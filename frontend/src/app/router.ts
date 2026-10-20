@@ -6,6 +6,8 @@ export const router=createRouter({history:createWebHistory(),routes:[
   {path:'/dashboard',component:()=>import('../modules/dashboard/DashboardPage.vue')},
   {path:'/dashboard/events',component:()=>import('../modules/dashboard/EventsPage.vue')},
   {path:'/runtime',component:()=>import('../modules/runtime/RuntimePage.vue')},
+  {path:'/agents',component:()=>import('../modules/agents/AgentsPage.vue')},
+  {path:'/agents/:id/:tab(live|config|history|events)?',component:()=>import('../modules/agents/AgentDetailPage.vue')},
   {path:'/sources/:id?',component:()=>import('../modules/sources/SourcesPage.vue')},
   {path:'/settings',redirect:'/settings/general'},
   {path:'/settings/:section(general|storage|resources|security|diagnostics)',component:()=>import('../modules/settings/SettingsPage.vue')},

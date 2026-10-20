@@ -1,5 +1,7 @@
 # 开发与模块交接
 
+2026-10-20 增量：智能体草稿管理入口已启用，Agent/Revision API、迁移及页面见 `AGENTS_API.md`；初学者操作见 `AGENTS_BEGINNER_GUIDE.md`。下面“本轮暂未生成”描述原基础框架交付阶段。任务创建/模型管理、真实运行与事件等仍未接入，不能将草稿管理视为完整智能体模块完成。
+
 本轮实现范围和完整产品范围分别见 `superpowers/specs/2026-10-18-foundation-design.md` 与 `MASTER_SPEC.md`。原型保存在 `reference/`。
 
 ## 公共技术边界

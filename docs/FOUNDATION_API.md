@@ -1,5 +1,7 @@
 # Foundation API：联调约定 v1
 
+2026-10-20：在不改变现有基础端点的前提下新增智能体草稿 API，详见 `AGENTS_API.md` 和生成的 OpenAPI。原 `/runs`、`/events` 仍为空列表扩展点，没有真实监测执行。
+
 实现者遇到缺项可增字段，不擅自改已有字段；变更先更新此文件并通知集成人。
 
 所有路径以 `/api/v1` 开头。同源 Cookie `vision_session`；CSRF Cookie `vision_csrf` 可被 JS 读取，所有已登录写操作加 `X-CSRF-Token`。初始化/登录除外。响应错误 `{error:{code,message,details,retryable,request_id}}`。ISO8601 UTC 时间，ID 为字符串 UUID。
