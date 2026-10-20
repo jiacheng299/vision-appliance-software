@@ -4,14 +4,14 @@ import { NButton } from 'naive-ui'
 import type { Region } from './api'
 import type { Source } from '../../shared/api/types'
 import { safeMediaUrl } from '../../shared/media/url'
-const props = defineProps<{ regions: Region[]; source?: Source; disabled?: boolean }>()
+const props = defineProps<{ regions: Region[]; source?: Source; disabled?: boolean; demo?:boolean }>()
 const emit = defineEmits<{ change: [regions: Region[]]; pending: [pending: boolean] }>()
 const points = ref<[number, number][]>([]), error = ref('')
 watch(() => points.value.length, count => emit('pending', count > 0), { immediate: true })
 const thumbnail = computed(() => safeMediaUrl(props.source?.thumbnail_url ?? null))
 const encoded = (values: number[][]) => values.map(p => `${p[0]! * 1000},${p[1]! * 1000}`).join(' ')
 function add(event: MouseEvent) {
-  if (props.disabled || !thumbnail.value || points.value.length >= 64) return
+  if (props.disabled || (!thumbnail.value&&!props.demo) || points.value.length >= 64) return
   const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null
   if (!rect) return
   points.value.push([Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))])
@@ -26,8 +26,8 @@ function finish() {
 <template>
   <div class="roi-editor">
     <p class="muted">在缩略图上依次点击边界点，完成后保存区域。区域边界不能交叉。</p>
-    <div v-if="thumbnail" class="roi-image" :style="{ aspectRatio: source?.width && source?.height ? `${source.width}/${source.height}` : '16/9' }">
-      <img :src="thumbnail" alt="视频源缩略图，用于绘制监测区域"/>
+    <div v-if="thumbnail||demo" class="roi-image" :style="{ aspectRatio: source?.width && source?.height ? `${source.width}/${source.height}` : '16/9' }">
+      <img v-if="thumbnail" :src="thumbnail" alt="视频源缩略图，用于绘制监测区域"/><span v-else class="mock-room-label">模拟画面，仅用于练习划区</span>
       <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" role="img" aria-label="点击画面绘制多边形区域" @click="add">
         <polygon v-for="region in regions" :key="region.id" :points="encoded(region.points)" class="roi-saved"/>
         <polyline :points="encoded(points)" class="roi-pending"/>

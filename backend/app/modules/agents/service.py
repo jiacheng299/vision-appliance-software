@@ -36,14 +36,15 @@ def revisions_for(db, agent_id):
 def agent_dto(db, agent, detail=False):
     revisions = revisions_for(db, agent.id)
     data = dict(id=agent.id, name=agent.name, description=agent.description, row_version=agent.row_version,
-                created_at=agent.created_at, updated_at=agent.updated_at, latest_revision=RevisionDTO.model_validate(revisions[0]))
+                created_at=agent.created_at, updated_at=agent.updated_at, archived_at=agent.archived_at,
+                desired_revision_id=agent.desired_revision_id, latest_revision=RevisionDTO.model_validate(revisions[0]))
     if detail:
         return AgentDetail(**data, revisions=[RevisionDTO.model_validate(r) for r in revisions])
     return AgentDTO(**data)
 
 
-def list_agents(db, q, source_id, cursor, limit):
-    statement = select(Agent)
+def list_agents(db, q, source_id, cursor, limit, archived=False, provider=None, actor_id=None, status=None, scene=None, sort='updated_desc'):
+    statement = select(Agent).where(Agent.archived_at.is_not(None) if archived else Agent.archived_at.is_(None))
     if q:
         statement = statement.where(or_(Agent.name.contains(q, autoescape=True), Agent.description.contains(q, autoescape=True)))
     if cursor:
@@ -53,12 +54,20 @@ def list_agents(db, q, source_id, cursor, limit):
                 raise ValueError()
         except (ValueError, TypeError, UnicodeError):
             raise Error(422, 'invalid_cursor', '分页位置无效，请刷新列表。')
-        statement = statement.where(or_(Agent.updated_at < updated_at, and_(Agent.updated_at == updated_at, Agent.id < identifier)))
+        statement = statement.where(or_(Agent.name > updated_at, and_(Agent.name == updated_at, Agent.id > identifier))) if sort == 'name_asc' else statement.where(or_(Agent.updated_at < updated_at, and_(Agent.updated_at == updated_at, Agent.id < identifier)))
     result = []
     # Filter only latest revisions; a source used by an older snapshot must not match.
-    for agent in db.scalars(statement.order_by(Agent.updated_at.desc(), Agent.id.desc())):
+    ordering = (Agent.name.asc(), Agent.id.asc()) if sort == 'name_asc' else (Agent.updated_at.desc(), Agent.id.desc())
+    for agent in db.scalars(statement.order_by(*ordering)):
         dto = agent_dto(db, agent)
         if source_id and not any(c.source_id == source_id for c in dto.latest_revision.config.channels):
+            continue
+        if scene and not any(c.rule == scene for c in dto.latest_revision.config.channels):
+            continue
+        if provider:
+            from .workflow import enrich
+            dto = enrich(db, dto, provider, actor_id)
+        if status and dto.status != status:
             continue
         result.append(dto)
         if len(result) == limit+1:
@@ -66,7 +75,7 @@ def list_agents(db, q, source_id, cursor, limit):
     next_cursor = None
     if len(result) > limit:
         last = result[limit-1]
-        next_cursor = base64.urlsafe_b64encode(json.dumps([last.updated_at, last.id]).encode()).decode()
+        next_cursor = base64.urlsafe_b64encode(json.dumps([last.name if sort == 'name_asc' else last.updated_at, last.id]).encode()).decode()
     return {'items': result[:limit], 'next_cursor': next_cursor}
 
 
@@ -116,6 +125,8 @@ def check_version(resource, expected):
 def patch_agent(db, agent_id, body):
     lock_write(db)
     agent = get_agent(db, agent_id)
+    from .workflow import writable
+    writable(agent)
     check_version(agent, body.row_version)
     agent.name, agent.description = body.name, body.description
     agent.row_version += 1
@@ -124,17 +135,20 @@ def patch_agent(db, agent_id, body):
     return agent_dto(db, agent, detail=True)
 
 
-def clone_revision(db, agent_id, body, actor_id, key):
+def clone_revision(db, agent_id, body, actor_id, key, baseline_run_id=None, baseline_channel_id=None):
     lock_write(db)
-    existing, request_hash = receipt(db, actor_id, key, f'clone:{agent_id}', body.model_dump(mode='json'))
+    existing, request_hash = receipt(db, actor_id, key, f'clone:{agent_id}', {**body.model_dump(mode='json'), 'baseline_run_id': baseline_run_id, 'baseline_channel_id': baseline_channel_id})
     if existing:
         return RevisionDTO.model_validate(existing.response)
     agent = get_agent(db, agent_id)
+    from .workflow import writable
+    writable(agent)
     check_version(agent, body.row_version)
     base = get_revision(db, body.base_revision_id)
     if base.agent_id != agent_id:
         raise Error(422, 'revision_agent_mismatch', '不能复制其他智能体的配置版本。')
-    revision = AgentRevision(agent_id=agent_id, revision_no=revisions_for(db, agent_id)[0].revision_no+1, base_revision_id=base.id, config=base.config)
+    config = base.config if baseline_channel_id is None else {**base.config, 'channels': [c for c in base.config['channels'] if c['channel_id'] == baseline_channel_id]}
+    revision = AgentRevision(agent_id=agent_id, revision_no=revisions_for(db, agent_id)[0].revision_no+1, base_revision_id=base.id, config=config, baseline_run_id=baseline_run_id or base.baseline_run_id)
     db.add(revision)
     agent.updated_at = now()
     agent.row_version += 1
@@ -147,11 +161,14 @@ def clone_revision(db, agent_id, body, actor_id, key):
 def patch_revision(db, revision_id, body):
     lock_write(db)
     revision = get_revision(db, revision_id)
+    from .workflow import writable
+    writable(get_agent(db, revision.agent_id))
     check_version(revision, body.row_version)
     if revision.state != 'draft':
         raise Error(409, 'revision_immutable', '已发布版本不能修改，请复制为新草稿。')
     check_config(db, body.config, revision.config)
     revision.config = body.config.model_dump(mode='json')
+    revision.latest_validation_id = None
     revision.row_version += 1
     revision.updated_at = now()
     agent = get_agent(db, revision.agent_id)

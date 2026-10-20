@@ -5,5 +5,5 @@ export const navigation = [
   {label:'系统设置',path:'/settings',icon:'settings'},
 ]
 export function permittedRoutes(path: string): boolean {
-  return /^\/(dashboard(?:\/events)?|runtime|agents(?:\/[^/]+(?:\/(?:live|config|history|events))?)?|sources(?:\/[^/]+)?|settings(?:\/(general|storage|resources|security|diagnostics))?)$/.test(path)
+  return /^\/(dashboard(?:\/events)?|runtime|agents(?:\/[^/]+(?:\/(?:live|config|history|events|reports))?)?|sources(?:\/[^/]+)?|settings(?:\/(general|storage|resources|security|diagnostics))?)$/.test(path)
 }

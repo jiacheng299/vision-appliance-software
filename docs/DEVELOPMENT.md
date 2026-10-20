@@ -1,12 +1,12 @@
 # 开发与模块交接
 
-2026-10-20 增量：智能体草稿管理入口已启用，Agent/Revision API、迁移及页面见 `AGENTS_API.md`；初学者操作见 `AGENTS_BEGINNER_GUIDE.md`。下面“本轮暂未生成”描述原基础框架交付阶段。任务创建/模型管理、真实运行与事件等仍未接入，不能将草稿管理视为完整智能体模块完成。
+2026-10-20 增量：智能体B端管理工作流、0003迁移、公开服务端口及独立演示已完成，见 `AGENTS_API.md`；初学者见 `AGENTS_BEGINNER_GUIDE.md`。真实推理、Run/Event存储、网关和报告引擎仍需团队接入，验收边界见 `AGENTS_IMPLEMENTATION.md`。
 
 本轮实现范围和完整产品范围分别见 `superpowers/specs/2026-10-18-foundation-design.md` 与 `MASTER_SPEC.md`。原型保存在 `reference/`。
 
 ## 公共技术边界
 
-前端为 Vue3/TypeScript/Naive UI，模块只消费 `shared/api` 的 DTO/API，不操作别的模块的 Pinia 私有状态。七导航固定；任务创建、智能体管理和模型管理本轮暂未生成，入口禁用。
+前端为 Vue3/TypeScript/Naive UI，模块消费公开DTO/API，不操作别的模块的 Pinia 私有状态。七导航固定；智能体已启用，任务创建和模型管理仍禁用。媒体HLS按需加载本地hls.js，无CDN。
 
 后端模块化单体：API → service → repository/domain，公共 DTO 和 OpenAPI 见 `contracts/`。耗时媒体探测/预览在独立 Worker 中执行。所有文件位于 `VISION_VAR_ROOT` 下，返回 storage_key 或同源授权地址，不将绝对文件路径暴露给浏览器。
 

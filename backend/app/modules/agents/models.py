@@ -12,6 +12,8 @@ class Agent(Base):
     row_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[str] = mapped_column(String, default=now)
     updated_at: Mapped[str] = mapped_column(String, default=now)
+    archived_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    desired_revision_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class AgentRevision(Base):
@@ -26,6 +28,9 @@ class AgentRevision(Base):
     row_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[str] = mapped_column(String, default=now)
     updated_at: Mapped[str] = mapped_column(String, default=now)
+    latest_validation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    published_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    baseline_run_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class AgentCommand(Base):
@@ -37,4 +42,29 @@ class AgentCommand(Base):
     command_key: Mapped[str] = mapped_column(String)
     request_hash: Mapped[str] = mapped_column(String)
     response: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[str] = mapped_column(String, default=now)
+
+
+class AgentValidation(Base):
+    __tablename__ = 'agent_validations'
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    revision_id: Mapped[str] = mapped_column(ForeignKey('agent_revisions.id'), index=True)
+    config_hash: Mapped[str] = mapped_column(String)
+    source_hash: Mapped[str] = mapped_column(String)
+    capability_fingerprint: Mapped[str] = mapped_column(String)
+    verdict: Mapped[str] = mapped_column(String)
+    result: Mapped[dict] = mapped_column(JSON)
+    data_origin: Mapped[str] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, default=now)
+    expires_at: Mapped[str] = mapped_column(String)
+
+
+class AgentConfirmation(Base):
+    __tablename__ = 'agent_confirmations'
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
+    revision_id: Mapped[str] = mapped_column(ForeignKey('agent_revisions.id'), unique=True)
+    validation_id: Mapped[str] = mapped_column(ForeignKey('agent_validations.id'))
+    actor_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    config_hash: Mapped[str] = mapped_column(String)
+    limitations_acknowledged: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[str] = mapped_column(String, default=now)

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import RevisionEditor from '../src/modules/agents/RevisionEditor.vue'
 import { agentApi, type Revision } from '../src/modules/agents/api'
@@ -24,6 +24,7 @@ function editor(value = revision()) {
 }
 function button(wrapper: ReturnType<typeof editor>, label: string) { return wrapper.findAll('button').find(b => b.text() === label)! }
 afterEach(() => vi.restoreAllMocks())
+beforeEach(() => { vi.spyOn(agentApi,'catalog').mockResolvedValue({items:[],fingerprint:'test',data_origin:'real'}) })
 
 describe('agent revision editing', () => {
   it('preserves Chinese, emoji and line breaks using transport-safe JSON', () => {

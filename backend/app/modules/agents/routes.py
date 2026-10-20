@@ -4,6 +4,9 @@ from ...shared.errors import Error
 from ..auth import current_user, writer
 from . import service
 from .schemas import AgentCreate, AgentDetail, AgentPage, AgentPatch, RevisionClone, RevisionDTO, RevisionPatch
+from .contracts import ValidationDTO, VersionCommand
+from .gateway_routes import providers
+from . import workflow
 
 router = APIRouter(tags=['agents'])
 
@@ -11,8 +14,10 @@ router = APIRouter(tags=['agents'])
 @router.get('/agents', response_model=AgentPage)
 def list_agents(q: str = Query('', max_length=160), source_id: str | None = None,
                 cursor: str | None = Query(None, max_length=512), limit: int = Query(24, ge=1, le=100),
-                user=Depends(current_user), db=Depends(get_db)):
-    return service.list_agents(db, q, source_id, cursor, limit)
+                status: str | None = Query(None, pattern='^(draft|ready|queued|running|stopping|stopped|failed|unknown|archived)$'), scene: str | None = Query(None, max_length=160), archived: bool = False,
+                sort: str = Query('updated_desc', pattern='^(updated_desc|name_asc)$'),
+                user=Depends(current_user), db=Depends(get_db), provider=Depends(providers)):
+    return service.list_agents(db, q, source_id, cursor, limit, archived=archived, provider=provider, actor_id=user.id, status=status, scene=scene, sort=sort)
 
 
 @router.post('/agents', response_model=AgentDetail, status_code=201)
@@ -21,8 +26,8 @@ def create_agent(body: AgentCreate, idempotency_key: str = Header(min_length=1, 
 
 
 @router.get('/agents/{agent_id}', response_model=AgentDetail)
-def agent_detail(agent_id: str, user=Depends(current_user), db=Depends(get_db)):
-    return service.agent_dto(db, service.get_agent(db, agent_id), detail=True)
+def agent_detail(agent_id: str, user=Depends(current_user), db=Depends(get_db), provider=Depends(providers)):
+    return workflow.enrich(db, service.agent_dto(db, service.get_agent(db, agent_id), detail=True), provider, user.id)
 
 
 @router.patch('/agents/{agent_id}', response_model=AgentDetail)
@@ -45,7 +50,7 @@ def patch_revision(revision_id: str, body: RevisionPatch, user=Depends(writer), 
     return service.patch_revision(db, revision_id, body)
 
 
-@router.post('/revisions/{revision_id}/validations', response_model=RevisionDTO)
-def validate_revision(revision_id: str, user=Depends(writer), db=Depends(get_db)):
-    service.get_revision(db, revision_id)
-    raise Error(503, 'capability_service_unavailable', '模型能力校验与需求评估服务尚未接入。草稿已保留，暂不能验证或启动。', retryable=True)
+@router.post('/revisions/{revision_id}/validations', response_model=ValidationDTO, status_code=201)
+def validate_revision(revision_id: str, body: VersionCommand | None = None, user=Depends(writer), db=Depends(get_db), provider=Depends(providers)):
+    revision = service.get_revision(db, revision_id)
+    return workflow.validate(db, revision_id, body.row_version if body else revision.row_version, provider, user.id)

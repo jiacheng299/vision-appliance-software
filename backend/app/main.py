@@ -18,6 +18,8 @@ from .shared.models import Notification
 from .schemas import ErrorDTO
 from .modules import auth, sources, settings, runtime, realtime
 from .modules.agents import routes as agents
+from .modules.agents import gateway_routes as agent_workflow
+from .modules.agents.integrations import AgentServices
 
 class LoginGuard:
     def __init__(self):
@@ -48,8 +50,10 @@ async def sample_runtime(app):
                 db.execute(delete(Notification).where(Notification.sequence<cutoff))
             db.commit()
 
-def create_app(var_root=None,testing=False):
+def create_app(var_root=None,testing=False,agent_services=None):
     config = Config(**({'var_root':var_root} if var_root is not None else {}))
+    if agent_services is not None and agent_services.data_origin == 'mock' and not testing and not config.agent_demo:
+        raise RuntimeError('Mock providers require explicit isolated demo mode.')
     config.prepare()
     engine = make_engine(config)
     migrate(engine)
@@ -68,6 +72,10 @@ def create_app(var_root=None,testing=False):
         engine.dispose()
     app = FastAPI(title='Vision Appliance Foundation API',version=config.version,lifespan=lifespan,docs_url='/api/docs',openapi_url='/api/openapi.json',redoc_url=None)
     app.state.config, app.state.engine, app.state.sessions = config, engine, sessions
+    if agent_services is None and config.agent_demo:
+        from .modules.agents.demo import DemoServices
+        agent_services = DemoServices()
+    app.state.agent_services = agent_services or AgentServices()
     app.state.vault = Vault(config)
     app.state.login_guard = LoginGuard()
     app.state.runtime_history = deque(maxlen=120)
@@ -91,7 +99,7 @@ def create_app(var_root=None,testing=False):
     @app.exception_handler(HTTPException)
     async def http_error(request,exc):
         return error_response(request,exc.status_code,'not_found' if exc.status_code==404 else 'http_error','请求资源不存在。' if exc.status_code==404 else '请求无法完成。')
-    for module in (auth,sources,settings,runtime,realtime,agents):
+    for module in (auth,sources,settings,runtime,realtime,agent_workflow,agents):
         app.include_router(module.router,prefix='/api/v1',responses={code:{'model':ErrorDTO} for code in (400,401,403,404,409,413,422,429,500,503)})
     @app.get('/{path:path}',include_in_schema=False)
     def frontend(path:str):

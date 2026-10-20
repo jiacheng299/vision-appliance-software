@@ -119,22 +119,34 @@ class RevisionDTO(DTO):
     row_version: int
     created_at: str
     updated_at: str
+    latest_validation_id: str | None = None
+    published_at: str | None = None
+    baseline_run_id: str | None = None
 
 
 class AgentDTO(DTO):
     id: str
     name: str
     description: str
-    status: Literal['draft'] = 'draft'
+    status: Literal['draft', 'ready', 'queued', 'running', 'stopping', 'stopped', 'failed', 'unknown', 'archived'] = 'draft'
     row_version: int
     created_at: str
     updated_at: str
     latest_revision: RevisionDTO
+    archived_at: str | None = None
+    desired_revision_id: str | None = None
+    today_event_count: int | None = None
+    latest_event_at: str | None = None
+    data_origin: Literal['real', 'mock'] = 'real'
+    active_run_count: int | None = None
+    active_revision_nos: list[int] = Field(default_factory=list)
+    failed_run_count: int | None = None
+    pending_review_count: int | None = None
 
 
 class AgentDetail(AgentDTO):
     revisions: list[RevisionDTO]
-    execution_available: Literal[False] = False
+    execution_available: bool = False
     limitation: str = '模型能力评估和监测运行服务尚未接入。草稿可保存，暂不能启动监测。'
 
 
