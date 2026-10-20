@@ -5,15 +5,18 @@ from ..schemas import General, Storage, Resources, Security, SettingsPatch, Sett
 from ..shared.models import Setting, Log
 from ..shared.db import get_db
 from ..shared.errors import Error
-from .auth import current_user, administrator
 
 router = APIRouter(prefix='/settings',tags=['settings'])
 SECTIONS = {'general':General,'storage':Storage,'resources':Resources,'security':Security}
 
 def initialize(db):
     for section, schema in SECTIONS.items():
-        if not db.get(Setting,section):
+        record = db.get(Setting,section)
+        if not record:
             db.add(Setting(section=section,values=schema().model_dump()))
+        elif section == 'security' and 'session_timeout_minutes' in record.values:
+            record.values = {key:value for key,value in record.values.items() if key != 'session_timeout_minutes'}
+            record.row_version += 1
     db.commit()
 
 def values_for(db, section):
@@ -21,7 +24,7 @@ def values_for(db, section):
     return record.values if record else SECTIONS[section]().model_dump()
 
 @router.get('/{section}',response_model=SettingsDTO)
-def get_settings(section:str, request:Request, user=Depends(current_user), db=Depends(get_db)):
+def get_settings(section:str, request:Request,  db=Depends(get_db)):
     if section == 'diagnostics':
         from .runtime import dependency_services
         services = dependency_services(request.app,db)
@@ -33,7 +36,7 @@ def get_settings(section:str, request:Request, user=Depends(current_user), db=De
     return record
 
 @router.patch('/{section}',response_model=SettingsDTO)
-def patch_settings(section:str,body:SettingsPatch,user=Depends(administrator),db=Depends(get_db)):
+def patch_settings(section:str,body:SettingsPatch,db=Depends(get_db)):
     if section == 'diagnostics':
         raise Error(403,'read_only','诊断配置为只读。')
     if section not in SECTIONS:

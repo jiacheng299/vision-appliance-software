@@ -11,7 +11,6 @@ from ..shared.db import get_db
 from ..shared.errors import Error
 from ..shared.security import camera_address
 from ..shared.storage import controlled_path
-from .auth import current_user, writer
 from .settings import values_for
 
 router = APIRouter(tags=['sources'])
@@ -40,7 +39,7 @@ def get_upload(db,upload_id):
     return upload
 
 @router.get('/sources',response_model=SourcePage)
-def list_sources(q:str='',kind:str|None=None,status:str|None=None,limit:int=Query(100,ge=1,le=500),cursor:str|None=None,user=Depends(current_user),db=Depends(get_db)):
+def list_sources(q:str='',kind:str|None=None,status:str|None=None,limit:int=Query(100,ge=1,le=500),cursor:str|None=None,db=Depends(get_db)):
     statement = select(Source).where(Source.archived==False)
     if q:
         statement = statement.where(or_(Source.name.contains(q,autoescape=True),Source.address.contains(q,autoescape=True)))
@@ -54,7 +53,7 @@ def list_sources(q:str='',kind:str|None=None,status:str|None=None,limit:int=Quer
     return {'items':[source_dto(row) for row in rows[:limit]],'next_cursor':rows[limit-1].id if len(rows)>limit else None}
 
 @router.post('/sources',response_model=SourceDTO)
-def create_source(body:CameraCreate,request:Request,user=Depends(writer),db=Depends(get_db)):
+def create_source(body:CameraCreate,request:Request,db=Depends(get_db)):
     address, credentials, _ = camera_address(body.address,values_for(db,'security')['camera_allowed_networks'])
     if body.username is not None:
         credentials['username'] = body.username
@@ -68,11 +67,11 @@ def create_source(body:CameraCreate,request:Request,user=Depends(writer),db=Depe
     return source_dto(source)
 
 @router.get('/sources/{source_id}',response_model=SourceDTO)
-def read_source(source_id:str,user=Depends(current_user),db=Depends(get_db)):
+def read_source(source_id:str,db=Depends(get_db)):
     return source_dto(get_source(db,source_id))
 
 @router.patch('/sources/{source_id}',response_model=SourceDTO)
-def patch_source(source_id:str,body:SourcePatch,request:Request,user=Depends(writer),db=Depends(get_db)):
+def patch_source(source_id:str,body:SourcePatch,request:Request,db=Depends(get_db)):
     source = get_source(db,source_id)
     changes = {'updated_at':now(),'row_version':body.row_version+1}
     if 'name' in body.model_fields_set:
@@ -107,7 +106,7 @@ def patch_source(source_id:str,body:SourcePatch,request:Request,user=Depends(wri
     return source_dto(source)
 
 @router.post('/sources/{source_id}/archive',status_code=204)
-def archive_source(source_id:str,user=Depends(writer),db=Depends(get_db)):
+def archive_source(source_id:str,db=Depends(get_db)):
     source = get_source(db,source_id)
     source.archived, source.updated_at = True, now()
     source.row_version += 1
@@ -117,7 +116,7 @@ def archive_source(source_id:str,user=Depends(writer),db=Depends(get_db)):
     db.add(Log(level='INFO',module='sources',message='已归档视频源。'))
 
 @router.post('/sources/{source_id}/tests',response_model=SourceTestDTO)
-def start_test(source_id:str,user=Depends(writer),db=Depends(get_db)):
+def start_test(source_id:str,db=Depends(get_db)):
     source = get_source(db,source_id)
     if source.kind!='camera':
         raise Error(422,'camera_required','连接测试仅用于摄像头。')
@@ -134,7 +133,7 @@ def start_test(source_id:str,user=Depends(writer),db=Depends(get_db)):
     return job
 
 @router.get('/source-tests/{job_id}',response_model=SourceTestDTO)
-def get_test(job_id:str,user=Depends(current_user),db=Depends(get_db)):
+def get_test(job_id:str,db=Depends(get_db)):
     job = db.get(Job,job_id)
     if not job or job.kind!='camera_test':
         raise Error(404,'test_not_found','测试记录不存在。')
@@ -142,7 +141,7 @@ def get_test(job_id:str,user=Depends(current_user),db=Depends(get_db)):
     return job
 
 @router.post('/sources/{source_id}/preview-sessions',response_model=PreviewDTO)
-def preview_session(source_id:str,user=Depends(current_user),db=Depends(get_db)):
+def preview_session(source_id:str,db=Depends(get_db)):
     source = get_source(db,source_id)
     if source.kind=='camera':
         raise Error(503,'dependency_unavailable','摄像头媒体网关未接入，请部署并接入 MediaMTX。',retryable=True)
@@ -151,7 +150,7 @@ def preview_session(source_id:str,user=Depends(current_user),db=Depends(get_db))
     return {'session_id':uid(),'protocol':'file','playback_url':f'/api/v1/sources/{source.id}/media','expires_at':(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat().replace('+00:00','Z')}
 
 @router.get('/sources/{source_id}/media')
-def media(source_id:str,request:Request,user=Depends(current_user),db=Depends(get_db)):
+def media(source_id:str,request:Request,db=Depends(get_db)):
     source = get_source(db,source_id)
     if source.status!='ready' or not source.media_key:
         raise Error(409,'media_not_ready','媒体尚未准备就绪。')
@@ -161,7 +160,7 @@ def media(source_id:str,request:Request,user=Depends(current_user),db=Depends(ge
     return FileResponse(path,media_type='video/mp4',headers={'Cache-Control':'private, no-store'})
 
 @router.get('/sources/{source_id}/thumbnail')
-def thumbnail(source_id:str,request:Request,user=Depends(current_user),db=Depends(get_db)):
+def thumbnail(source_id:str,request:Request,db=Depends(get_db)):
     source = get_source(db,source_id)
     if not source.thumbnail_key:
         raise Error(404,'thumbnail_unavailable','缩略图未生成。')
@@ -171,7 +170,7 @@ def thumbnail(source_id:str,request:Request,user=Depends(current_user),db=Depend
     return FileResponse(path,media_type='image/jpeg',headers={'Cache-Control':'private, no-store'})
 
 @router.post('/uploads',response_model=UploadDTO)
-def create_upload(body:UploadCreate,request:Request,user=Depends(writer),db=Depends(get_db)):
+def create_upload(body:UploadCreate,request:Request,db=Depends(get_db)):
     if body.size_bytes > values_for(db,'storage')['max_upload_mb']*1024*1024:
         raise Error(413,'upload_too_large','文件超过当前上传大小限制。')
     upload = Upload(filename=body.filename,size_bytes=body.size_bytes)
@@ -181,11 +180,11 @@ def create_upload(body:UploadCreate,request:Request,user=Depends(writer),db=Depe
     return upload
 
 @router.get('/uploads/{upload_id}',response_model=UploadDTO)
-def read_upload(upload_id:str,user=Depends(current_user),db=Depends(get_db)):
+def read_upload(upload_id:str,db=Depends(get_db)):
     return get_upload(db,upload_id)
 
 @router.put('/uploads/{upload_id}/chunks/{number}',response_model=UploadDTO)
-async def write_chunk(upload_id:str,number:int,request:Request,user=Depends(writer),db=Depends(get_db)):
+async def write_chunk(upload_id:str,number:int,request:Request,db=Depends(get_db)):
     data = bytearray()
     async for part in request.stream():
         data.extend(part)
@@ -193,7 +192,7 @@ async def write_chunk(upload_id:str,number:int,request:Request,user=Depends(writ
             raise Error(413,'chunk_too_large','单块不得超过 8 MiB。')
     if not data or number<0:
         raise Error(422,'invalid_chunk','分块不能为空，编号从 0 开始。')
-    # End authentication's read transaction before taking the SQLite writer lock.
+    # End any read transaction before taking the SQLite writer lock.
     db.commit()
     db.execute(text('BEGIN IMMEDIATE'))
     upload = get_upload(db,upload_id)
@@ -221,7 +220,7 @@ async def write_chunk(upload_id:str,number:int,request:Request,user=Depends(writ
     return upload
 
 @router.post('/uploads/{upload_id}/complete',response_model=UploadDTO)
-def complete_upload(upload_id:str,body:UploadComplete,request:Request,user=Depends(writer),db=Depends(get_db)):
+def complete_upload(upload_id:str,body:UploadComplete,request:Request,db=Depends(get_db)):
     db.commit()
     db.execute(text('BEGIN IMMEDIATE'))
     upload = get_upload(db,upload_id)
@@ -240,7 +239,7 @@ def complete_upload(upload_id:str,body:UploadComplete,request:Request,user=Depen
     return upload
 
 @router.delete('/uploads/{upload_id}',status_code=204)
-def cancel_upload(upload_id:str,user=Depends(writer),db=Depends(get_db)):
+def cancel_upload(upload_id:str,db=Depends(get_db)):
     db.commit()
     db.execute(text('BEGIN IMMEDIATE'))
     upload = get_upload(db,upload_id)

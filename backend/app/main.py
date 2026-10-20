@@ -1,9 +1,7 @@
 import asyncio
-from collections import deque, defaultdict
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-import threading
-import time
 import uuid
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -13,25 +11,10 @@ from sqlalchemy import select, delete
 from .shared.config import Config
 from .shared.db import make_engine, migrate, session_factory
 from .shared.errors import Error, handle_error, error_response
-from .shared.security import Vault
+from .shared.security import Vault, same_origin_request
 from .shared.models import Notification
 from .schemas import ErrorDTO
-from .modules import auth, sources, settings, runtime, realtime
-
-class LoginGuard:
-    def __init__(self):
-        self.attempts = defaultdict(deque)
-        self.lock = threading.Lock()
-    def check(self, identity):
-        with self.lock:
-            queue = self.attempts[identity]
-            while queue and queue[0]<time.monotonic()-60:
-                queue.popleft()
-            if len(queue)>=15:
-                raise Error(429,'login_rate_limited','登录尝试过于频繁，请稍后重试。',retryable=True)
-            queue.append(time.monotonic())
-            if len(self.attempts)>10000:
-                self.attempts = defaultdict(deque,{identity:queue})
+from .modules import sources, settings, runtime, realtime
 
 async def sample_runtime(app):
     while True:
@@ -68,13 +51,15 @@ def create_app(var_root=None,testing=False):
     app = FastAPI(title='Vision Appliance Foundation API',version=config.version,lifespan=lifespan,docs_url='/api/docs',openapi_url='/api/openapi.json',redoc_url=None)
     app.state.config, app.state.engine, app.state.sessions = config, engine, sessions
     app.state.vault = Vault(config)
-    app.state.login_guard = LoginGuard()
     app.state.runtime_history = deque(maxlen=120)
     @app.middleware('http')
     async def request_context(request:Request,call_next):
         request.state.request_id = str(uuid.uuid4())
         try:
-            response = await call_next(request)
+            if request.url.path.startswith('/api/') and request.method not in ('GET','HEAD','OPTIONS') and not same_origin_request(request):
+                response = error_response(request,403,'cross_origin_forbidden','请求来源不被允许，请从工作台页面操作。')
+            else:
+                response = await call_next(request)
         except Exception:
             response = error_response(request,500,'internal_error','服务器内部错误，请通过请求编号联系维护人员。')
         response.headers['X-Request-ID'] = request.state.request_id
@@ -90,7 +75,7 @@ def create_app(var_root=None,testing=False):
     @app.exception_handler(HTTPException)
     async def http_error(request,exc):
         return error_response(request,exc.status_code,'not_found' if exc.status_code==404 else 'http_error','请求资源不存在。' if exc.status_code==404 else '请求无法完成。')
-    for module in (auth,sources,settings,runtime,realtime):
+    for module in (sources,settings,runtime,realtime):
         app.include_router(module.router,prefix='/api/v1',responses={code:{'model':ErrorDTO} for code in (400,401,403,404,409,413,422,429,500,503)})
     @app.get('/{path:path}',include_in_schema=False)
     def frontend(path:str):

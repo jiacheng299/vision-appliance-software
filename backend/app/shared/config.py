@@ -9,7 +9,6 @@ class Config(BaseSettings):
     frontend_dist: Path = ROOT / 'frontend' / 'dist'
     ffmpeg: str = 'ffmpeg'
     ffprobe: str = 'ffprobe'
-    cookie_secure: bool = False
     media_timeout_seconds: int = 120
     worker_lease_seconds: int = 180
     worker_poll_seconds: float = 1.0

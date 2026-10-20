@@ -1,10 +1,9 @@
 import asyncio
 import json
-from urllib.parse import urlsplit
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select, func
-from ..shared.models import Session, User, Notification, now, uid
-from ..shared.security import digest
+from ..shared.models import Notification, now, uid
+from ..shared.security import same_origin_request
 from .runtime import runtime_snapshot
 
 router = APIRouter()
@@ -12,25 +11,16 @@ router = APIRouter()
 def envelope(item):
     return {'schema_version':'1.0','event_id':item.event_id,'sequence':item.sequence,'type':item.type,'occurred_at':item.occurred_at,'aggregate_id':item.aggregate_id,'payload':item.payload}
 
-def valid_session(websocket):
-    token = websocket.cookies.get('vision_session','')
-    with websocket.app.state.sessions() as db:
-        session = db.get(Session,digest(token)) if token else None
-        return bool(session and session.expires_at>now() and db.get(User,session.user_id))
 
 @router.websocket('/ws')
 async def websocket_endpoint(websocket:WebSocket):
-    origin = websocket.headers.get('origin')
-    if not valid_session(websocket) or (origin and urlsplit(origin).netloc != websocket.headers.get('host')):
-        await websocket.close(code=1008,reason='Authentication required')
+    if not same_origin_request(websocket):
+        await websocket.close(code=1008,reason='Origin not allowed')
         return
     await websocket.accept()
     topics, cursor = set(), 0
     try:
         while True:
-            if not valid_session(websocket):
-                await websocket.close(code=1008,reason='Session expired')
-                return
             try:
                 message = await asyncio.wait_for(websocket.receive_json(),timeout=2)
                 if not isinstance(message,dict) or message.get('type')!='subscribe' or not isinstance(message.get('topics'),list) or any(t not in ('runtime','source','sources') for t in message['topics']):

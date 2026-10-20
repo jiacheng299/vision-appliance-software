@@ -16,16 +16,6 @@ class ErrorDetail(DTO):
 class ErrorDTO(DTO):
     error: ErrorDetail
 
-class Credentials(DTO):
-    model_config = ConfigDict(extra='forbid', str_strip_whitespace=False)
-    username: str = Field(min_length=1,max_length=80,pattern=r'^[\w.@-]+$')
-    password: str = Field(min_length=1,max_length=512)
-
-class UserDTO(DTO):
-    id: str
-    username: str
-    role: Literal['admin','operator','viewer']
-
 class SourceDTO(DTO):
     id: str
     name: str
@@ -120,7 +110,6 @@ class Resources(DTO):
     reconnect_attempts: int = Field(default=3,ge=0,le=20,strict=True)
 
 class Security(DTO):
-    session_timeout_minutes: int = Field(default=480,ge=5,le=10080,strict=True)
     camera_allowed_networks: list[str] = Field(default_factory=lambda:['127.0.0.0/8','::1/128'],max_length=32)
     @field_validator('camera_allowed_networks')
     @classmethod

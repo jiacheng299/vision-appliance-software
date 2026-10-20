@@ -12,20 +12,6 @@ def uid():
 class Base(DeclarativeBase):
     pass
 
-class User(Base):
-    __tablename__ = 'users'
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)
-    username: Mapped[str] = mapped_column(String, unique=True)
-    password_hash: Mapped[str] = mapped_column(Text)
-    role: Mapped[str] = mapped_column(String, default='admin')
-
-class Session(Base):
-    __tablename__ = 'sessions'
-    token_hash: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String)
-    csrf_hash: Mapped[str] = mapped_column(String)
-    expires_at: Mapped[str] = mapped_column(String)
-
 class Source(Base):
     __tablename__ = 'sources'
     id: Mapped[str] = mapped_column(String, primary_key=True, default=uid)

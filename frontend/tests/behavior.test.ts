@@ -1,24 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { csrfToken, humanError } from '../src/shared/api/client'
-import { validateCredentials } from '../src/shared/auth/validation'
+import { humanError } from '../src/shared/api/client'
 import { validateSettings } from '../src/modules/settings/validation'
 import { safeMediaUrl } from '../src/shared/media/url'
 import { uploadFile } from '../src/modules/sources/upload'
 import { permittedRoutes } from '../src/app/navigation'
 
-describe('session and error boundaries', () => {
-  it('reads the exact CSRF cookie even with similarly named cookies', () => {
-    expect(csrfToken('other_vision_csrf=bad; vision_csrf=hello%2Bworld')).toBe('hello+world')
-    expect(csrfToken('vision_session=secret')).toBe('')
-  })
+describe('error boundaries', () => {
   it('never exposes internal server errors', () => {
     expect(humanError({ response: { status: 500, data: { error: { code: 'INTERNAL_ERROR', message: 'Traceback secret', request_id: 'request-1' } } } })).not.toContain('Traceback')
     expect(humanError({ response: { status: 409, data: {} } })).toContain('刷新')
-  })
-  it('requires a strong first administrator password but accepts existing login passwords', () => {
-    expect(validateCredentials('admin', 'short', true)).toContain('12')
-    expect(validateCredentials('admin', 'short', false)).toBe('')
-    expect(validateCredentials(' ', 'long-password', true)).not.toBe('')
   })
 })
 describe('settings and route boundaries', () => {

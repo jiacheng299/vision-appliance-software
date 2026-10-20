@@ -1,19 +1,24 @@
-import hashlib
-import secrets
 import os
 import json
 import ipaddress
 import socket
 from urllib.parse import urlsplit, urlunsplit, unquote
 from cryptography.fernet import Fernet
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError
 from .errors import Error
 
-password_hasher = PasswordHasher()
 
-def digest(value):
-    return hashlib.sha256(value.encode()).hexdigest()
+def same_origin_request(connection):
+    """Reject unrelated websites without requiring accounts or cookies."""
+    if connection.headers.get('sec-fetch-site') == 'cross-site':
+        return False
+    origin = connection.headers.get('origin')
+    if not origin:
+        return True
+    try:
+        parts = urlsplit(origin)
+        return parts.scheme in ('http', 'https') and parts.netloc == connection.headers.get('host')
+    except ValueError:
+        return False
 
 class Vault:
     def __init__(self, config):

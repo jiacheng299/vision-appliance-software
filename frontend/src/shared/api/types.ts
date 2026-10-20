@@ -1,4 +1,3 @@
-export interface User { id: string; username: string; role: 'admin' | 'operator' | 'viewer' }
 export interface Source { id: string; name: string; kind: 'file' | 'camera'; status: string; created_at: string; updated_at: string; row_version: number; observed_at: string | null; address: string | null; width: number | null; height: number | null; fps: number | null; duration_ms: number | null; size_bytes: number | null; sha256: string | null; preview_url: string | null; thumbnail_url: string | null; error_code: string | null; error_message: string | null }
 export interface Upload { id: string; state: string; received_bytes: number; size_bytes: number; source_id: string | null; error_code: string | null; error_message: string | null }
 export interface CameraInput { name: string; kind: 'camera'; address: string; username?: string; password?: string }

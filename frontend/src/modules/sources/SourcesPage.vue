@@ -5,7 +5,6 @@ import { NButton,NCheckbox,NInput,NPopconfirm,NProgress,NSelect,useMessage } fro
 import { api,uploadTransport } from '../../shared/api'
 import type { Source,Upload } from '../../shared/api/types'
 import { humanError } from '../../shared/api/client'
-import { useSession } from '../../shared/auth/store'
 import { useResource,formatDate,formatBytes,duration } from '../../shared/ui/resource'
 import { safeMediaUrl } from '../../shared/media/url'
 import { uploadFile,uploadErrorMessage } from './upload'
@@ -15,14 +14,13 @@ import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import Icon from '../../shared/ui/Icon.vue'
 import StatusBadge from '../../shared/ui/StatusBadge.vue'
 import MediaPlayer from '../../shared/media/MediaPlayer.vue'
-const route=useRoute(),router=useRouter(),message=useMessage(),session=useSession()
+const route=useRoute(),router=useRouter(),message=useMessage()
 const search=ref(String(route.query.q??'')),kind=ref(''),status=ref(''),tab=ref<'file'|'camera'>('file')
 const {data,loading,error,refresh}=useResource(()=>api.sources(search.value,kind.value,status.value))
 const selected=ref<Source|null>(null),detailError=ref(''),detailBusy=ref(false),saving=ref(false),testing=ref(false),testMessage=ref(''),testState=ref(''),clearCredentials=ref(false)
 const edit=reactive({name:'',address:'',username:'',password:''}),camera=reactive({name:'',address:'',username:'',password:''})
 const creating=ref(false),createError=ref(''),upload=ref<Upload|null>(null),uploading=ref(false),uploadError=ref(''),uploadFilename=ref('')
 let abort:AbortController|undefined,stopped=false,searchTimer:ReturnType<typeof setTimeout>|undefined,detailGeneration=0
-const writable=computed(()=>session.user?.role!=='viewer')
 const statusOptions=computed(()=>[{label:'全部状态',value:''},...((kind.value==='camera'?['unverified','online','disconnected','failed']:kind.value==='file'?['ready','probing','transcoding','failed']:['ready','online','unverified','probing','failed']).map(value=>({label:({ready:'就绪',online:'在线',unverified:'未验证',disconnected:'已断开',failed:'失败',probing:'探测中',transcoding:'转码中'} as Record<string,string>)[value]!,value})))])
 function fill(source:Source){selected.value=source;Object.assign(edit,{name:source.name,address:source.address??'',username:'',password:''});clearCredentials.value=false}
 async function loadDetail(){
@@ -83,7 +81,7 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 <h1>视频源管理</h1>
 <p>统一管理本地录像与摄像头，支持连接测试、预览和基础信息维护</p>
 </div>
-<NButton v-if="writable" type="primary" size="small" @click="goImport">
+<NButton type="primary" size="small" @click="goImport">
 <template #icon>
 <Icon name="plus" :size="16"/>
 </template>新增视频源</NButton>
@@ -158,26 +156,26 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 <div v-for="detail in selected ? [selected] : []" :key="detail.id">
 <div class="field">
 <label for="source-name">视频源名称</label>
-<NInput id="source-name" v-model:value="edit.name" :disabled="!writable" placeholder="视频源名称"/>
+<NInput id="source-name" v-model:value="edit.name" placeholder="视频源名称"/>
 </div>
 <template v-if="detail.kind==='camera'">
 <div class="field">
 <label for="source-address">视频源地址</label>
-<NInput id="source-address" v-model:value="edit.address" :disabled="!writable" placeholder="rtsp://192.168.1.10:554/live"/>
+<NInput id="source-address" v-model:value="edit.address" placeholder="rtsp://192.168.1.10:554/live"/>
 </div>
 <div class="field-grid">
 <div class="field">
 <label>用户名</label>
-<NInput v-model:value="edit.username" :disabled="!writable||clearCredentials" placeholder="留空保留原凭据" autocomplete="off"/>
+<NInput v-model:value="edit.username" :disabled="clearCredentials" placeholder="留空保留原凭据" autocomplete="off"/>
 </div>
 <div class="field">
 <label>密码</label>
-<NInput v-model:value="edit.password" :disabled="!writable||clearCredentials" type="password" show-password-on="click" placeholder="留空保留原密码" autocomplete="new-password"/>
+<NInput v-model:value="edit.password" :disabled="clearCredentials" type="password" show-password-on="click" placeholder="留空保留原密码" autocomplete="new-password"/>
 </div>
 </div>
-<NCheckbox v-if="writable" v-model:checked="clearCredentials" style="font-size:11px">明确清除已保存的用户名和密码</NCheckbox>
+<NCheckbox v-model:checked="clearCredentials" style="font-size:11px">明确清除已保存的用户名和密码</NCheckbox>
 </template>
-<div v-if="writable" class="button-row">
+<div class="button-row">
 <NButton v-if="detail.kind==='camera'" :loading="testing" @click="test">
 <template #icon>
 <Icon name="play" :size="14"/>
@@ -218,7 +216,7 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 <Icon name="video"/>
 <span>当前状态暂不可预览，请等待处理或检查错误。</span>
 </div>
-<div v-if="writable" style="text-align:right;margin-top:17px">
+<div style="text-align:right;margin-top:17px">
 <NPopconfirm @positive-click="archive">
 <template #trigger>
 <NButton size="small" text type="error">归档此视频源</NButton>
@@ -234,13 +232,12 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 <button :class="{active:tab==='camera'}" role="tab" :aria-selected="tab==='camera'" @click="tab='camera'">摄像头接入</button>
 </div>
 <template v-if="tab==='file'">
-<div v-if="writable" class="upload-zone">
+<div class="upload-zone">
 <Icon name="upload" :size="28"/>
 <strong>{{uploading?'正在上传并处理视频…':'点击选择本地录像'}}</strong>
 <span>文件将在本机保存并执行媒体探测，完成后可预览</span>
 <input type="file" accept="video/*,.mkv,.avi,.mov,.ts" aria-label="导入本地视频" :disabled="uploading" @change="importFile"/>
 </div>
-<div v-else class="notice">当前账号为只读用户，无法导入视频。</div>
 <div v-if="upload" class="upload-progress">
 <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:9px">
 <span>{{uploadFilename}}</span>
@@ -258,26 +255,26 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 <div class="field-grid">
 <div class="field">
 <label>视频源名称</label>
-<NInput v-model:value="camera.name" placeholder="例如：园区入口" :disabled="!writable"/>
+<NInput v-model:value="camera.name" placeholder="例如：园区入口"/>
 </div>
 <div class="field">
 <label>RTSP 地址</label>
-<NInput v-model:value="camera.address" placeholder="rtsp://192.168.1.10:554/live" :disabled="!writable"/>
+<NInput v-model:value="camera.address" placeholder="rtsp://192.168.1.10:554/live"/>
 </div>
 </div>
 <div class="field-grid">
 <div class="field">
 <label>用户名（可选）</label>
-<NInput v-model:value="camera.username" placeholder="摄像头用户名" :disabled="!writable" autocomplete="off"/>
+<NInput v-model:value="camera.username" placeholder="摄像头用户名" autocomplete="off"/>
 </div>
 <div class="field">
 <label>密码（可选）</label>
-<NInput v-model:value="camera.password" type="password" show-password-on="click" placeholder="摄像头密码" :disabled="!writable" autocomplete="new-password"/>
+<NInput v-model:value="camera.password" type="password" show-password-on="click" placeholder="摄像头密码" autocomplete="new-password"/>
 </div>
 </div>
-<div class="notice">地址须位于管理员允许的网段内。保存后请执行连接测试；实时预览需要本地媒体网关就绪。</div>
+<div class="notice">地址须位于设置允许的网段内。保存后请执行连接测试；实时预览需要本地媒体网关就绪。</div>
 <div v-if="createError" class="error-banner" style="margin-top:12px" role="alert">{{createError}}</div>
-<NButton type="primary" attr-type="submit" :loading="creating" :disabled="!writable" style="margin-top:15px">保存摄像头</NButton>
+<NButton type="primary" attr-type="submit" :loading="creating" style="margin-top:15px">保存摄像头</NButton>
 </form>
 </section>
 </template>

@@ -5,7 +5,7 @@ export function validateSettings(section: string, values: Record<string, unknown
   }
   const ranges: Record<string,Record<string,[number,number]>> = {
     resources:{max_concurrent_jobs:[1,8],connection_timeout_seconds:[1,60],reconnect_attempts:[0,20]},
-    storage:{retention_days:[1,3650],max_upload_mb:[1,102400]}, security:{session_timeout_minutes:[5,10080]},
+    storage:{retention_days:[1,3650],max_upload_mb:[1,102400]}, security:{},
   }
   for (const [key,[min,max]] of Object.entries(ranges[section] ?? {})) {
     const number = values[key]

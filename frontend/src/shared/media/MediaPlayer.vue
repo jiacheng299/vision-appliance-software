@@ -23,4 +23,4 @@ async function preview(){
   }catch(e){if(version===generation)error.value=humanError(e)}finally{if(version===generation)loading.value=false}
 }
 </script>
-<template><div class="media-player"><video v-if="playback" :key="playback" :src="playback" controls preload="metadata" playsinline @error="error='浏览器无法播放当前媒体，请检查编码或媒体服务。';playback=null"/><template v-else><Icon name="video"/><span>{{error || (source.kind==='camera'?'点击预览以建立受保护的播放会话':'视频已导入，可打开预览')}}</span><NButton size="small" :loading="loading" type="primary" @click="preview">{{error?'重试预览':'打开预览'}}</NButton></template></div></template>
+<template><div class="media-player"><video v-if="playback" :key="playback" :src="playback" controls preload="metadata" playsinline @error="error='浏览器无法播放当前媒体，请检查编码或媒体服务。';playback=null"/><template v-else><Icon name="video"/><span>{{error || (source.kind==='camera'?'点击预览以打开视频源':'视频已导入，可打开预览')}}</span><NButton size="small" :loading="loading" type="primary" @click="preview">{{error?'重试预览':'打开预览'}}</NButton></template></div></template>

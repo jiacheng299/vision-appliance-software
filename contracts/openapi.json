@@ -5,632 +5,6 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/api/v1/auth/setup-status": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Setup Status",
-        "operationId": "setup_status_api_v1_auth_setup_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Content Too Large",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/setup": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Setup",
-        "operationId": "setup_api_v1_auth_setup_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Credentials"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserDTO"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Content Too Large",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/login": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Login",
-        "operationId": "login_api_v1_auth_login_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Credentials"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserDTO"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Content Too Large",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/me": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Me",
-        "operationId": "me_api_v1_auth_me_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserDTO"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Content Too Large",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
-      }
-    },
-    "/api/v1/auth/logout": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Logout",
-        "operationId": "logout_api_v1_auth_logout_post",
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Content Too Large",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Content",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too Many Requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Service Unavailable",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDTO"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
-      }
-    },
     "/api/v1/sources": {
       "get": {
         "tags": [
@@ -638,11 +12,6 @@
         ],
         "summary": "List Sources",
         "operationId": "list_sources_api_v1_sources_get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "q",
@@ -834,11 +203,6 @@
         ],
         "summary": "Create Source",
         "operationId": "create_source_api_v1_sources_post",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -970,11 +334,6 @@
         ],
         "summary": "Read Source",
         "operationId": "read_source_api_v1_sources__source_id__get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_id",
@@ -1105,11 +464,6 @@
         ],
         "summary": "Patch Source",
         "operationId": "patch_source_api_v1_sources__source_id__patch",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_id",
@@ -1252,11 +606,6 @@
         ],
         "summary": "Archive Source",
         "operationId": "archive_source_api_v1_sources__source_id__archive_post",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_id",
@@ -1382,11 +731,6 @@
         ],
         "summary": "Start Test",
         "operationId": "start_test_api_v1_sources__source_id__tests_post",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_id",
@@ -1519,11 +863,6 @@
         ],
         "summary": "Get Test",
         "operationId": "get_test_api_v1_source_tests__job_id__get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "job_id",
@@ -1656,11 +995,6 @@
         ],
         "summary": "Preview Session",
         "operationId": "preview_session_api_v1_sources__source_id__preview_sessions_post",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_id",
@@ -1793,11 +1127,6 @@
         ],
         "summary": "Media",
         "operationId": "media_api_v1_sources__source_id__media_get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_id",
@@ -1928,11 +1257,6 @@
         ],
         "summary": "Thumbnail",
         "operationId": "thumbnail_api_v1_sources__source_id__thumbnail_get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_id",
@@ -2184,12 +1508,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/uploads/{upload_id}": {
@@ -2199,11 +1518,6 @@
         ],
         "summary": "Read Upload",
         "operationId": "read_upload_api_v1_uploads__upload_id__get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "upload_id",
@@ -2334,11 +1648,6 @@
         ],
         "summary": "Cancel Upload",
         "operationId": "cancel_upload_api_v1_uploads__upload_id__delete",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "upload_id",
@@ -2464,11 +1773,6 @@
         ],
         "summary": "Write Chunk",
         "operationId": "write_chunk_api_v1_uploads__upload_id__chunks__number__put",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "upload_id",
@@ -2610,11 +1914,6 @@
         ],
         "summary": "Complete Upload",
         "operationId": "complete_upload_api_v1_uploads__upload_id__complete_post",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "upload_id",
@@ -2757,11 +2056,6 @@
         ],
         "summary": "Get Settings",
         "operationId": "get_settings_api_v1_settings__section__get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "section",
@@ -2892,11 +2186,6 @@
         ],
         "summary": "Patch Settings",
         "operationId": "patch_settings_api_v1_settings__section__patch",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "section",
@@ -3150,12 +2439,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/dashboard": {
@@ -3276,12 +2560,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/events": {
@@ -3402,12 +2681,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/runs": {
@@ -3526,12 +2800,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/logs": {
@@ -3541,11 +2810,6 @@
         ],
         "summary": "Logs",
         "operationId": "logs_api_v1_logs_get",
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "parameters": [
           {
             "name": "level",
@@ -3993,30 +3257,6 @@
           "address"
         ],
         "title": "CameraCreate"
-      },
-      "Credentials": {
-        "properties": {
-          "username": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 1,
-            "pattern": "^[\\w.@-]+$",
-            "title": "Username"
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Password"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "username",
-          "password"
-        ],
-        "title": "Credentials"
       },
       "DashboardDTO": {
         "properties": {
@@ -4971,42 +4211,6 @@
           "size_bytes"
         ],
         "title": "UploadDTO"
-      },
-      "UserDTO": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "username": {
-            "type": "string",
-            "title": "Username"
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "admin",
-              "operator",
-              "viewer"
-            ],
-            "title": "Role"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "username",
-          "role"
-        ],
-        "title": "UserDTO"
-      }
-    },
-    "securitySchemes": {
-      "APIKeyCookie": {
-        "type": "apiKey",
-        "in": "cookie",
-        "name": "vision_session"
       }
     }
   }

@@ -18,10 +18,3 @@ def client(app):
     from fastapi.testclient import TestClient
     with TestClient(app) as client:
         yield client
-
-@pytest.fixture
-def admin(client):
-    response = client.post('/api/v1/auth/setup', json={'username':'admin','password':'correct horse battery staple'})
-    assert response.status_code == 200, response.text
-    client.headers['X-CSRF-Token'] = client.cookies['vision_csrf']
-    return client

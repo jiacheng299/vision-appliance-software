@@ -7,7 +7,6 @@ from sqlalchemy import select, func
 from ..shared.db import get_db
 from ..shared.models import Source, Worker, Log, now
 from ..schemas import RuntimeDTO, DashboardDTO, EventPage, LogPage
-from .auth import current_user
 from .sources import source_dto
 
 router = APIRouter(tags=['runtime'])
@@ -41,26 +40,26 @@ def runtime_snapshot(app,db,record=True):
     return {**sample,'disk':{'used_bytes':usage.used,'total_bytes':usage.total,'free_bytes':usage.free},'sources':{'total':total,'online':online},'runs':{'running':0,'completed':0,'failed':0},'services':dependency_services(app,db),'models':[],'workers':[{'id':w.id,'status':'online','observed_at':__import__('datetime').datetime.fromtimestamp(w.heartbeat_at,__import__('datetime').timezone.utc).isoformat().replace('+00:00','Z')} for w in worker_rows(db)],'history':list(app.state.runtime_history)}
 
 @router.get('/runtime/overview',response_model=RuntimeDTO)
-def overview(request:Request,user=Depends(current_user),db=Depends(get_db)):
+def overview(request:Request,db=Depends(get_db)):
     return runtime_snapshot(request.app,db)
 
 @router.get('/dashboard',response_model=DashboardDTO)
-def dashboard(user=Depends(current_user),db=Depends(get_db)):
+def dashboard(db=Depends(get_db)):
     sources = list(db.scalars(select(Source).where(Source.archived==False).order_by(Source.created_at.desc()).limit(100)))
     total = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False))
     online = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False,Source.kind=='camera',Source.status=='online'))
     return {'counts':{'sources_total':total,'sources_online':online,'active_runs':0,'today_events':0},'sources':[source_dto(s) for s in sources],'recent_events':[],'task_summary':{'running':0,'completed':0,'waiting':0}}
 
 @router.get('/events',response_model=EventPage)
-def events(user=Depends(current_user)):
+def events():
     return {'items':[],'next_cursor':None}
 
 @router.get('/runs')
-def runs(user=Depends(current_user)):
+def runs():
     return {'items':[],'next_cursor':None}
 
 @router.get('/logs',response_model=LogPage)
-def logs(level:str|None=None,q:str='',limit:int=Query(100,ge=1,le=500),user=Depends(current_user),db=Depends(get_db)):
+def logs(level:str|None=None,q:str='',limit:int=Query(100,ge=1,le=500),db=Depends(get_db)):
     statement = select(Log)
     if level:
         statement = statement.where(Log.level==level.upper())

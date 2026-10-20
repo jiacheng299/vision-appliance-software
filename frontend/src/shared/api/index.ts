@@ -1,10 +1,6 @@
 import { client } from './client'
-import type { CameraInput, Dashboard, Event, Log, MediaSession, Page, Runtime, Settings, SettingsSection, Source, SourceTest, Upload, User } from './types'
+import type { CameraInput, Dashboard, Event, Log, MediaSession, Page, Runtime, Settings, SettingsSection, Source, SourceTest, Upload } from './types'
 export const api = {
-  setupStatus: () => client.get<{initialized:boolean}>('/auth/setup-status').then(r=>r.data),
-  me: () => client.get<User>('/auth/me').then(r=>r.data),
-  authenticate: (setup:boolean,username:string,password:string) => client.post<User>(setup?'/auth/setup':'/auth/login',{username,password}).then(r=>r.data),
-  logout: () => client.post('/auth/logout'),
   dashboard: () => client.get<Dashboard>('/dashboard').then(r=>r.data),
   runtime: () => client.get<Runtime>('/runtime/overview').then(r=>r.data),
   logs: (q='',level='') => client.get<Page<Log>>('/logs',{params:{q,level,limit:100}}).then(r=>r.data),
