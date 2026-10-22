@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import RevisionEditor from '../src/modules/agents/RevisionEditor.vue'
 import { agentApi, type Revision } from '../src/modules/agents/api'
 import { copyConfig, newChannel } from '../src/modules/agents/draft'
+import { channelSources } from '../src/modules/agents/channelSources'
 import { agentJson } from '../src/modules/agents/json'
 
 vi.mock('naive-ui', async () => {
@@ -77,7 +78,7 @@ describe('agent revision editing', () => {
     await wrapper.get('select').setValue('source-new')
     await button(wrapper, '保存草稿').trigger('click'); await flushPromises()
     const submitted = save.mock.calls[0]![1].channels![0]!
-    expect(submitted.source_id).toBe('source-new')
+    expect(channelSources(submitted)[0]!.source_id).toBe('source-new')
     expect(submitted.regions).toEqual([])
     expect(submitted.start_media_ms).toBeNull()
     expect(submitted.end_media_ms).toBeNull()

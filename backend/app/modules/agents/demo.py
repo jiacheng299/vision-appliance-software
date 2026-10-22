@@ -14,6 +14,7 @@ from ...shared.errors import Error
 from ...shared.models import now
 from .contracts import *
 from .integrations import AgentServices
+from .schemas import channel_sources
 from .workflow import digest
 
 
@@ -23,6 +24,7 @@ def identifier():
 
 class DemoServices(AgentServices):
     data_origin = 'mock'
+    supports_grouped_sources = True
 
     def __init__(self):
         self.lock = RLock(); self.scenario = 'normal'; self.offset = 0
@@ -62,8 +64,9 @@ class DemoServices(AgentServices):
                 unsupported.append(f'{c.name}：模拟模型只声明支持 person，未覆盖 {c.target or "未指定目标"}。')
             if c.rule not in item.rules:
                 unsupported.append(f'{c.name}：模拟模板未声明支持规则 {c.rule or "未指定规则"}。')
-            if c.rule in item.requires_region and not c.regions:
-                missing.append(f'{c.name}：请绘制或保留已给出的监测区域。')
+            for binding in channel_sources(c):
+                if c.rule in item.requires_region and not binding.regions:
+                    missing.append(f'{c.name} / {binding.source_id}：请为这个视频源绘制监测区域。')
             if c.rule in item.requires_duration and not c.duration_seconds:
                 missing.append(f'{c.name}：请明确持续时长。')
         verdict = 'unsupported' if unsupported else 'clarification_required' if missing else 'insufficient_evidence' if self.scenario == 'insufficient_evidence' else 'executable'
@@ -109,22 +112,32 @@ class DemoServices(AgentServices):
             if command.agent_id in self.archived and command.kind != 'stop':
                 raise Error(409, 'agent_archived', '智能体已经归档。')
             active = [r for r in self.run_rows.values() if r.agent_id == command.agent_id and r.channel_id in command.channel_ids and r.state in ACTIVE_STATES]
-            if command.kind == 'stop':
+            if command.kind == 'stop' and command.stop_channel_id:
+                scope = [command.stop_channel_id]
+                if set(r.id for r in active) != set(command.expected_active_run_ids):
+                    raise Error(409, 'run_scope_changed', '通道组运行已变化，请刷新。')
+                pairs = [(r.channel_id, r.source_id) for r in active]
+            elif command.kind == 'stop':
                 target = self.run_rows.get(command.stop_run_id)
                 if not target or target.agent_id != command.agent_id:
                     raise Error(404, 'run_not_found', '运行不存在。')
                 active = [target] if target.state in ACTIVE_STATES else []
-                scope = [target.channel_id]
+                scope = [target.channel_id]; pairs = [(target.channel_id, target.source_id)]
             else:
                 scope = command.channel_ids
                 if set(r.id for r in active) != set(command.expected_active_run_ids):
                     raise Error(409, 'run_scope_changed', '实际运行已发生变化，请刷新后核对。')
                 if active and command.kind == 'start':
                     raise Error(409, 'channel_busy', '所选通道正在运行，请使用应用配置或先停止。')
+                pairs = [(c.channel_id, b.source_id) for c in command.config.channels if c.channel_id in scope for b in channel_sources(c)]
+                pairs += [(r.channel_id, r.source_id) for r in active]
+                pairs = list(dict.fromkeys(pairs))
+            if not pairs:
+                raise Error(422, 'invalid_channel_scope', '所选通道没有可执行的视频源。')
             if any((command.agent_id, c) in self.busy for c in scope):
-                raise Error(409, 'channel_busy', '通道正在执行另一项操作，请等待结果。')
+                raise Error(409, 'channel_busy', '通道组正在执行另一项操作，请等待结果。')
             op = OperationDTO(id=identifier(), agent_id=command.agent_id, kind=command.kind, state='pending',
-                channels=[ChannelOperation(channel_id=c, state='pending', old_run_id=next((r.id for r in active if r.channel_id == c), None)) for c in scope], message='模拟操作已受理，尚未完成。', data_origin='mock')
+                channels=[ChannelOperation(channel_id=c, source_id=sid, state='pending', old_run_id=next((r.id for r in active if r.channel_id == c and r.source_id == sid), None)) for c,sid in pairs], message='模拟操作已受理，按通道组处理，各视频独立记录结果。', data_origin='mock')
             self.operations[op.id] = op; self.commands[op.id] = command.model_copy(deep=True); self.started[op.id] = self.clock()
             for c in scope:
                 self.busy[(command.agent_id, c)] = op.id
@@ -169,18 +182,21 @@ class DemoServices(AgentServices):
                 if elapsed < 1.3:
                     continue
                 channel = next(c for c in command.config.channels if c.channel_id == item.channel_id)
+                binding = next((b for b in channel_sources(channel) if b.source_id == item.source_id), None)
+                if binding is None:
+                    item.state = 'succeeded'; item.message = '此视频源已从新配置移除，旧运行已停止。'; continue
                 failed = self.scenario == 'start_failed' and index == 0
                 queued = self.scenario == 'resource_queued' and not failed
                 run = RunDTO(id=identifier(), agent_id=op.agent_id, revision_id=command.revision_id,
                     revision_no=command.revision_no, channel_id=channel.channel_id, channel_name=channel.name,
-                    source_id=channel.source_id, source_kind=command.source_kinds[channel.source_id],
-                    created_at=now(), recording_available=command.source_kinds[channel.source_id] == 'file',
-                    source_snapshot=next((s for s in command.source_snapshots if s.id == channel.source_id), None),
+                    source_id=binding.source_id, source_kind=command.source_kinds[binding.source_id],
+                    created_at=now(), recording_available=command.source_kinds[binding.source_id] == 'file',
+                    source_snapshot=next((s for s in command.source_snapshots if s.id == binding.source_id), None),
                     state='failed' if failed else 'queued' if queued else 'running', config_snapshot=command.config.model_copy(deep=True),
                     started_at=None if queued else now(), ended_at=now() if failed else None,
-                    last_heartbeat_at=None if queued or failed else now(), start_media_ms=channel.start_media_ms, end_media_ms=channel.end_media_ms,
-                    processed_media_ms=0 if command.source_kinds[channel.source_id] == 'file' else None,
-                    selected_duration_ms=(channel.end_media_ms-channel.start_media_ms) if channel.end_media_ms is not None else 60000 if command.source_kinds[channel.source_id] == 'file' else None,
+                    last_heartbeat_at=None if queued or failed else now(), start_media_ms=binding.start_media_ms, end_media_ms=binding.end_media_ms,
+                    processed_media_ms=0 if command.source_kinds[binding.source_id] == 'file' else None,
+                    selected_duration_ms=(binding.end_media_ms-binding.start_media_ms) if binding.end_media_ms is not None else 60000 if command.source_kinds[binding.source_id] == 'file' else None,
                     message='模拟启动失败；旧运行若已停止，不会自动恢复。' if failed else '模拟资源不足，已排队，尚未运行。' if queued else '模拟运行中，不执行真实识别。',
                     error_code='MOCK_START_FAILED' if failed else None, baseline_run_id=command.baseline_run_id, data_origin='mock')
                 self.run_rows[run.id] = run; item.new_run_id = run.id
@@ -296,7 +312,7 @@ class DemoServices(AgentServices):
             raise Error(409, 'playback_unavailable', '该运行还没有可用画面。')
         with self.lock:
             value = PlaybackDTO(id=identifier(), agent_id=run.agent_id, run_id=run.id, protocol='mock', expires_at=(datetime.now(timezone.utc)+timedelta(minutes=2)).isoformat().replace('+00:00', 'Z'),
-                message='模拟场景示意图，不是真实视频或检测输出。', regions=next(c.regions for c in run.config_snapshot.channels if c.channel_id == run.channel_id),
+                message='模拟场景示意图，不是真实视频或检测输出。', regions=next(b.regions for c in run.config_snapshot.channels if c.channel_id == run.channel_id for b in channel_sources(c) if b.source_id == run.source_id),
                 targets=[TargetBox(id='MOCK-target', label='模拟人员', x=.4, y=.25, width=.13, height=.45)] if run.state == 'running' else [], observed_at=now(), data_origin='mock',
                 media_origin_ms=run.start_media_ms or 0, duration_ms=run.selected_duration_ms)
             self.sessions[value.id] = (run.agent_id, actor_id)

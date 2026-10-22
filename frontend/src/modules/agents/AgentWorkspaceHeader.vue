@@ -4,6 +4,7 @@ import Icon from '../../shared/ui/Icon.vue'
 import { formatDate } from '../../shared/ui/resource'
 import AgentStatus from './AgentStatus.vue'
 import type { AgentDetail, Revision } from './api'
+import { sourceCount } from './channelSources'
 defineProps<{agent:AgentDetail;revision:Revision;status:string;disabled:boolean;loading:boolean;canWrite:boolean}>()
 const emit=defineEmits<{select:[id:string];refresh:[];rename:[];archive:[]}>()
 const sections=[
@@ -23,7 +24,7 @@ const sections=[
     <div class="agent-overview-grid">
       <div class="agent-overview-cell"><span class="agent-meta-label">当前状态</span><AgentStatus :value="status"/></div>
       <div class="agent-overview-cell agent-version-cell"><label class="agent-meta-label">查看配置版本</label><NSelect :value="revision.id" :options="agent.revisions.map(r=>({label:`v${r.revision_no} · ${r.state==='published'?'已发布':'草稿'}`,value:r.id}))" :disabled="disabled" aria-label="选择配置版本" @update:value="emit('select',$event)"/></div>
-      <div class="agent-overview-cell"><span class="agent-meta-label">监测通道</span><strong>{{revision.config.channels?.length??0}} <small>路配置</small></strong></div>
+      <div class="agent-overview-cell"><span class="agent-meta-label">监测通道</span><strong>{{revision.config.channels?.length??0}} <small>个通道</small></strong><small>{{sourceCount(revision.config)}} 路视频</small></div>
       <div class="agent-overview-cell"><span class="agent-meta-label">最后保存</span><span class="agent-meta-date">{{formatDate(revision.updated_at)}}</span></div>
     </div>
     <nav class="agent-section-nav" aria-label="智能体详情导航">

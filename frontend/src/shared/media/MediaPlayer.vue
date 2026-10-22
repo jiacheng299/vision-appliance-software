@@ -6,10 +6,10 @@ import { humanError } from '../api/client'
 import { safeMediaUrl } from './url'
 import type { Source } from '../api/types'
 import Icon from '../ui/Icon.vue'
-const props=defineProps<{source:Source}>()
+const props=defineProps<{source:Source;autoOpen?:boolean}>()
 const playback=ref<string|null>(null), error=ref(''), loading=ref(false)
 let generation=0
-watch(()=>props.source.id,()=>{generation++;playback.value=null;error.value=''})
+watch(()=>[props.source.id,props.autoOpen],()=>{generation++;playback.value=null;error.value='';loading.value=false;if(props.autoOpen)void preview()},{immediate:true})
 onUnmounted(()=>generation++)
 async function preview(){
   const version=++generation;loading.value=true;error.value=''

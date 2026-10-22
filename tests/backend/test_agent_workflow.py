@@ -403,3 +403,60 @@ def test_event_pagination_and_incremental_replay_do_not_skip_a_backlog(demo):
         assert int(page.stream_cursor)>int(cursor)
         replayed.update(e.id for e in page.items);cursor=page.stream_cursor
     assert replayed==seen
+
+
+def grouped(demo):
+    c,p,a,app=demo
+    rev=detail(c,a)['latest_revision'];left,right=rev['config']['channels']
+    def binding(channel):return {k:channel[k] for k in ('source_id','regions','start_media_ms','end_media_ms')}
+    left['sources']=[binding(left),binding(right)]
+    left.update(source_id=None,regions=[],start_media_ms=None,end_media_ms=None)
+    rev['config']['channels']=[left]
+    result=c.patch(API+f"/revisions/{rev['id']}",json={'config':rev['config'],'row_version':rev['row_version']})
+    assert result.status_code==200,result.text
+    return c,p,a,app,result.json()
+
+
+def test_group_sources_have_independent_runs_events_regions_and_group_stop(demo):
+    c,p,a,_,rev=grouped(demo);rev,_=publish(c,a)
+    op=submit(c,a,rev).json();assert len(op['channels'])==2
+    assert len({x['channel_id'] for x in op['channels']})==1
+    finish(c,p,a,op)
+    runs=c.get(API+f"/agents/{a['id']}/workspace").json()['runs'];assert len(runs)==2
+    assert len({r['source_id'] for r in runs})==2
+    for r in runs:
+        assert c.post(API+f"/agents/{a['id']}/runs/{r['id']}/playback").status_code==200
+        refs=c.get(API+'/agent-services/references',params={'source_id':r['source_id']}).json()['items']
+        assert refs[0]['active_run_ids']==[r['id']]
+    for e in c.get(API+f"/agents/{a['id']}/events").json()['items']:
+        assert c.get(API+f"/agents/{a['id']}/events/{e['id']}").status_code==200
+    path=f"/agents/{a['id']}/channels/{runs[0]['channel_id']}/stop";key=str(uuid4())
+    op=post(c,path,key=key).json();assert len(op['channels'])==2
+    finish(c,p,a,op);assert post(c,path,key=key).json()['id']==op['id']
+    assert all(r['state']=='stopped' for r in c.get(API+f"/agents/{a['id']}/workspace").json()['runs'])
+
+
+def test_group_validation_checks_each_video_and_rejects_duplicate_bindings(demo):
+    c,p,a,_,rev=grouped(demo)
+    config=rev['config'];config['channels'][0]['sources'][1]['regions']=[]
+    response=c.patch(API+f"/revisions/{rev['id']}",json={'config':config,'row_version':rev['row_version']});assert response.status_code==200
+    value=post(c,f"/revisions/{rev['id']}/validations",{'row_version':response.json()['row_version']}).json()
+    assert value['verdict']=='clarification_required' and value['missing_conditions']
+    config['channels'][0]['sources'].append(config['channels'][0]['sources'][0])
+    assert post(c,'/agents',{'name':'bad','config':config}).status_code==422
+
+
+def test_group_apply_removal_stops_removed_source_and_retest_copies_only_baseline_source(demo):
+    c,p,a,_,rev=grouped(demo);rev,_=publish(c,a);finish(c,p,a,submit(c,a,rev).json())
+    runs=c.get(API+f"/agents/{a['id']}/workspace").json()['runs']
+    clone=post(c,f"/agents/{a['id']}/revisions",{'base_revision_id':rev['id'],'row_version':detail(c,a)['row_version']}).json()
+    clone['config']['channels'][0]['sources']=clone['config']['channels'][0]['sources'][:1]
+    response=c.patch(API+f"/revisions/{clone['id']}",json={'config':clone['config'],'row_version':clone['row_version']});assert response.status_code==200
+    newer,_=publish(c,a,clone['id']);op=submit(c,a,newer,kind='apply',run_ids=[r['id'] for r in runs]).json()
+    assert finish(c,p,a,op)['state']=='succeeded'
+    current=c.get(API+f"/agents/{a['id']}/workspace").json()['runs']
+    assert sum(r['state']=='running' for r in current)==1
+    baseline=runs[0]
+    retest=post(c,f"/agents/{a['id']}/retests",{'baseline_run_id':baseline['id'],'row_version':detail(c,a)['row_version']}).json()
+    assert len(retest['config']['channels'][0]['sources'])==1
+    assert retest['config']['channels'][0]['sources'][0]['source_id']==baseline['source_id']

@@ -7,7 +7,7 @@ from ...shared.errors import Error
 from ...shared.models import Log, now
 from ..sources import resolve_agent_source
 from .models import Agent, AgentCommand, AgentRevision
-from .schemas import AgentDTO, AgentDetail, RevisionConfig, RevisionDTO
+from .schemas import AgentDTO, AgentDetail, RevisionConfig, RevisionDTO, channel_sources
 
 
 def lock_write(db):
@@ -60,7 +60,7 @@ def list_agents(db, q, source_id, cursor, limit, archived=False, provider=None, 
     ordering = (Agent.name.asc(), Agent.id.asc()) if sort == 'name_asc' else (Agent.updated_at.desc(), Agent.id.desc())
     for agent in db.scalars(statement.order_by(*ordering)):
         dto = agent_dto(db, agent)
-        if source_id and not any(c.source_id == source_id for c in dto.latest_revision.config.channels):
+        if source_id and not any(b.source_id == source_id for c in dto.latest_revision.config.channels for b in channel_sources(c)):
             continue
         if scene and not any(c.rule == scene for c in dto.latest_revision.config.channels):
             continue
@@ -81,15 +81,13 @@ def list_agents(db, q, source_id, cursor, limit, archived=False, provider=None, 
 
 def check_config(db, config: RevisionConfig, previous: dict | None = None):
     old = RevisionConfig.model_validate(previous).channels if previous else []
-    old_sources = {(c.channel_id, c.source_id) for c in old}
+    old_sources = {(c.channel_id, b.source_id) for c in old for b in channel_sources(c)}
     for channel in config.channels:
-        if not channel.source_id:
-            continue
-        # Keep old references readable/editable even if a source is later archived.
-        source = resolve_agent_source(db, channel.source_id, allow_archived=(channel.channel_id, channel.source_id) in old_sources)
-        if channel.start_media_ms is not None:
-            if source.kind != 'file' or source.duration_ms is None or channel.end_media_ms > source.duration_ms:
-                raise Error(422, 'invalid_media_range', '录像区间超出视频时长，或该视频源不支持区间。')
+        for binding in channel_sources(channel):
+            source = resolve_agent_source(db, binding.source_id, allow_archived=(channel.channel_id, binding.source_id) in old_sources)
+            if binding.start_media_ms is not None:
+                if source.kind != 'file' or source.duration_ms is None or binding.end_media_ms > source.duration_ms:
+                    raise Error(422, 'invalid_media_range', '录像区间超出视频时长，或该视频源不支持区间。')
 
 
 def receipt(db, actor_id, key, operation, payload):
@@ -135,9 +133,9 @@ def patch_agent(db, agent_id, body):
     return agent_dto(db, agent, detail=True)
 
 
-def clone_revision(db, agent_id, body, actor_id, key, baseline_run_id=None, baseline_channel_id=None):
+def clone_revision(db, agent_id, body, actor_id, key, baseline_run_id=None, baseline_channel_id=None, baseline_source_id=None):
     lock_write(db)
-    existing, request_hash = receipt(db, actor_id, key, f'clone:{agent_id}', {**body.model_dump(mode='json'), 'baseline_run_id': baseline_run_id, 'baseline_channel_id': baseline_channel_id})
+    existing, request_hash = receipt(db, actor_id, key, f'clone:{agent_id}', {**body.model_dump(mode='json'), 'baseline_run_id': baseline_run_id, 'baseline_channel_id': baseline_channel_id, 'baseline_source_id': baseline_source_id})
     if existing:
         return RevisionDTO.model_validate(existing.response)
     agent = get_agent(db, agent_id)
@@ -148,6 +146,13 @@ def clone_revision(db, agent_id, body, actor_id, key, baseline_run_id=None, base
     if base.agent_id != agent_id:
         raise Error(422, 'revision_agent_mismatch', '不能复制其他智能体的配置版本。')
     config = base.config if baseline_channel_id is None else {**base.config, 'channels': [c for c in base.config['channels'] if c['channel_id'] == baseline_channel_id]}
+    if baseline_source_id:
+        config = RevisionConfig.model_validate(config).model_copy(deep=True)
+        for c in config.channels:
+            binding = next(b for b in channel_sources(c) if b.source_id == baseline_source_id)
+            if c.sources:
+                c.sources = [binding]
+        config = config.model_dump(mode='json')
     revision = AgentRevision(agent_id=agent_id, revision_no=revisions_for(db, agent_id)[0].revision_no+1, base_revision_id=base.id, config=config, baseline_run_id=baseline_run_id or base.baseline_run_id)
     db.add(revision)
     agent.updated_at = now()

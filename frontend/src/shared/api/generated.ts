@@ -842,6 +842,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/{agent_id}/channels/{channel_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Channel */
+        post: operations["stop_channel_api_v1_agents__agent_id__channels__channel_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -1227,6 +1244,8 @@ export interface components {
             name: string;
             /** Source Id */
             source_id?: string | null;
+            /** Sources */
+            sources?: components["schemas"]["ChannelSource"][];
             /**
              * Requirement Text
              * @default
@@ -1256,6 +1275,8 @@ export interface components {
         ChannelOperation: {
             /** Channel Id */
             channel_id: string;
+            /** Source Id */
+            source_id?: string | null;
             /**
              * State
              * @enum {string}
@@ -1270,6 +1291,17 @@ export interface components {
              * @default
              */
             message: string;
+        };
+        /** ChannelSource */
+        ChannelSource: {
+            /** Source Id */
+            source_id: string;
+            /** Start Media Ms */
+            start_media_ms?: number | null;
+            /** End Media Ms */
+            end_media_ms?: number | null;
+            /** Regions */
+            regions?: components["schemas"]["Region"][];
         };
         /** ComparisonDTO */
         ComparisonDTO: {
@@ -2272,7 +2304,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2281,7 +2313,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2386,7 +2418,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2395,7 +2427,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2498,7 +2530,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2507,7 +2539,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2614,7 +2646,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2623,7 +2655,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2724,7 +2756,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2733,7 +2765,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2836,7 +2868,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2845,7 +2877,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2948,7 +2980,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -2957,7 +2989,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3060,7 +3092,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3069,7 +3101,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3172,7 +3204,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3181,7 +3213,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3284,7 +3316,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3293,7 +3325,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3398,7 +3430,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3407,7 +3439,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3510,7 +3542,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3519,7 +3551,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3620,7 +3652,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3629,7 +3661,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3733,7 +3765,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3742,7 +3774,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3849,7 +3881,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3858,7 +3890,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3961,7 +3993,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3970,7 +4002,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4077,7 +4109,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4086,7 +4118,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4187,7 +4219,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4196,7 +4228,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4297,7 +4329,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4306,7 +4338,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4407,7 +4439,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4416,7 +4448,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4517,7 +4549,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4526,7 +4558,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4631,7 +4663,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4640,7 +4672,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4741,7 +4773,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4750,7 +4782,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4851,7 +4883,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4860,7 +4892,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4961,7 +4993,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4970,7 +5002,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5071,7 +5103,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5080,7 +5112,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5187,7 +5219,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5196,7 +5228,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5299,7 +5331,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5308,7 +5340,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5411,7 +5443,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5420,7 +5452,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5529,7 +5561,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5538,7 +5570,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5647,7 +5679,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5656,7 +5688,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5765,7 +5797,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5774,7 +5806,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5880,7 +5912,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5889,7 +5921,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5993,7 +6025,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6002,7 +6034,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6109,7 +6141,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6118,7 +6150,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6225,7 +6257,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6234,7 +6266,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6345,7 +6377,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6354,7 +6386,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6460,7 +6492,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6469,7 +6501,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6573,7 +6605,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6582,7 +6614,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6692,7 +6724,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6701,7 +6733,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6804,7 +6836,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6813,7 +6845,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6922,7 +6954,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6931,7 +6963,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7035,7 +7067,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7044,7 +7076,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7148,7 +7180,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7157,7 +7189,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7262,7 +7294,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7271,7 +7303,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7380,7 +7412,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7389,7 +7421,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7495,7 +7527,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7504,7 +7536,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7613,7 +7645,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7622,7 +7654,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7723,7 +7755,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7732,7 +7764,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7836,7 +7868,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7845,7 +7877,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7952,7 +7984,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7961,7 +7993,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8065,7 +8097,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8074,7 +8106,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8175,7 +8207,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8184,7 +8216,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8289,7 +8321,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8298,7 +8330,122 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    stop_channel_api_v1_agents__agent_id__channels__channel_id__stop_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                agent_id: string;
+                channel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDTO"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8408,7 +8555,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8417,7 +8564,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8524,7 +8671,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8533,7 +8680,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8636,7 +8783,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8645,7 +8792,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8752,7 +8899,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8761,7 +8908,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8870,7 +9017,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8879,7 +9026,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8982,7 +9129,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8991,7 +9138,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9098,7 +9245,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9107,7 +9254,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9214,7 +9361,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Content Too Large */
+            /** @description Request Entity Too Large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9223,7 +9370,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDTO"];
                 };
             };
-            /** @description Unprocessable Content */
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;

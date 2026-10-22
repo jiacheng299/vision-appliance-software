@@ -7,7 +7,7 @@ from ...shared.errors import Error
 from ...shared.models import Log, now
 from ..sources import resolve_agent_source
 from .models import AgentCommand, AgentConfirmation, AgentValidation
-from .schemas import RevisionDTO, RevisionClone
+from .schemas import RevisionDTO, RevisionClone, channel_sources
 from .contracts import (ACTIVE_STATES, Assessment, OperationDTO, RuntimeCommand, ValidationDTO, WorkspaceDTO)
 from . import service
 
@@ -21,11 +21,16 @@ def writable(agent):
         raise Error(409, 'agent_archived', '智能体已归档，请先恢复后再操作。')
 
 
+def check_group_support(provider, config):
+    if any(c.sources for c in config.channels) and not provider.supports_grouped_sources:
+        raise Error(503, 'grouped_sources_unavailable', '公共服务尚未声明支持通道内多视频源，配置已保留，暂不能验证或启动。')
+
+
 def source_snapshots(db, config):
     result = []
     for channel in config.channels:
-        if channel.source_id:
-            s = resolve_agent_source(db, channel.source_id)
+        for binding in channel_sources(channel):
+            s = resolve_agent_source(db, binding.source_id)
             result.append({key: getattr(s, key) for key in ('id', 'row_version', 'kind', 'sha256', 'width', 'height', 'duration_ms')})
     return result
 
@@ -48,6 +53,7 @@ def validate(db, revision_id, expected_version, provider, actor_id):
     if revision.state != 'draft':
         raise Error(409, 'revision_immutable', '已发布配置不能再次验证或改写，请复制为新草稿。')
     config = RevisionDTO.model_validate(revision).config
+    check_group_support(provider, config)
     config_hash = digest(config.model_dump(mode='json'))
     sources = source_snapshots(db, config)
     sources_hash = digest(sources)
@@ -60,7 +66,7 @@ def validate(db, revision_id, expected_version, provider, actor_id):
     if not config.channels:
         missing.append('至少添加一路监测。')
     for c in config.channels:
-        if not c.source_id:
+        if not channel_sources(c):
             missing.append(f'{c.name}：请选择视频源。')
         if not c.requirement_text:
             missing.append(f'{c.name}：请填写原始监测需求。')
@@ -155,6 +161,7 @@ def start(db, provider, agent_id, body, actor_id, key, kind='start'):
         raise Error(422, 'confirmation_required', '配置缺少有效的用户确认记录。')
     validation = get_validation(db, confirmation.validation_id)
     config = RevisionDTO.model_validate(revision).config
+    check_group_support(provider, config)
     sources = source_snapshots(db, config)
     if validation.expires_at <= now() or validation.config_hash != digest(revision.config) or validation.source_hash != digest(sources):
         raise Error(409, 'validation_stale', '执行依据已经改变，请复制为草稿后重新验证确认。')
@@ -199,6 +206,28 @@ def stop(db, provider, agent_id, run_id, actor_id, key):
     return remember_operation(db, result, actor_id, key, operation_name, payload)
 
 
+def stop_channel(db, provider, agent_id, channel_id, actor_id, key):
+    operation_name = f'channel:stop:{agent_id}'
+    payload = {'channel_id': channel_id}
+    existing, _ = service.receipt(db, actor_id, key, operation_name, payload)
+    if existing:
+        return provider.operation(agent_id, existing.response['id'], actor_id)
+    service.get_agent(db, agent_id)
+    targets = [r for r in provider.runs(agent_id, actor_id) if r.channel_id == channel_id and r.state in ACTIVE_STATES]
+    if not targets:
+        raise Error(409, 'run_scope_changed', '该通道当前没有活动运行，请刷新后查看。')
+    if not provider.supports_grouped_sources and len(targets) > 1:
+        raise Error(503, 'grouped_sources_unavailable', '运行服务尚未支持通道组停止。')
+    if any(r.agent_id != agent_id for r in targets):
+        raise Error(502, 'provider_contract_invalid', '运行服务返回了其他智能体的数据。')
+    result = provider.submit(RuntimeCommand(kind='stop', agent_id=agent_id, channel_ids=[channel_id],
+        stop_channel_id=channel_id if provider.supports_grouped_sources else None, stop_run_id=None if provider.supports_grouped_sources else targets[0].id,
+        expected_active_run_ids=[r.id for r in targets]), actor_id, key)
+    if result.agent_id != agent_id or result.data_origin != provider.data_origin:
+        raise Error(502, 'provider_contract_invalid', '停止操作关联不一致。')
+    return remember_operation(db, result, actor_id, key, operation_name, payload)
+
+
 def workspace(db, provider, agent_id, actor_id):
     service.get_agent(db, agent_id)
     try:
@@ -207,7 +236,7 @@ def workspace(db, provider, agent_id, actor_id):
             raise Error(502, 'provider_contract_invalid', '运行服务返回了不属于此智能体的数据。')
         for run in runs:
             revision = service.get_revision(db, run.revision_id)
-            if revision.agent_id != agent_id or revision.revision_no != run.revision_no or digest(revision.config) != digest(run.config_snapshot.model_dump(mode='json')) or not any(c.get('channel_id') == run.channel_id and c.get('source_id') == run.source_id for c in revision.config['channels']):
+            if revision.agent_id != agent_id or revision.revision_no != run.revision_no or digest(revision.config) != digest(run.config_snapshot.model_dump(mode='json')) or not any(c.get('channel_id') == run.channel_id and any(b.source_id == run.source_id for b in channel_sources(c)) for c in revision.config['channels']):
                 raise Error(502, 'provider_contract_invalid', '实际运行配置与发布版本不一致。')
         return WorkspaceDTO(agent_id=agent_id, runs=runs, runtime_available=True, observed_at=now(), data_origin=provider.data_origin)
     except Error as exc:
@@ -227,7 +256,7 @@ def enrich(db, dto, provider, actor_id):
     dto.active_revision_nos = sorted({r.revision_no for r in active})
     latest = {}
     for r in sorted(w.runs, key=lambda r: r.created_at or r.started_at or '', reverse=True):
-        latest.setdefault(r.channel_id, r)
+        latest.setdefault((r.channel_id, r.source_id), r)
     dto.failed_run_count = sum(r.state == 'failed' for r in latest.values()) if w.runtime_available else None
     if active:
         if any(r.state in ('running', 'reconnecting') and (not r.last_heartbeat_at or (datetime.now(timezone.utc)-datetime.fromisoformat(r.last_heartbeat_at.replace('Z', '+00:00'))).total_seconds() > 30) for r in active):
@@ -280,5 +309,5 @@ def retest(db, provider, agent_id, body, actor_id, key):
     run = scoped_run(db, provider, agent_id, body.baseline_run_id, actor_id)
     if run.state in ACTIVE_STATES:
         raise Error(409, 'baseline_running', '请先结束基线运行，再创建可追溯的复测草稿。')
-    result = service.clone_revision(db, agent_id, RevisionClone(base_revision_id=run.revision_id, row_version=body.row_version), actor_id, key, baseline_run_id=run.id, baseline_channel_id=run.channel_id)
+    result = service.clone_revision(db, agent_id, RevisionClone(base_revision_id=run.revision_id, row_version=body.row_version), actor_id, key, baseline_run_id=run.id, baseline_channel_id=run.channel_id, baseline_source_id=run.source_id)
     return result
