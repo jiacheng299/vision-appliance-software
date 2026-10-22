@@ -54,3 +54,19 @@ def test_periodic_checks_disconnect_recover_and_do_not_duplicate(client,app):
         assert not worker.schedule_camera_check()
     finally:
         worker.engine.dispose()
+
+@pytest.mark.parametrize('code', ['camera_decode_failed','camera_connection_failed'])
+def test_failed_camera_verification_cannot_claim_online(client,app,code):
+    source=client.post(API+'/sources',json={'name':'unreadable','kind':'camera','address':'rtsp://127.0.0.1:8554/plaza'}).json()
+    client.post(API+'/sources/'+source['id']+'/tests')
+    worker=Supervisor(app.state.config)
+    try:
+        with patch('worker.supervisor.describe'), patch('worker.supervisor.MediaGateway') as gateway, patch('worker.supervisor.decode_camera',side_effect=MediaFailure(code,'视频不可用')):
+            gateway.return_value.ensure_published.return_value='plaza'
+            assert worker.run_once()
+        result=client.get(API+'/sources/'+source['id']).json()
+        assert result['status']=='disconnected'
+        assert result['error_code']==code
+        assert result['width'] is None
+    finally:
+        worker.engine.dispose()
