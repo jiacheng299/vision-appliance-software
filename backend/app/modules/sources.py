@@ -32,6 +32,14 @@ def get_source(db,source_id):
         raise Error(404,'source_not_found','视频源不存在或已归档。')
     return source
 
+
+def resolve_agent_source(db, source_id, allow_archived=False):
+    """Public, read-only source reference for agent draft configuration (no credentials)."""
+    source = db.get(Source, source_id)
+    if source is None or (source.archived and not allow_archived):
+        raise Error(422, 'source_unavailable', '所选视频源不存在或已归档，请重新选择。')
+    return source_dto(source)
+
 def get_upload(db,upload_id):
     upload = db.get(Upload,upload_id)
     if not upload:

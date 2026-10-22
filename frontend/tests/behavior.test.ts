@@ -17,9 +17,11 @@ describe('settings and route boundaries', () => {
     expect(validateSettings('resources', { max_concurrent_jobs: 2, connection_timeout_seconds: 30, reconnect_attempts: 3 })).toBe('')
     expect(validateSettings('general', { system_name: '', timezone: 'Asia/Shanghai' })).not.toBe('')
   })
-  it('has no deferred module destination', () => {
+  it('enables agents while leaving task creation and models deferred', () => {
     expect(permittedRoutes('/create')).toBe(false)
-    expect(permittedRoutes('/agents')).toBe(false)
+    expect(permittedRoutes('/agents')).toBe(true)
+    expect(permittedRoutes('/agents/123/config')).toBe(true)
+    expect(permittedRoutes('/agents/123/unknown')).toBe(false)
     expect(permittedRoutes('/models')).toBe(false)
     expect(permittedRoutes('/sources/123')).toBe(true)
     expect(permittedRoutes('/settings/security')).toBe(true)
