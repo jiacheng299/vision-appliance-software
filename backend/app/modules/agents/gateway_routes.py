@@ -142,7 +142,7 @@ def iso_utc(value):
         raise Error(422, 'invalid_time', '时间必须是带时区的 ISO8601 时间。')
 
 
-@router.get('/agents/{agent_id}/events', response_model=EventPage)
+@router.get('/agents/{agent_id}/events', response_model=AgentEventPage)
 def events(agent_id: str, run_id: str | None = None, event_type: str | None = Query(None, max_length=160),
            review_status: str | None = Query(None, pattern='^(unreviewed|correct|false_positive)$'),
            from_time: str | None = None, to_time: str | None = None, cursor: str | None = Query(None, max_length=512),

@@ -1130,6 +1130,84 @@ export interface components {
              */
             limitation: string;
         };
+        /** AgentEventDTO */
+        AgentEventDTO: {
+            /** Id */
+            id: string;
+            /** Agent Id */
+            agent_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Revision Id */
+            revision_id: string;
+            /** Source Id */
+            source_id: string;
+            /** Channel Id */
+            channel_id: string;
+            /** Occurred At */
+            occurred_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Row Version */
+            row_version: number;
+            /** Event Type */
+            event_type: string;
+            /** Severity */
+            severity: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Evidence Status
+             * @enum {string}
+             */
+            evidence_status: "pending" | "ready" | "partial" | "missing" | "failed" | "expired";
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "unreviewed" | "correct" | "false_positive";
+            /**
+             * Feedback Reason
+             * @default
+             */
+            feedback_reason: string;
+            /** Start Media Ms */
+            start_media_ms?: number | null;
+            /** End Media Ms */
+            end_media_ms?: number | null;
+            /**
+             * Data Origin
+             * @default real
+             * @enum {string}
+             */
+            data_origin: "real" | "mock";
+        };
+        /** AgentEventPage */
+        AgentEventPage: {
+            /** Items */
+            items: components["schemas"]["AgentEventDTO"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Stream Cursor */
+            stream_cursor: string;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * Resync Required
+             * @default false
+             */
+            resync_required: boolean;
+            /**
+             * Data Origin
+             * @default real
+             * @enum {string}
+             */
+            data_origin: "real" | "mock";
+            /** Today Count */
+            today_count?: number | null;
+            /** Pending Review Count */
+            pending_review_count?: number | null;
+        };
         /** AgentPage */
         AgentPage: {
             /** Items */
@@ -1330,7 +1408,7 @@ export interface components {
             /** Sources */
             sources: components["schemas"]["SourceDTO"][];
             /** Recent Events */
-            recent_events: components["schemas"]["app__schemas__EventDTO"][];
+            recent_events: components["schemas"]["EventDTO"][];
             /** Task Summary */
             task_summary: {
                 [key: string]: number;
@@ -1380,6 +1458,31 @@ export interface components {
             retryable: boolean;
             /** Request Id */
             request_id: string;
+        };
+        /** EventDTO */
+        EventDTO: {
+            /** Id */
+            id: string;
+            /** Event Type */
+            event_type: string;
+            /** Source Id */
+            source_id: string | null;
+            /** Source Name */
+            source_name: string | null;
+            /** Run Id */
+            run_id: string | null;
+            /** Revision Id */
+            revision_id: string | null;
+            /** Occurred At */
+            occurred_at: string | null;
+            /** Start Media Ms */
+            start_media_ms: number | null;
+            /** Reason */
+            reason: string;
+            /** Evidence Status */
+            evidence_status: string;
+            /** Review Status */
+            review_status: string;
         };
         /** EventDetail */
         EventDetail: {
@@ -1436,6 +1539,13 @@ export interface components {
             evidence: components["schemas"]["EvidenceDTO"][];
             /** Feedback History */
             feedback_history: components["schemas"]["FeedbackDTO"][];
+        };
+        /** EventPage */
+        EventPage: {
+            /** Items */
+            items: components["schemas"]["EventDTO"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** EvidenceDTO */
         EvidenceDTO: {
@@ -2187,116 +2297,6 @@ export interface components {
              * @enum {string}
              */
             data_origin: "real" | "mock";
-        };
-        /** EventDTO */
-        app__modules__agents__contracts__EventDTO: {
-            /** Id */
-            id: string;
-            /** Agent Id */
-            agent_id: string;
-            /** Run Id */
-            run_id: string;
-            /** Revision Id */
-            revision_id: string;
-            /** Source Id */
-            source_id: string;
-            /** Channel Id */
-            channel_id: string;
-            /** Occurred At */
-            occurred_at: string;
-            /** Updated At */
-            updated_at: string;
-            /** Row Version */
-            row_version: number;
-            /** Event Type */
-            event_type: string;
-            /** Severity */
-            severity: string;
-            /** Reason */
-            reason: string;
-            /**
-             * Evidence Status
-             * @enum {string}
-             */
-            evidence_status: "pending" | "ready" | "partial" | "missing" | "failed" | "expired";
-            /**
-             * Review Status
-             * @enum {string}
-             */
-            review_status: "unreviewed" | "correct" | "false_positive";
-            /**
-             * Feedback Reason
-             * @default
-             */
-            feedback_reason: string;
-            /** Start Media Ms */
-            start_media_ms?: number | null;
-            /** End Media Ms */
-            end_media_ms?: number | null;
-            /**
-             * Data Origin
-             * @default real
-             * @enum {string}
-             */
-            data_origin: "real" | "mock";
-        };
-        /** EventPage */
-        app__modules__agents__contracts__EventPage: {
-            /** Items */
-            items: components["schemas"]["app__modules__agents__contracts__EventDTO"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
-            /** Stream Cursor */
-            stream_cursor: string;
-            /** Updated At */
-            updated_at: string;
-            /**
-             * Resync Required
-             * @default false
-             */
-            resync_required: boolean;
-            /**
-             * Data Origin
-             * @default real
-             * @enum {string}
-             */
-            data_origin: "real" | "mock";
-            /** Today Count */
-            today_count?: number | null;
-            /** Pending Review Count */
-            pending_review_count?: number | null;
-        };
-        /** EventDTO */
-        app__schemas__EventDTO: {
-            /** Id */
-            id: string;
-            /** Event Type */
-            event_type: string;
-            /** Source Id */
-            source_id: string | null;
-            /** Source Name */
-            source_name: string | null;
-            /** Run Id */
-            run_id: string | null;
-            /** Revision Id */
-            revision_id: string | null;
-            /** Occurred At */
-            occurred_at: string | null;
-            /** Start Media Ms */
-            start_media_ms: number | null;
-            /** Reason */
-            reason: string;
-            /** Evidence Status */
-            evidence_status: string;
-            /** Review Status */
-            review_status: string;
-        };
-        /** EventPage */
-        app__schemas__EventPage: {
-            /** Items */
-            items: components["schemas"]["app__schemas__EventDTO"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
         };
     };
     responses: never;
@@ -5019,7 +5019,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__EventPage"];
+                    "application/json": components["schemas"]["EventPage"];
                 };
             };
             /** @description Bad Request */
@@ -6957,7 +6957,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__modules__agents__contracts__EventPage"];
+                    "application/json": components["schemas"]["AgentEventPage"];
                 };
             };
             /** @description Bad Request */

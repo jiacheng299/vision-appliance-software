@@ -246,11 +246,11 @@ class DemoServices(AgentServices):
                 rows = [e for e in rows if (e.occurred_at, e.id) < tuple(pivot)]
             rows.sort(key=lambda e: (e.occurred_at, e.id), reverse=True)
             page = rows[:limit]
-            items = [EventDTO.model_validate(e.model_dump(exclude={'evidence', 'feedback_history'})) for e in page]
+            items = [AgentEventDTO.model_validate(e.model_dump(exclude={'evidence', 'feedback_history'})) for e in page]
             if self.scenario == 'duplicate_events' and items:
                 items.append(items[0].model_copy(deep=True))
             next_cursor = base64.urlsafe_b64encode(json.dumps([page[-1].occurred_at, page[-1].id]).encode()).decode() if after is None and len(rows)>limit else None
-            return EventPage(items=items, next_cursor=next_cursor,
+            return AgentEventPage(items=items, next_cursor=next_cursor,
                 stream_cursor=str(stream_cursor), updated_at=now(), data_origin='mock', resync_required=resync, today_count=total, pending_review_count=pending)
 
     def event(self, agent_id, event_id, actor_id):

@@ -3297,7 +3297,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__schemas__EventPage"
+                  "$ref": "#/components/schemas/EventPage"
                 }
               }
             }
@@ -5878,7 +5878,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__modules__agents__contracts__EventPage"
+                  "$ref": "#/components/schemas/AgentEventPage"
                 }
               }
             }
@@ -10122,6 +10122,208 @@
         ],
         "title": "AgentDetail"
       },
+      "AgentEventDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "agent_id": {
+            "type": "string",
+            "title": "Agent Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "revision_id": {
+            "type": "string",
+            "title": "Revision Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "row_version": {
+            "type": "integer",
+            "title": "Row Version"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "evidence_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "partial",
+              "missing",
+              "failed",
+              "expired"
+            ],
+            "title": "Evidence Status"
+          },
+          "review_status": {
+            "type": "string",
+            "enum": [
+              "unreviewed",
+              "correct",
+              "false_positive"
+            ],
+            "title": "Review Status"
+          },
+          "feedback_reason": {
+            "type": "string",
+            "title": "Feedback Reason",
+            "default": ""
+          },
+          "start_media_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Media Ms"
+          },
+          "end_media_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Media Ms"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Origin",
+            "default": "real"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "agent_id",
+          "run_id",
+          "revision_id",
+          "source_id",
+          "channel_id",
+          "occurred_at",
+          "updated_at",
+          "row_version",
+          "event_type",
+          "severity",
+          "reason",
+          "evidence_status",
+          "review_status"
+        ],
+        "title": "AgentEventDTO"
+      },
+      "AgentEventPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentEventDTO"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "stream_cursor": {
+            "type": "string",
+            "title": "Stream Cursor"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "resync_required": {
+            "type": "boolean",
+            "title": "Resync Required",
+            "default": false
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Origin",
+            "default": "real"
+          },
+          "today_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Today Count"
+          },
+          "pending_review_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Review Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "stream_cursor",
+          "updated_at"
+        ],
+        "title": "AgentEventPage"
+      },
       "AgentPage": {
         "properties": {
           "items": {
@@ -10717,7 +10919,7 @@
           },
           "recent_events": {
             "items": {
-              "$ref": "#/components/schemas/app__schemas__EventDTO"
+              "$ref": "#/components/schemas/EventDTO"
             },
             "type": "array",
             "title": "Recent Events"
@@ -10857,6 +11059,112 @@
           "request_id"
         ],
         "title": "ErrorDetail"
+      },
+      "EventDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "start_media_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Media Ms"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "evidence_status": {
+            "type": "string",
+            "title": "Evidence Status"
+          },
+          "review_status": {
+            "type": "string",
+            "title": "Review Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "source_id",
+          "source_name",
+          "run_id",
+          "revision_id",
+          "occurred_at",
+          "start_media_ms",
+          "reason",
+          "evidence_status",
+          "review_status"
+        ],
+        "title": "EventDTO"
       },
       "EventDetail": {
         "properties": {
@@ -11001,6 +11309,34 @@
           "feedback_history"
         ],
         "title": "EventDetail"
+      },
+      "EventPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EventDTO"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "EventPage"
       },
       "EvidenceDTO": {
         "properties": {
@@ -13226,342 +13562,6 @@
           "observed_at"
         ],
         "title": "WorkspaceDTO"
-      },
-      "app__modules__agents__contracts__EventDTO": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "agent_id": {
-            "type": "string",
-            "title": "Agent Id"
-          },
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
-          "revision_id": {
-            "type": "string",
-            "title": "Revision Id"
-          },
-          "source_id": {
-            "type": "string",
-            "title": "Source Id"
-          },
-          "channel_id": {
-            "type": "string",
-            "title": "Channel Id"
-          },
-          "occurred_at": {
-            "type": "string",
-            "title": "Occurred At"
-          },
-          "updated_at": {
-            "type": "string",
-            "title": "Updated At"
-          },
-          "row_version": {
-            "type": "integer",
-            "title": "Row Version"
-          },
-          "event_type": {
-            "type": "string",
-            "title": "Event Type"
-          },
-          "severity": {
-            "type": "string",
-            "title": "Severity"
-          },
-          "reason": {
-            "type": "string",
-            "title": "Reason"
-          },
-          "evidence_status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "ready",
-              "partial",
-              "missing",
-              "failed",
-              "expired"
-            ],
-            "title": "Evidence Status"
-          },
-          "review_status": {
-            "type": "string",
-            "enum": [
-              "unreviewed",
-              "correct",
-              "false_positive"
-            ],
-            "title": "Review Status"
-          },
-          "feedback_reason": {
-            "type": "string",
-            "title": "Feedback Reason",
-            "default": ""
-          },
-          "start_media_ms": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Media Ms"
-          },
-          "end_media_ms": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Media Ms"
-          },
-          "data_origin": {
-            "type": "string",
-            "enum": [
-              "real",
-              "mock"
-            ],
-            "title": "Data Origin",
-            "default": "real"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "agent_id",
-          "run_id",
-          "revision_id",
-          "source_id",
-          "channel_id",
-          "occurred_at",
-          "updated_at",
-          "row_version",
-          "event_type",
-          "severity",
-          "reason",
-          "evidence_status",
-          "review_status"
-        ],
-        "title": "EventDTO"
-      },
-      "app__modules__agents__contracts__EventPage": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/app__modules__agents__contracts__EventDTO"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "stream_cursor": {
-            "type": "string",
-            "title": "Stream Cursor"
-          },
-          "updated_at": {
-            "type": "string",
-            "title": "Updated At"
-          },
-          "resync_required": {
-            "type": "boolean",
-            "title": "Resync Required",
-            "default": false
-          },
-          "data_origin": {
-            "type": "string",
-            "enum": [
-              "real",
-              "mock"
-            ],
-            "title": "Data Origin",
-            "default": "real"
-          },
-          "today_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Today Count"
-          },
-          "pending_review_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pending Review Count"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "items",
-          "stream_cursor",
-          "updated_at"
-        ],
-        "title": "EventPage"
-      },
-      "app__schemas__EventDTO": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "event_type": {
-            "type": "string",
-            "title": "Event Type"
-          },
-          "source_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Id"
-          },
-          "source_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Name"
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Run Id"
-          },
-          "revision_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision Id"
-          },
-          "occurred_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Occurred At"
-          },
-          "start_media_ms": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Media Ms"
-          },
-          "reason": {
-            "type": "string",
-            "title": "Reason"
-          },
-          "evidence_status": {
-            "type": "string",
-            "title": "Evidence Status"
-          },
-          "review_status": {
-            "type": "string",
-            "title": "Review Status"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "event_type",
-          "source_id",
-          "source_name",
-          "run_id",
-          "revision_id",
-          "occurred_at",
-          "start_media_ms",
-          "reason",
-          "evidence_status",
-          "review_status"
-        ],
-        "title": "EventDTO"
-      },
-      "app__schemas__EventPage": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/app__schemas__EventDTO"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "EventPage"
       }
     },
     "securitySchemes": {

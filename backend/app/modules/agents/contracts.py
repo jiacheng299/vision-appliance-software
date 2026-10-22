@@ -128,7 +128,7 @@ class RetestInput(VersionCommand):
     baseline_run_id: str = Field(min_length=1, max_length=80)
 
 
-class EventDTO(DTO):
+class AgentEventDTO(DTO):
     id: str
     agent_id: str
     run_id: str
@@ -165,13 +165,13 @@ class FeedbackDTO(DTO):
     author_id: str
 
 
-class EventDetail(EventDTO):
+class EventDetail(AgentEventDTO):
     evidence: list[EvidenceDTO]
     feedback_history: list[FeedbackDTO]
 
 
-class EventPage(DTO):
-    items: list[EventDTO]
+class AgentEventPage(DTO):
+    items: list[AgentEventDTO]
     next_cursor: str | None = None
     stream_cursor: str
     updated_at: str

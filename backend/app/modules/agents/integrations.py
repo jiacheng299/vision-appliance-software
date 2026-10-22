@@ -5,7 +5,7 @@ The default fails closed. Each service can be independently unavailable.
 The provider must enforce actor access, execution idempotency and atomic channel locks.
 """
 from ...shared.errors import Error
-from .contracts import (Assessment, CapabilityCatalog, ComparisonDTO, EventDetail, EventPage,
+from .contracts import (Assessment, CapabilityCatalog, ComparisonDTO, EventDetail, AgentEventPage,
                         ExportDTO, ExportDestinations, ExportInput, FeedbackInput, MissedDTO, MissedInput,
                         OperationDTO, PlaybackDTO, RunDTO, RuntimeCommand)
 from .schemas import RevisionConfig
@@ -41,7 +41,7 @@ class AgentServices:
         """Atomically gate future starts and reject archiving active channels."""
         self.unavailable('runtime')
 
-    def events(self, agent_id: str, actor_id: str, filters: dict, cursor: str | None = None, after: str | None = None) -> EventPage:
+    def events(self, agent_id: str, actor_id: str, filters: dict, cursor: str | None = None, after: str | None = None) -> AgentEventPage:
         self.unavailable('events')
 
     def event(self, agent_id: str, event_id: str, actor_id: str) -> EventDetail:
