@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import type Hls from 'hls.js'
 import { api } from '../api'
@@ -7,7 +7,7 @@ import { humanError } from '../api/client'
 import { safeMediaUrl } from './url'
 import type { Source } from '../api/types'
 import Icon from '../ui/Icon.vue'
-const props = defineProps<{ source: Source }>()
+const props = defineProps<{ source: Source; autoStart?: boolean; loop?: boolean }>()
 const playback = ref<string | null>(null), error = ref(''), loading = ref(false)
 const video = ref<HTMLVideoElement | null>(null), live = ref(false)
 let generation = 0
@@ -37,7 +37,11 @@ function fail(message: string, version: number) {
   error.value = message
 }
 
-watch(() => props.source.id, reset, { flush: 'sync' })
+watch(() => [props.source.id, props.autoStart], () => {
+  reset()
+  if (props.autoStart) void preview()
+}, { flush: 'sync' })
+onMounted(() => { if (props.autoStart) void preview() })
 onBeforeUnmount(reset)
 
 function mediaError(event: Event) {
@@ -69,7 +73,7 @@ async function preview() {
     const element = video.value
     if (!live.value || element.canPlayType('application/vnd.apple.mpegurl')) {
       element.src = url
-      if (live.value) void element.play().catch(() => {})
+      if (live.value || props.autoStart) void element.play().catch(() => {})
       return
     }
     const { default: HlsPlayer } = await import('hls.js')
@@ -100,7 +104,7 @@ async function preview() {
 </script>
 <template>
   <div class="media-player">
-    <video v-if="playback" :key="generation" ref="video" controls preload="metadata" playsinline :muted="live" :autoplay="live" @error="mediaError" />
+    <video v-if="playback" :key="generation" ref="video" controls preload="metadata" playsinline :muted="live || autoStart" :autoplay="live || autoStart" :loop="loop" @error="mediaError" />
     <template v-else>
       <Icon name="video" />
       <span>{{ error || (source.kind === 'camera' ? '点击预览以打开视频源' : '视频已导入，可打开预览') }}</span>

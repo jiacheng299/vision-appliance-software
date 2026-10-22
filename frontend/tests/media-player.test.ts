@@ -179,3 +179,25 @@ describe('media preview', () => {
     expect(hls.instances).toHaveLength(0)
   })
 })
+
+describe('automatic wall playback', () => {
+  it('opens a camera automatically when requested', async () => {
+    const wrapper = mount(MediaPlayer, { props: { source: source(), autoStart: true } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    expect(api.mediaSession).toHaveBeenCalledWith('camera-1')
+    expect(wrapper.find('video').exists()).toBe(true)
+    expect(hls.instances).toHaveLength(1)
+  })
+  it('plays wall recordings muted and looped', async () => {
+    vi.mocked(api.mediaSession).mockResolvedValue(session('file', '/api/v1/media/clip.mp4'))
+    const wrapper = mount(MediaPlayer, { props: { source: { ...source(), kind: 'file' }, autoStart: true, loop: true } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    const video = wrapper.get('video').element
+    expect(video.autoplay).toBe(true)
+    expect(video.muted).toBe(true)
+    expect(video.loop).toBe(true)
+    expect(video.play).toHaveBeenCalled()
+  })
+})
