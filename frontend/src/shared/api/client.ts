@@ -4,6 +4,14 @@ export function csrfToken(cookies = document.cookie): string {
   try { return decodeURIComponent(value) } catch { return '' }
 }
 const messages: Record<string, string> = {
+  AGENT_NOT_FOUND:'智能体不存在，请返回列表并刷新。',
+  REVISION_NOT_FOUND:'配置版本不存在，请刷新详情。',
+  REVISION_CONFLICT:'配置已被其他页面更新。当前输入已保留，请先复制需要保留的内容，再刷新并比较。',
+  REVISION_IMMUTABLE:'已发布配置不能直接修改，请复制为新草稿。',
+  SOURCE_UNAVAILABLE:'所选视频源不存在或已归档，请重新选择。',
+  INVALID_MEDIA_RANGE:'录像区间超出视频时长，或该视频源不支持区间。',
+  IDEMPOTENCY_CONFLICT:'此请求编号已用于不同内容，请刷新后重新操作。',
+  CAPABILITY_SERVICE_UNAVAILABLE:'模型能力评估服务尚未接入。草稿已保留，暂不能验证或启动。',
   CAMERA_ADDRESS_FORBIDDEN:'摄像头地址须为允许网段内的 RTSP 地址，请检查地址与安全设置。', PASSWORD_TOO_SHORT:'密码至少需要 12 个字符。', ALREADY_INITIALIZED:'管理员已初始化，请使用已有账号登录。', LOGIN_RATE_LIMITED:'登录尝试过于频繁，请稍后再试。', MEDIA_NOT_READY:'视频尚未准备就绪，请等待探测或转码完成。', MEDIA_MISSING:'媒体文件不存在，请重新导入视频。', DEPENDENCY_UNAVAILABLE:'实时媒体网关尚未接入，请在运行状态中检查本地组件。', UPLOAD_TOO_LARGE:'文件超过当前上传限制，请检查存储设置。', MEDIA_GATEWAY_UNAVAILABLE:'摄像头媒体网关尚未接入，暂时无法预览。',
   FILE_UNREADABLE:'文件无法读取，请检查文件是否损坏或重新选择。', MEDIA_UNSUPPORTED:'当前环境无法解码此视频，请检查本地媒体组件或更换文件。',
   STORAGE_LOW:'存储空间不足，请释放空间后重试。', SOURCE_UNREACHABLE:'无法连接视频源，请检查现场网络和地址。',
