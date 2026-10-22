@@ -89,7 +89,7 @@ def test_camera_connection_test_recognizes_published_gateway_stream(client, app)
     from worker.supervisor import Supervisor
     source = camera(client)
     job = client.post(f"{API}/sources/{source['id']}/tests").json()
-    with patch('worker.supervisor.describe'), patch('worker.supervisor.MediaGateway') as gateway:
+    with patch('worker.supervisor.describe'), patch('worker.supervisor.decode_camera', return_value={'width':960,'height':540,'fps':15.0}, create=True), patch('worker.supervisor.MediaGateway') as gateway:
         gateway.return_value.ensure_published.return_value = 'plaza'
         worker = Supervisor(app.state.config)
         try:
@@ -97,8 +97,10 @@ def test_camera_connection_test_recognizes_published_gateway_stream(client, app)
         finally:
             worker.engine.dispose()
     result = client.get(f"{API}/sources/{source['id']}").json()
-    assert result['status'] == 'unverified'  # A connection test is not a decoder.
+    assert result['status'] == 'online'
+    assert (result['width'], result['height'], result['fps']) == (960,540,15.0)
     assert result['error_code'] is None
     report = client.get(API+'/source-tests/'+job['id']).json()
     assert report['state'] == 'completed'
-    assert '网关已连接' in report['message']
+    assert '解码' in report['message']
+

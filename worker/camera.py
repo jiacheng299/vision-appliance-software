@@ -6,10 +6,43 @@ import secrets
 import socket
 import ssl
 import time
+import json
+import math
+from fractions import Fraction
 from urllib.parse import urlsplit
 from app.shared.security import camera_address
 from app.shared.errors import Error
 from .media import MediaFailure
+from .media import run_tool
+
+
+def decode_camera(config, path, timeout):
+    """Count decoded frames from the locally published gateway path, never user URLs."""
+    from urllib.parse import quote
+    address = f'rtsp://127.0.0.1:{config.media_gateway_rtsp_port}/{quote(path, safe="/")}'
+    try:
+        raw = run_tool(config.ffprobe, [
+            '-v','error','-protocol_whitelist','tcp,rtsp,rtp','-format_whitelist','rtsp',
+            '-rtsp_transport','tcp','-read_intervals','%+1','-count_frames',
+            '-select_streams','v:0','-show_entries',
+            'stream=width,height,avg_frame_rate,r_frame_rate,nb_read_frames',
+            '-of','json',address], timeout)
+        video = json.loads(raw)['streams'][0]
+        width,height = int(video['width']),int(video['height'])
+        if int(video.get('nb_read_frames',0)) < 1 or not (0 < width <= 16384 and 0 < height <= 16384):
+            raise ValueError()
+        rate = video.get('avg_frame_rate') or video.get('r_frame_rate') or '0/1'
+        try:
+            fps = float(Fraction(rate))
+        except (ValueError, ZeroDivisionError):
+            fps = 0
+        return {'width':width,'height':height,'fps':fps if math.isfinite(fps) and fps > 0 else None}
+    except MediaFailure as failure:
+        if failure.code == 'dependency_unavailable':
+            raise
+        raise MediaFailure('camera_decode_failed','未能在限时内解码视频帧，请检查摄像头、视频编码与媒体网关。') from None
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise MediaFailure('camera_decode_failed','未能读取有效视频帧，请检查摄像头与媒体网关。') from None
 
 def describe(address,credentials,networks,timeout):
     deadline = time.monotonic()+timeout

@@ -8,6 +8,7 @@ import os
 import signal
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from cryptography.fernet import InvalidToken
 from sqlalchemy import select, update, text
 from app.shared.config import Config
@@ -20,7 +21,7 @@ from app.shared.errors import Error
 from app.modules.settings import values_for
 from app.modules.sources import notify_source
 from .media import probe, transcode, MediaFailure
-from .camera import describe
+from .camera import describe, decode_camera
 
 class Supervisor:
     def __init__(self, config=None):
@@ -180,12 +181,15 @@ class Supervisor:
         describe(address,credentials,networks,timeout)
         gateway = MediaGateway(self.config)
         try:
-            gateway.ensure_published(source,networks)
+            path = gateway.ensure_published(source,networks)
             published = True
         except Error:
             published = False
         finally:
             gateway.close()
+        if not published and source.width and source.observed_at:
+            raise MediaFailure('camera_decode_failed','媒体网关未发现该路视频，连接已断开；请检查视频发布服务。')
+        metadata = decode_camera(self.config,path,timeout) if published else None
         with self.sessions() as db:
             db.execute(text('BEGIN IMMEDIATE'))
             job = self.owned(db,job_id)
@@ -195,12 +199,15 @@ class Supervisor:
             if source.archived or source.address!=address or source.credentials!=expected_credentials:
                 job.state='canceled'
             else:
-                source.status,source.observed_at,source.updated_at = 'unverified',now(),now()
+                source.status,source.observed_at,source.updated_at = 'online' if metadata else 'unverified',now(),now()
+                if metadata:
+                    for field,value in metadata.items():
+                        setattr(source,field,value)
                 source.row_version += 1
                 source.error_code=None if published else 'media_gateway_unavailable'
                 source.error_message=None if published else 'RTSP 视频会话描述可达；尚未在媒体网关确认该路视频，浏览器直播暂不可用。'
                 job.state='completed'
-                job.message='RTSP 视频会话描述可达，媒体网关已连接；请打开预览检查实际画面。' if published else source.error_message
+                job.message='视频帧解码成功，媒体网关已连接。' if metadata else source.error_message
                 notify_source(db,source)
             job.lease_owner=job.lease_until=None
             db.commit()
@@ -213,7 +220,8 @@ class Supervisor:
                 return
             source = db.get(Source,job.source_id)
             if source and not source.archived and source.status!='canceled':
-                source.status,source.error_code,source.error_message='failed',failure.code,failure.message
+                disconnected = source.kind=='camera' and failure.code in ('camera_connection_failed','camera_decode_failed')
+                source.status,source.error_code,source.error_message='disconnected' if disconnected else 'failed',failure.code,failure.message
                 source.updated_at,source.observed_at=now(),now()
                 source.row_version += 1
                 notify_source(db,source)
@@ -226,8 +234,27 @@ class Supervisor:
             db.add(Log(level='ERROR',module='worker',message=failure.message))
             db.commit()
 
+    def schedule_camera_check(self):
+        """Queue at most one due camera, using the same durable leases as manual tests."""
+        cutoff = (datetime.now(timezone.utc)-timedelta(seconds=30)).isoformat().replace('+00:00','Z')
+        with self.sessions() as db:
+            db.execute(text('BEGIN IMMEDIATE'))
+            pending = select(Job.source_id).where(Job.kind=='camera_test',Job.state.in_(['queued','running']))
+            source = db.scalar(select(Source).where(
+                Source.kind=='camera',Source.archived==False,
+                Source.status.in_(['online','disconnected']),
+                Source.observed_at<cutoff,Source.id.not_in(pending)
+            ).order_by(Source.observed_at,Source.id).limit(1))
+            if source is None:
+                db.commit()
+                return False
+            db.add(Job(kind='camera_test',source_id=source.id))
+            db.commit()
+            return True
+
     def run_once(self):
         self.heartbeat()
+        self.schedule_camera_check()
         job_id = self.claim()
         if not job_id:
             return False
