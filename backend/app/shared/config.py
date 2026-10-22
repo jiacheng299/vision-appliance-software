@@ -16,6 +16,7 @@ class Config(BaseSettings):
     max_chunk_bytes: int = 8 * 1024 * 1024
     version: str = '0.1.0'
     agent_demo: bool = False
+    manual_review_enabled: bool = False
     _demo_root_applied: bool = PrivateAttr(default=False)
 
     @property

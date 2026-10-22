@@ -9,7 +9,7 @@ vi.mock('naive-ui', async () => {
   const { defineComponent } = await import('vue')
   const Box = defineComponent({ template: '<div><slot/><slot name="footer"/></div>' })
   return {
-    NDrawer: Box, NDrawerContent: Box,
+    NDrawer: defineComponent({name:'TestDrawer',props:['maskClosable','closeOnEsc'],emits:['update:show'],template:'<div><slot/></div>'}), NDrawerContent: Box,
     NButton: defineComponent({ props: ['disabled', 'loading'], template: '<button :disabled="disabled || loading"><slot/></button>' }),
     NInput: defineComponent({ props: ['value', 'inputProps'], emits: ['update:value'], template: '<input v-bind="inputProps" :value="value" @input="$emit(\'update:value\', $event.target.value)"/>' }),
     NSelect: defineComponent({ props: ['value'], emits: ['update:value'], template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="source-new">新视频源</option></select>' }),
@@ -27,6 +27,16 @@ afterEach(() => vi.restoreAllMocks())
 beforeEach(() => { vi.spyOn(agentApi,'catalog').mockResolvedValue({items:[],fingerprint:'test',data_origin:'real'}) })
 
 describe('agent revision editing', () => {
+  it('closes through the mask but preserves dirty input when discard is canceled',async()=>{
+    const confirm=vi.spyOn(window,'confirm').mockReturnValue(false)
+    const wrapper=editor(),drawer=wrapper.getComponent({name:'TestDrawer'})
+    expect(drawer.props('maskClosable')).toBe(true)
+    await wrapper.get('input').setValue('尚未保存的配置')
+    drawer.vm.$emit('update:show',false);await flushPromises()
+    expect(confirm).toHaveBeenCalledOnce();expect(wrapper.emitted('close')).toBeUndefined()
+    confirm.mockReturnValue(true);drawer.vm.$emit('update:show',false);await flushPromises()
+    expect(wrapper.emitted('close')).toHaveLength(1);wrapper.unmount()
+  })
   it('preserves Chinese, emoji and line breaks using transport-safe JSON', () => {
     const body = { name: '北门监测 🔔', description: '第一行\n第二行', quote: '"与\\' }
     const encoded = agentJson(body)

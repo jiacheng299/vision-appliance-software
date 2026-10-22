@@ -42,7 +42,7 @@ async function save() {
 }
 </script>
 <template>
-  <NDrawer :show="true" :width="760" :mask-closable="false" :close-on-esc="false" @update:show="close">
+  <NDrawer :show="true" :width="760" :mask-closable="!saving" :close-on-esc="!saving" @update:show="close">
     <NDrawerContent :title="`编辑配置 v${revision.revision_no}`" closable @close="close">
       <p class="notice">保存只更新这份草稿，不会启动或重启监测。视频源和需求可以先留空，之后补齐。</p>
       <ErrorBanner :error="error" :retryable="false"/>

@@ -2,6 +2,12 @@
 
 更新：2026-10-22。字段以 `contracts/openapi.json` 为准，前端类型由它生成。使用 snake_case、UTC、UUID 和统一错误信封。工作台无账号与角色，页面、API、媒体和事件订阅无需登录、Cookie 或 CSRF Token；写入保留同源来源校验。
 
+## 当前版本功能门禁
+
+人工核查暂未开放：前端入口置灰，事件详情只读，反馈和人工漏报写端点默认503 `feature_not_available`。历史数据及只读接口保留。Config.manual_review_enabled默认false；测试仅为保留延期实现的回归覆盖而显式打开，不表示生产可用。
+
+区域采用标准闭合多边形顶点列表，首点不重复附在末尾；编辑器必须点击起点完成闭合才可保存，约10个屏幕像素内的相邻误点吸附合并。后端保留简单多边形、面积、范围和重复点校验，不用固定归一化容差擅自改写历史区域。
+
 ## 数据所有权
 
 B拥有 Agent、AgentRevision、AgentValidation、AgentConfirmation、AgentCommand。配置为受校验 channels[] JSON，稳定channel_id，最多16路。Run、Event、Feedback、MissedAnnotation、Model、MediaSession、ExportJob 由公共服务拥有；B不写其数据库。

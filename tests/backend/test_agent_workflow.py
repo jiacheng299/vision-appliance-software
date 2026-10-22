@@ -16,6 +16,8 @@ API='/api/v1'
 def demo(tmp_path):
     provider=DemoServices()
     app=create_app(var_root=tmp_path,testing=True,agent_services=provider)
+    # Deferred implementation retains contract coverage; the release defaults off.
+    app.state.config.manual_review_enabled=True
     with TestClient(app) as client:
         response=client.post(API+'/agent-demo/seed')
         assert response.status_code==200,response.text
@@ -24,6 +26,21 @@ def demo(tmp_path):
 
 def post(client,path,body=None,key=None):
     return client.post(API+path,json=body,headers={'Idempotency-Key':key or str(uuid4())})
+
+
+def test_manual_review_release_gate_preserves_read_only_events(tmp_path):
+    provider=DemoServices()
+    app=create_app(var_root=tmp_path,testing=True,agent_services=provider)
+    assert app.state.config.manual_review_enabled is False
+    with TestClient(app) as c:
+        a=c.post(API+'/agent-demo/seed').json()
+        _,runs=start_demo(c,provider,a)
+        event=c.get(API+f"/agents/{a['id']}/events").json()['items'][0]
+        response=post(c,f"/agents/{a['id']}/events/{event['id']}/feedback",{'label':'correct','reason':'test','row_version':event['row_version']})
+        assert response.status_code==503 and response.json()['error']['code']=='feature_not_available'
+        response=post(c,f"/agents/{a['id']}/missed-annotations",{'run_id':runs[0]['id'],'event_type':'test','description':'test'})
+        assert response.status_code==503
+        assert c.get(API+f"/agents/{a['id']}/events/{event['id']}").json()['feedback_history']==[]
 
 
 def detail(client,agent):

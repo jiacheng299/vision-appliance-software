@@ -192,7 +192,12 @@ def event(agent_id: str, event_id: str, db=Depends(get_db), provider=Depends(pro
     return event_scope(db, provider, agent_id, event_id, WORKSPACE_ACTOR_ID)
 
 
-@router.post('/agents/{agent_id}/events/{event_id}/feedback', response_model=EventDetail)
+def require_manual_review(request: Request):
+    if not request.app.state.config.manual_review_enabled:
+        raise Error(503, 'feature_not_available', '人工核查当前版本暂未开放。')
+
+
+@router.post('/agents/{agent_id}/events/{event_id}/feedback', response_model=EventDetail, dependencies=[Depends(require_manual_review)])
 def feedback(agent_id: str, event_id: str, body: FeedbackInput, idempotency_key: str = Header(min_length=1, max_length=128),
              db=Depends(get_db), provider=Depends(providers)):
     event_scope(db, provider, agent_id, event_id, WORKSPACE_ACTOR_ID)
@@ -205,7 +210,7 @@ def missed(agent_id: str, db=Depends(get_db), provider=Depends(providers)):
     return MissedPage(items=provider.missed(agent_id, WORKSPACE_ACTOR_ID), data_origin=provider.data_origin)
 
 
-@router.post('/agents/{agent_id}/missed-annotations', response_model=MissedDTO, status_code=201)
+@router.post('/agents/{agent_id}/missed-annotations', response_model=MissedDTO, status_code=201, dependencies=[Depends(require_manual_review)])
 def add_missed(agent_id: str, body: MissedInput, idempotency_key: str = Header(min_length=1, max_length=128),
                db=Depends(get_db), provider=Depends(providers)):
     run = workflow.scoped_run(db, provider, agent_id, body.run_id, WORKSPACE_ACTOR_ID)
