@@ -23,7 +23,8 @@ def decode_camera(config, path, timeout):
     try:
         raw = run_tool(config.ffprobe, [
             '-v','error','-protocol_whitelist','tcp,rtsp,rtp','-format_whitelist','rtsp',
-            '-rtsp_transport','tcp','-read_intervals','%+3','-count_frames',
+            '-rtsp_transport','tcp','-analyzeduration','1000000','-probesize','1000000',
+            '-read_intervals','%+#45','-count_frames',
             '-select_streams','v:0','-show_entries',
             'stream=width,height,avg_frame_rate,r_frame_rate,nb_read_frames',
             '-of','json',address], timeout)
