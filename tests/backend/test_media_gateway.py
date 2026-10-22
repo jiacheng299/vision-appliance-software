@@ -103,4 +103,3 @@ def test_camera_connection_test_recognizes_published_gateway_stream(client, app)
     report = client.get(API+'/source-tests/'+job['id']).json()
     assert report['state'] == 'completed'
     assert '解码' in report['message']
-
