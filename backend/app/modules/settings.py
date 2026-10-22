@@ -29,7 +29,7 @@ def get_settings(section:str, request:Request,  db=Depends(get_db)):
         from .runtime import dependency_services
         services = dependency_services(request.app,db)
         statuses = {v['key']:v['status'] for v in services}
-        return {'section':section,'values':{'version':request.app.state.config.version,'media_gateway_configured':False,'ffmpeg_available':statuses['ffmpeg']=='ready','worker_online':statuses['worker']=='ready','configuration_sources':{'storage':'VISION_VAR_ROOT environment or local default','ffmpeg':'VISION_FFMPEG / VISION_FFPROBE environment or PATH','media_gateway':'not connected'}},'row_version':1}
+        return {'section':section,'values':{'version':request.app.state.config.version,'media_gateway_configured':statuses['media_gateway']=='ready','ffmpeg_available':statuses['ffmpeg']=='ready','worker_online':statuses['worker']=='ready','configuration_sources':{'storage':'VISION_VAR_ROOT environment or local default','ffmpeg':'VISION_FFMPEG / VISION_FFPROBE environment or PATH','media_gateway':'VISION_MEDIA_GATEWAY_API_URL / VISION_MEDIA_GATEWAY_HLS_URL environment or loopback default'}},'row_version':1}
     record = db.get(Setting,section)
     if not record:
         raise Error(404,'section_not_found','设置分类不存在。')

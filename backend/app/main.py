@@ -13,6 +13,7 @@ from .shared.db import make_engine, migrate, session_factory
 from .shared.errors import Error, handle_error, error_response
 from .shared.security import Vault, same_origin_request
 from .shared.models import Notification
+from .shared.media_gateway import MediaGateway
 from .schemas import ErrorDTO
 from .modules import sources, settings, runtime, realtime
 from .modules.agents import routes as agents
@@ -52,9 +53,11 @@ def create_app(var_root=None,testing=False,agent_services=None):
             await task
         except asyncio.CancelledError:
             pass
+        app.state.media_gateway.close()
         engine.dispose()
     app = FastAPI(title='Vision Appliance Foundation API',version=config.version,lifespan=lifespan,docs_url='/api/docs',openapi_url='/api/openapi.json',redoc_url=None)
     app.state.config, app.state.engine, app.state.sessions = config, engine, sessions
+    app.state.media_gateway = MediaGateway(config)
     if agent_services is None and config.agent_demo:
         from .modules.agents.demo import DemoServices
         agent_services = DemoServices()

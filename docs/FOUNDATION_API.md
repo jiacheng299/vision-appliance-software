@@ -26,6 +26,7 @@ Source：`{id,name,kind:'file'|'camera',status,created_at,updated_at,row_version
 - DELETE `/uploads/{id}` → 204。
 - POST `/sources/{id}/tests` → `{id,state,source_id}`；GET `/source-tests/{id}` → `{id,state,source_id,error_code?,message?}`。测试不得假报鉴权原因。
 - POST `/sources/{id}/preview-sessions` → `{session_id,protocol:'file'|'hls'|'webrtc',playback_url,expires_at}`。缺少网关时 503。
+- 摄像头已发布到本机 MediaMTX 后，预览返回 `protocol:'hls'` 与 `/api/v1/sources/{id}/live/index.m3u8`。GET `/sources/{id}/live/{asset_path}` 代理并重写该源的清单、初始化段及视频分片，禁止越界路径或跨源重定向；归档源返回 404。媒体与控制服务只允许回环 HTTP 地址，默认 HLS 8888、API 9997、RTSP 8554。外部实体摄像头须先接入 MediaMTX，再登记它提供的本机 RTSP 地址，不由网页直接拉取任意公网地址。
 - GET `/sources/{id}/media` 与 `/sources/{id}/thumbnail` 无需登录；仍检查视频源存在、归档状态及受控存储路径；预览 URL 返回本地 API 相对 URL。
 
 ## Dashboard / Runtime / Logs / Events

@@ -15,6 +15,8 @@ from app.shared.db import make_engine, migrate, session_factory
 from app.shared.models import Job, Source, Upload, Worker, Log, now, uid
 from app.shared.security import Vault
 from app.shared.storage import controlled_path
+from app.shared.media_gateway import MediaGateway
+from app.shared.errors import Error
 from app.modules.settings import values_for
 from app.modules.sources import notify_source
 from .media import probe, transcode, MediaFailure
@@ -176,6 +178,14 @@ class Supervisor:
             networks = values_for(db,'security')['camera_allowed_networks']
             timeout = values_for(db,'resources')['connection_timeout_seconds']
         describe(address,credentials,networks,timeout)
+        gateway = MediaGateway(self.config)
+        try:
+            gateway.ensure_published(source,networks)
+            published = True
+        except Error:
+            published = False
+        finally:
+            gateway.close()
         with self.sessions() as db:
             db.execute(text('BEGIN IMMEDIATE'))
             job = self.owned(db,job_id)
@@ -187,9 +197,10 @@ class Supervisor:
             else:
                 source.status,source.observed_at,source.updated_at = 'unverified',now(),now()
                 source.row_version += 1
-                source.error_code='media_gateway_unavailable'
-                source.error_message='RTSP 视频会话描述可达；尚未验证实际解码，浏览器直播仍需接入媒体网关。'
-                job.state,job.message='completed',source.error_message
+                source.error_code=None if published else 'media_gateway_unavailable'
+                source.error_message=None if published else 'RTSP 视频会话描述可达；尚未在媒体网关确认该路视频，浏览器直播暂不可用。'
+                job.state='completed'
+                job.message='RTSP 视频会话描述可达，媒体网关已连接；请打开预览检查实际画面。' if published else source.error_message
                 notify_source(db,source)
             job.lease_owner=job.lease_until=None
             db.commit()

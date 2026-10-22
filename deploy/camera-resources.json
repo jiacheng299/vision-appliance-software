@@ -1,0 +1,35 @@
+{
+  "mediamtx": {
+    "version": "1.21.2",
+    "url": "https://github.com/bluenviron/mediamtx/releases/download/v1.21.2/mediamtx_v1.21.2_windows_amd64.zip",
+    "bytes": 28583662,
+    "sha256": "a84224f5a490855684e62ba6fb71e80ea2a5e16aed61883bb58380290e93e467",
+    "source": "https://github.com/bluenviron/mediamtx/releases/tag/v1.21.2"
+  },
+  "cameras": [
+    {
+      "path": "plaza",
+      "name": "模拟摄像头—行人广场（录像循环）",
+      "file": "plaza.mp4",
+      "url": "https://motchallenge.net/sequenceVideos/MOT17-02-DPM-raw.mp4",
+      "bytes": 14780307,
+      "sha256": "d560bc50e1942d5c7335c937c8ac513aa87bb41ea51ae21fa02f661151d5a066",
+      "source": "https://motchallenge.net/data/MOT17/"
+    },
+    {
+      "path": "night",
+      "name": "模拟摄像头—夜间街道（录像循环）",
+      "file": "night.mp4",
+      "url": "https://motchallenge.net/sequenceVideos/MOT17-04-DPM-raw.mp4",
+      "bytes": 14745062,
+      "sha256": "ab0d2fc03bce5e112abe9a173de7a2d70b39875c0af3eca49d6160c6e317e495",
+      "source": "https://motchallenge.net/data/MOT17/"
+    },
+    {
+      "path": "pendulum",
+      "name": "真实直播—海德堡大学傅科摆",
+      "url": "https://kip.uni-heidelberg.de/mjpg/video.mjpg",
+      "source": "https://kip.uni-heidelberg.de/oeffwiss/pendelcam/"
+    }
+  ]
+}
