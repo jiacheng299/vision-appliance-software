@@ -52,10 +52,27 @@ class CapabilityRef(DTO):
     template_version: str = Field(min_length=1, max_length=80)
 
 
+class ChannelSource(DTO):
+    source_id: str = Field(min_length=1, max_length=80)
+    start_media_ms: int | None = Field(default=None, ge=0, strict=True)
+    end_media_ms: int | None = Field(default=None, gt=0, strict=True)
+    regions: list[Region] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode='after')
+    def valid_bounds(self):
+        if (self.start_media_ms is None) != (self.end_media_ms is None) or (self.start_media_ms is not None and self.end_media_ms <= self.start_media_ms):
+            raise ValueError('Invalid source media interval')
+        if len({r.id for r in self.regions}) != len(self.regions):
+            raise ValueError('Duplicate region ids')
+        return self
+
+
 class ChannelConfig(DTO):
     channel_id: str = Field(default_factory=uid, min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=160)
     source_id: str | None = Field(default=None, min_length=1, max_length=80)
+    # Empty field is omitted to keep historical single-source snapshot hashes stable.
+    sources: list[ChannelSource] = Field(default_factory=list, max_length=16, exclude_if=lambda v: not v)
     requirement_text: str = Field(default='', max_length=8000)
     target: str = Field(default='', max_length=160)
     rule: str = Field(default='', max_length=160)
@@ -67,6 +84,10 @@ class ChannelConfig(DTO):
 
     @model_validator(mode='after')
     def consistent(self):
+        if len({s.source_id for s in self.sources}) != len(self.sources):
+            raise ValueError('Duplicate sources in a channel')
+        if self.sources and (self.source_id or self.regions or self.start_media_ms is not None or self.end_media_ms is not None):
+            raise ValueError('Use sources or legacy source fields, not both')
         if (self.start_media_ms is None) != (self.end_media_ms is None):
             raise ValueError('Provide both media interval bounds')
         if self.start_media_ms is not None and self.end_media_ms <= self.start_media_ms:
@@ -76,12 +97,22 @@ class ChannelConfig(DTO):
         return self
 
 
+def channel_sources(channel):
+    """Read both historical one-source channels and grouped source bindings."""
+    if isinstance(channel, dict):
+        channel = ChannelConfig.model_validate(channel)
+    return channel.sources or ([ChannelSource(source_id=channel.source_id, regions=channel.regions,
+        start_media_ms=channel.start_media_ms, end_media_ms=channel.end_media_ms)] if channel.source_id else [])
+
+
 class RevisionConfig(DTO):
     schema_version: Literal['1.0'] = '1.0'
     channels: list[ChannelConfig] = Field(default_factory=list, max_length=16)
 
     @model_validator(mode='after')
     def unique_channels(self):
+        if sum(len(channel_sources(c)) for c in self.channels) > 64:
+            raise ValueError('An agent supports at most 64 source bindings')
         if len({c.channel_id for c in self.channels}) != len(self.channels):
             raise ValueError('Duplicate channel ids')
         return self

@@ -22,6 +22,7 @@ export type AgentPage = components['schemas']['AgentPage']
 export type Revision = components['schemas']['RevisionDTO']
 export type RevisionConfig = components['schemas']['RevisionConfig']
 export type Channel = components['schemas']['ChannelConfig']
+export type ChannelSource = components['schemas']['ChannelSource']
 export type Region = components['schemas']['Region']
 export type AgentCreate = components['schemas']['AgentCreate']
 export type Validation = components['schemas']['ValidationDTO']
@@ -56,6 +57,7 @@ export const agentApi = {
   workspace: (id: string) => client.get<Workspace>(`${base(id)}/workspace`).then(r => r.data),
   submit: (id: string, kind: 'start'|'apply', body: components['schemas']['StartInput'], key: string) => client.post<Operation>(`${base(id)}/${kind === 'start' ? 'run-groups' : 'revision-applications'}`, body, keyOptions(key)).then(r => r.data),
   stop: (id: string, runId: string, key: string) => client.post<Operation>(`${base(id)}/runs/${encodeURIComponent(runId)}/stop`, {}, keyOptions(key)).then(r => r.data),
+  stopChannel: (id:string, channelId:string, key:string) => client.post<Operation>(`${base(id)}/channels/${encodeURIComponent(channelId)}/stop`,{},keyOptions(key)).then(r=>r.data),
   operation: (id: string, operationId: string) => client.get<Operation>(`${base(id)}/operations/${encodeURIComponent(operationId)}`).then(r => r.data),
   archive: (agent: Agent, restore: boolean) => client.post<AgentDetail>(`${base(agent.id)}/${restore ? 'restore' : 'archive'}`, {row_version:agent.row_version}, jsonOptions).then(r => r.data),
   events: (id: string, filters: EventFilters = {}, cursor?: string) => client.get<MonitorEventPage>(`${base(id)}/events`, {params:{...filters,cursor,limit:30}}).then(r => r.data),

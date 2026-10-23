@@ -17,6 +17,7 @@ class Config(BaseSettings):
     max_chunk_bytes: int = 8 * 1024 * 1024
     version: str = '0.1.0'
     agent_demo: bool = False
+    manual_review_enabled: bool = False
     media_gateway_api_url: str = 'http://127.0.0.1:9997'
     media_gateway_hls_url: str = 'http://127.0.0.1:8888'
     media_gateway_rtsp_port: int = Field(default=8554, ge=1, le=65535)

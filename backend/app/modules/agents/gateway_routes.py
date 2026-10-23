@@ -9,7 +9,7 @@ from ...shared.errors import Error
 from .workspace import WORKSPACE_ACTOR_ID
 from . import service, workflow
 from .contracts import *
-from .schemas import AgentDetail, RevisionDTO
+from .schemas import AgentDetail, RevisionDTO, channel_sources
 
 router = APIRouter(tags=['agent-workflow'])
 
@@ -22,7 +22,7 @@ def event_scope(db, provider, agent_id, event_id, actor_id):
     service.get_agent(db, agent_id)
     event = provider.event(agent_id, event_id, actor_id)
     revision = service.get_revision(db, event.revision_id)
-    if event.agent_id != agent_id or revision.agent_id != agent_id or not any(c.get('channel_id') == event.channel_id and c.get('source_id') == event.source_id for c in revision.config['channels']):
+    if event.agent_id != agent_id or revision.agent_id != agent_id or not any(c.get('channel_id') == event.channel_id and any(b.source_id == event.source_id for b in channel_sources(c)) for c in revision.config['channels']):
         raise Error(502, 'provider_contract_invalid', '事件的源、通道或版本关联不一致。')
     return event
 
@@ -53,7 +53,7 @@ def references(source_id: str | None = Query(None, max_length=80), model_id: str
         matches = []
         for channel in revision.config['channels']:
             ref = channel.get('capability_ref') or {}
-            if source_id and channel.get('source_id') != source_id:
+            if source_id and not any(b.source_id == source_id for b in channel_sources(channel)):
                 continue
             if model_id and (ref.get('model_id') != model_id or (model_version and ref.get('model_version') != model_version)):
                 continue
@@ -71,7 +71,7 @@ def references(source_id: str | None = Query(None, max_length=80), model_id: str
         runs = run_cache[agent.id]
         result.append(AgentReference(agent_id=agent.id, agent_name=agent.name, revision_id=revision.id, revision_no=revision.revision_no,
             revision_state=revision.state, channel_ids=matches, archived=bool(agent.archived_at), runtime_checked=runs is not None,
-            active_run_ids=[r.id for r in runs if r.revision_id == revision.id and r.channel_id in matches and r.state in ACTIVE_STATES] if runs is not None else None))
+            active_run_ids=[r.id for r in runs if r.revision_id == revision.id and r.channel_id in matches and (not source_id or r.source_id == source_id) and r.state in ACTIVE_STATES] if runs is not None else None))
         if len(result) > limit:
             break
     return ReferencePage(items=result[:limit], next_cursor=result[limit-1].revision_id if len(result)>limit else None, data_origin=provider.data_origin)
@@ -192,7 +192,12 @@ def event(agent_id: str, event_id: str, db=Depends(get_db), provider=Depends(pro
     return event_scope(db, provider, agent_id, event_id, WORKSPACE_ACTOR_ID)
 
 
-@router.post('/agents/{agent_id}/events/{event_id}/feedback', response_model=EventDetail)
+def require_manual_review(request: Request):
+    if not request.app.state.config.manual_review_enabled:
+        raise Error(503, 'feature_not_available', '人工核查当前版本暂未开放。')
+
+
+@router.post('/agents/{agent_id}/events/{event_id}/feedback', response_model=EventDetail, dependencies=[Depends(require_manual_review)])
 def feedback(agent_id: str, event_id: str, body: FeedbackInput, idempotency_key: str = Header(min_length=1, max_length=128),
              db=Depends(get_db), provider=Depends(providers)):
     event_scope(db, provider, agent_id, event_id, WORKSPACE_ACTOR_ID)
@@ -205,7 +210,7 @@ def missed(agent_id: str, db=Depends(get_db), provider=Depends(providers)):
     return MissedPage(items=provider.missed(agent_id, WORKSPACE_ACTOR_ID), data_origin=provider.data_origin)
 
 
-@router.post('/agents/{agent_id}/missed-annotations', response_model=MissedDTO, status_code=201)
+@router.post('/agents/{agent_id}/missed-annotations', response_model=MissedDTO, status_code=201, dependencies=[Depends(require_manual_review)])
 def add_missed(agent_id: str, body: MissedInput, idempotency_key: str = Header(min_length=1, max_length=128),
                db=Depends(get_db), provider=Depends(providers)):
     run = workflow.scoped_run(db, provider, agent_id, body.run_id, WORKSPACE_ACTOR_ID)
@@ -326,3 +331,9 @@ def demo_scenario(body: DemoScenario, provider=Depends(providers)):
         raise Error(404, 'not_found', '当前模式不提供模拟故障。')
     provider.set_scenario(body.scenario, body.run_id)
     return EnvironmentDTO(data_origin='mock', message='已切换模拟情形：'+body.scenario)
+
+
+@router.post('/agents/{agent_id}/channels/{channel_id}/stop', response_model=OperationDTO, status_code=202)
+def stop_channel(agent_id: str, channel_id: str, idempotency_key: str = Header(min_length=1, max_length=128),
+                 db=Depends(get_db), provider=Depends(providers)):
+    return workflow.stop_channel(db, provider, agent_id, channel_id, WORKSPACE_ACTOR_ID, idempotency_key)
