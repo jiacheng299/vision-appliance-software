@@ -9,7 +9,7 @@ import type { Source } from '../src/shared/api/types'
 import VideoWall from '../src/modules/agents/VideoWall.vue'
 vi.mock('naive-ui',async()=>{const {defineComponent}=await import('vue');return {
   NButton:defineComponent({props:['disabled'],template:'<button :disabled="disabled"><slot/></button>'}),
-  NSelect:defineComponent({props:['value'],template:'<select/>'})
+  NSelect:defineComponent({props:['value','options'],template:'<select/>'})
 }})
 it('keeps regions attached to their source when selection changes, with one shared rule',()=>{
   const c=newChannel();c.source_id='A';c.rule='dwell';c.regions=[{id:'r',name:'door',points:[[0,0],[1,0],[0,1]]}]
@@ -25,11 +25,12 @@ it('does not collapse different sources in the same channel into one run',()=>{
 })
 it('opens only visible wall tiles and releases all players when changing page',async()=>{
   const c=newChannel();setChannelSources(c,['A','B','C','D','E'])
-  const released=vi.fn(),Player=defineComponent({setup(){onUnmounted(released)},template:'<div class="test-player"/>'})
+  const released=vi.fn(),Player=defineComponent({props:{autoStart:Boolean},setup(){onUnmounted(released)},template:'<div class="test-player"/>'})
   const wrapper=mount(VideoWall,{props:{agentId:'a',revision:{id:'r',config:{schema_version:'1.0',channels:[c]}} as Revision,runs:[],sources:['A','B','C','D','E'].map(id=>({id,name:id,kind:'file'} as Source)),runtimeAvailable:false},global:{stubs:{MediaPlayer:Player,RunPlayer:Player,AgentStatus:true}}})
   const button=(text:string)=>wrapper.findAll('button').find(b=>b.text()===text)!
   expect(wrapper.findAll('.wall-tile')).toHaveLength(4);expect(wrapper.findAll('.test-player')).toHaveLength(0)
   await button('打开本页画面').trigger('click');expect(wrapper.findAll('.test-player')).toHaveLength(4)
+  expect(wrapper.findAllComponents(Player).every(player=>player.props('autoStart')===true)).toBe(true)
   await button('下一页').trigger('click');expect(wrapper.findAll('.wall-tile')).toHaveLength(1);expect(released).toHaveBeenCalledTimes(4)
   expect(wrapper.findAll('.test-player')).toHaveLength(0);wrapper.unmount()
 })

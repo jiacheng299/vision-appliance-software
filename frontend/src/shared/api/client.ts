@@ -8,7 +8,7 @@ const messages: Record<string, string> = {
   INVALID_MEDIA_RANGE:'录像区间超出视频时长，或该视频源不支持区间。',
   IDEMPOTENCY_CONFLICT:'此请求编号已用于不同内容，请刷新后重新操作。',
   CAPABILITY_SERVICE_UNAVAILABLE:'模型能力评估服务尚未接入。草稿已保留，暂不能验证或启动。',
-  CAMERA_ADDRESS_FORBIDDEN:'摄像头地址须为允许网段内的 RTSP 地址，请检查地址与安全设置。', MEDIA_NOT_READY:'视频尚未准备就绪，请等待探测或转码完成。', MEDIA_MISSING:'媒体文件不存在，请重新导入视频。', DEPENDENCY_UNAVAILABLE:'实时媒体网关尚未接入，请在运行状态中检查本地组件。', UPLOAD_TOO_LARGE:'文件超过当前上传限制，请检查存储设置。', MEDIA_GATEWAY_UNAVAILABLE:'摄像头媒体网关尚未接入，暂时无法预览。',
+  CAMERA_ADDRESS_FORBIDDEN:'摄像头地址须为允许网段内的 RTSP 地址，请检查地址与安全设置。', MEDIA_NOT_READY:'视频尚未准备就绪，请等待探测或转码完成。', MEDIA_MISSING:'媒体文件不存在，请重新导入视频。', DEPENDENCY_UNAVAILABLE:'实时媒体服务暂未就绪，请检查媒体网关与视频源。', UPLOAD_TOO_LARGE:'文件超过当前上传限制，请检查存储设置。', MEDIA_GATEWAY_UNAVAILABLE:'摄像头媒体网关尚未接入，暂时无法预览。',
   FILE_UNREADABLE:'文件无法读取，请检查文件是否损坏或重新选择。', MEDIA_UNSUPPORTED:'当前环境无法解码此视频，请检查本地媒体组件或更换文件。',
   STORAGE_LOW:'存储空间不足，请释放空间后重试。', SOURCE_UNREACHABLE:'无法连接视频源，请检查现场网络和地址。',
   SOURCE_AUTH_FAILED:'摄像头拒绝认证，请修改凭据后测试。', SOURCE_DIAGNOSIS_UNKNOWN:'连接失败，原因尚未确认，请检查网络、地址和设备状态。',

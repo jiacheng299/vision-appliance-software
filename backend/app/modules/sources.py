@@ -149,13 +149,25 @@ def get_test(job_id:str,db=Depends(get_db)):
     return job
 
 @router.post('/sources/{source_id}/preview-sessions',response_model=PreviewDTO)
-def preview_session(source_id:str,db=Depends(get_db)):
+def preview_session(source_id:str,request:Request,db=Depends(get_db)):
     source = get_source(db,source_id)
     if source.kind=='camera':
-        raise Error(503,'dependency_unavailable','摄像头媒体网关未接入，请部署并接入 MediaMTX。',retryable=True)
+        request.app.state.media_gateway.ensure_published(source,values_for(db,'security')['camera_allowed_networks'])
+        return {'session_id':uid(),'protocol':'hls','playback_url':f'/api/v1/sources/{source.id}/live/index.m3u8','expires_at':(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat().replace('+00:00','Z')}
     if source.status!='ready' or not source.media_key:
         raise Error(409,'media_not_ready','视频仍未准备就绪，请检查探测或转码状态。')
     return {'session_id':uid(),'protocol':'file','playback_url':f'/api/v1/sources/{source.id}/media','expires_at':(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat().replace('+00:00','Z')}
+
+@router.get('/sources/{source_id}/live/{asset_path:path}',response_class=Response)
+def live_media(source_id:str,asset_path:str,request:Request,db=Depends(get_db)):
+    source = get_source(db,source_id)
+    if source.kind!='camera':
+        raise Error(404,'media_missing','该视频源没有直播资源。')
+    prefix = f'/api/v1/sources/{source.id}/live/'
+    content,status,media_type,headers = request.app.state.media_gateway.read(
+        source,values_for(db,'security')['camera_allowed_networks'],asset_path,prefix,
+        query=request.url.query,range_header=request.headers.get('range'))
+    return Response(content=content,status_code=status,media_type=media_type,headers=headers)
 
 @router.get('/sources/{source_id}/media')
 def media(source_id:str,request:Request,db=Depends(get_db)):
