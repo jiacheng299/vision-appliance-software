@@ -17,7 +17,7 @@ const all=computed(()=>groups.value.flatMap(g=>g.tiles.map(t=>({...t,groupId:g.i
 const pages=computed(()=>Math.max(1,Math.ceil(all.value.length/capacity.value)))
 const visible=computed(()=>all.value.slice(page.value*capacity.value,(page.value+1)*capacity.value))
 const pageGroups=computed(()=>groups.value.map(g=>({...g,tiles:visible.value.filter(t=>t.groupId===g.id)})).filter(g=>g.tiles.length))
-watch(()=>[props.agentId,props.revision.id,capacity.value],()=>{page.value=0;opened.value=[]})
+watch([()=>props.agentId,()=>props.revision.id,capacity],()=>{page.value=0;opened.value=[]})
 watch(page,()=>{opened.value=[]})
 watch(pages,n=>{if(page.value>=n)page.value=n-1})
 const source=(id:string)=>props.sources.find(s=>s.id===id)

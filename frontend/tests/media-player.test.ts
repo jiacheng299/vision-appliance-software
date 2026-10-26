@@ -181,6 +181,24 @@ describe('media preview', () => {
 })
 
 describe('automatic wall playback', () => {
+  it('keeps the player and session when refreshed source metadata has the same identity', async () => {
+    const wrapper = mount(MediaPlayer, { props: { source: source(), autoStart: true } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    const element = wrapper.get('video').element
+    const player = hls.instances[0]
+    for (let i = 0; i < 5; i++) {
+      await wrapper.setProps({ source: { ...source(), name: `updated ${i}` } })
+      await flushPromises()
+    }
+    expect(api.mediaSession).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('video').element).toBe(element)
+    expect(player.destroy).not.toHaveBeenCalled()
+    await wrapper.setProps({ source: source('camera-2') })
+    await flushPromises()
+    expect(api.mediaSession).toHaveBeenCalledTimes(2)
+    expect(player.destroy).toHaveBeenCalledOnce()
+  })
   it('opens a camera automatically when requested', async () => {
     const wrapper = mount(MediaPlayer, { props: { source: source(), autoStart: true } })
     wrappers.push(wrapper)
