@@ -195,6 +195,6 @@ def test_upgrade_from_foundation_keeps_existing_settings(tmp_path):
     engine.dispose()
     upgraded = create_app(var_root=tmp_path, testing=True)
     with upgraded.state.engine.connect() as connection:
-        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar() == '0004_workspace_actors'
+        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar() == '0005_member_a_models'
         assert 'existing installation' in connection.execute(text('SELECT "values" FROM settings WHERE section=\'general\'')).scalar()
     upgraded.state.engine.dispose()

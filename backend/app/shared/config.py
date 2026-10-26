@@ -14,6 +14,7 @@ class Config(BaseSettings):
     media_timeout_seconds: int = 120
     worker_lease_seconds: int = 180
     worker_poll_seconds: float = 1.0
+    max_model_file_bytes: int = Field(default=1024 * 1024 * 1024, ge=1)
     max_chunk_bytes: int = 8 * 1024 * 1024
     version: str = '0.1.0'
     agent_demo: bool = False

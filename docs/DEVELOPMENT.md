@@ -6,7 +6,7 @@
 
 ## 公共技术边界
 
-前端为 Vue3/TypeScript/Naive UI，模块消费公开DTO/API，不操作别的模块的 Pinia 私有状态。七导航固定；智能体已启用，任务创建和模型管理仍禁用。媒体HLS按需加载本地hls.js，无CDN。
+前端为 Vue3/TypeScript/Naive UI，模块消费公开DTO/API，不操作别的模块的 Pinia 私有状态。七导航固定；智能体、任务创建和模型管理均已启用。成员 A 的服务适配与边界见 `MEMBER_A.md`。媒体HLS按需加载本地hls.js，无CDN。
 
 后端模块化单体：API → service → repository/domain，公共 DTO 和 OpenAPI 见 `contracts/`。耗时媒体探测/预览在独立 Worker 中执行。所有文件位于 `VISION_VAR_ROOT` 下，返回 storage_key 或同源授权地址，不将绝对文件路径暴露给浏览器。
 

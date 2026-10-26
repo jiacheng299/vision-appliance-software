@@ -16,9 +16,11 @@ from .shared.models import Notification
 from .shared.media_gateway import MediaGateway
 from .schemas import ErrorDTO
 from .modules import sources, settings, runtime, realtime
+from .modules.models import routes as models
+from .modules.models.integrations import ModelServices, DemoModelServices
+from .modules.models.bridge import RegistryAgentServices, RegistryDemoServices
 from .modules.agents import routes as agents
 from .modules.agents import gateway_routes as agent_workflow
-from .modules.agents.integrations import AgentServices
 
 async def sample_runtime(app):
     while True:
@@ -34,10 +36,12 @@ async def sample_runtime(app):
                 db.execute(delete(Notification).where(Notification.sequence<cutoff))
             db.commit()
 
-def create_app(var_root=None,testing=False,agent_services=None):
+def create_app(var_root=None,testing=False,agent_services=None,model_services=None):
     config = Config(**({'var_root':var_root} if var_root is not None else {}))
     if agent_services is not None and agent_services.data_origin == 'mock' and not testing and not config.agent_demo:
         raise RuntimeError('Mock providers require explicit isolated demo mode.')
+    if model_services is not None and model_services.data_origin == 'mock' and not testing and not config.agent_demo:
+        raise RuntimeError('Mock model services require explicit isolated demo mode.')
     config.prepare()
     engine = make_engine(config)
     migrate(engine)
@@ -58,10 +62,11 @@ def create_app(var_root=None,testing=False,agent_services=None):
     app = FastAPI(title='Vision Appliance Foundation API',version=config.version,lifespan=lifespan,docs_url='/api/docs',openapi_url='/api/openapi.json',redoc_url=None)
     app.state.config, app.state.engine, app.state.sessions = config, engine, sessions
     app.state.media_gateway = MediaGateway(config)
-    if agent_services is None and config.agent_demo:
-        from .modules.agents.demo import DemoServices
-        agent_services = DemoServices()
-    app.state.agent_services = agent_services or AgentServices()
+    app.state.model_services = model_services or (DemoModelServices() if config.agent_demo else ModelServices())
+    if agent_services is None:
+        agent_services = RegistryDemoServices() if config.agent_demo else RegistryAgentServices()
+        agent_services.init_registry(sessions, app.state.model_services)
+    app.state.agent_services = agent_services
     app.state.vault = Vault(config)
     app.state.runtime_history = deque(maxlen=120)
     @app.middleware('http')
@@ -87,7 +92,7 @@ def create_app(var_root=None,testing=False,agent_services=None):
     @app.exception_handler(HTTPException)
     async def http_error(request,exc):
         return error_response(request,exc.status_code,'not_found' if exc.status_code==404 else 'http_error','请求资源不存在。' if exc.status_code==404 else '请求无法完成。')
-    for module in (sources,settings,runtime,realtime,agent_workflow,agents):
+    for module in (sources,settings,runtime,realtime,models,agent_workflow,agents):
         app.include_router(module.router,prefix='/api/v1',responses={code:{'model':ErrorDTO} for code in (400,401,403,404,409,413,422,429,500,503)})
     @app.get('/{path:path}',include_in_schema=False)
     def frontend(path:str):
