@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { MANUAL_REVIEW_AVAILABLE } from './features'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NInput, NModal, NSelect } from 'naive-ui'
@@ -10,7 +11,8 @@ import EmptyState from '../../shared/ui/EmptyState.vue'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import Icon from '../../shared/ui/Icon.vue'
 import { agentApi, listAgentSources, type Agent } from './api'
-import { emptyConfig } from './draft'
+import { emptyConfig, newChannel } from './draft'
+import { setChannelSources, sourceCount } from './channelSources'
 import { environment } from '../../shared/environment'
 import { agentError, label } from './state'
 import AgentStatus from './AgentStatus.vue'
@@ -19,6 +21,8 @@ const router = useRouter()
 const items = ref<Agent[]>([]), sources = ref<Source[]>([]), query = ref(''), sourceId = ref<string | null>(null)
 const error = ref(''), sourcesError = ref(''), loading = ref(false), cursor = ref<string | null>(null), showCreate = ref(false)
 const name = ref(''), description = ref(''), creating = ref(false), createError = ref('')
+const selectedSources=ref<string[]>([])
+const createConfig=computed(()=>{const config=emptyConfig();if(selectedSources.value.length){const channel=newChannel();channel.name='监测组 1';setChannelSources(channel,selectedSources.value);config.channels=[channel]}return config})
 const canWrite = true
 const stateFilter=ref<string|null>(null),scene=ref(''),archived=ref(false),sort=ref('updated_desc'),seeding=ref(false)
 let generation = 0, timer: ReturnType<typeof setTimeout> | undefined, createToken = '', createBody = ''
@@ -36,11 +40,12 @@ async function loadSources() { try { sources.value = await listAgentSources(); s
 watch([query, sourceId,stateFilter,scene,archived,sort], () => { generation++; items.value = []; cursor.value = null; clearTimeout(timer); timer = setTimeout(() => void load(), 250) })
 onUnmounted(() => { generation++; clearTimeout(timer) })
 void load(); void loadSources()
-function openCreate() { name.value = ''; description.value = ''; createError.value = ''; createToken = ''; createBody = ''; showCreate.value = true }
+function openCreate() { selectedSources.value=[];name.value = ''; description.value = ''; createError.value = ''; createToken = ''; createBody = ''; showCreate.value = true }
 async function create() {
   if (creating.value) return
   if (!name.value.trim()) { createError.value = '请先给智能体起一个名称。'; return }
-  const body = { name: name.value.trim(), description: description.value.trim(), config: emptyConfig() }
+  if(selectedSources.value.length>16){createError.value='首个通道最多选择16个视频源。';return}
+  const body = { name: name.value.trim(), description: description.value.trim(), config: createConfig.value }
   const encoded = JSON.stringify(body)
   if (!createToken || createBody !== encoded) { createToken = crypto.randomUUID(); createBody = encoded }
   creating.value = true; createError.value = ''
@@ -48,7 +53,7 @@ async function create() {
   catch (e) { createError.value = humanError(e) }
   finally { creating.value = false }
 }
-function thumbnail(agent: Agent) { return safeMediaUrl(sources.value.find(s => s.id === agent.latest_revision.config.channels?.[0]?.source_id)?.thumbnail_url ?? null) }
+function thumbnail(agent: Agent) { return safeMediaUrl(sources.value.find(s => s.id === (agent.latest_revision.config.channels?.[0]?.sources?.[0]?.source_id??agent.latest_revision.config.channels?.[0]?.source_id))?.thumbnail_url ?? null) }
 async function seed(){if(seeding.value)return;seeding.value=true;error.value='';try{const result=await agentApi.seed();await loadSources();await router.push(`/agents/${result.id}/config`)}catch(e){error.value=agentError(e)}finally{seeding.value=false}}
 </script>
 <template>
@@ -60,12 +65,12 @@ async function seed(){if(seeding.value)return;seeding.value=true;error.value='';
   <div v-if="items.length" class="agent-grid">
     <article v-for="agent in items" :key="agent.id" class="panel agent-card">
       <RouterLink :to="`/agents/${agent.id}/live`" class="agent-card-preview" :aria-label="`查看${agent.name}`"><img v-if="thumbnail(agent)" :src="thumbnail(agent)!" :alt="`${agent.name} 的视频源缩略图`"/><Icon v-else name="video" :size="32"/><AgentStatus :value="agent.status"/></RouterLink>
-      <div class="agent-card-body"><RouterLink :to="`/agents/${agent.id}/live`" class="agent-card-name">{{agent.name}}</RouterLink><p class="agent-description">{{agent.description || '暂无说明'}}</p><div class="agent-card-meta"><span>{{agent.latest_revision.config.channels?.length ?? 0}} 路配置</span><span>最新配置 v{{agent.latest_revision.revision_no}}</span></div><p class="muted">活动配置：{{agent.active_revision_nos?.length?agent.active_revision_nos.map(n=>`v${n}`).join('、'):'无 / 状态待确认'}}</p><p v-if="agent.failed_run_count" class="status bad">异常 {{agent.failed_run_count}} 路</p><p class="muted">待核查 {{agent.pending_review_count==null?'未知':agent.pending_review_count}}</p><p class="muted">今日事件 {{agent.today_event_count==null?'未知':agent.today_event_count}} · 最近报警 {{formatDate(agent.latest_event_at??null)}}</p><p class="muted">更新于 {{formatDate(agent.updated_at)}}</p><div class="agent-actions"><RouterLink :to="`/agents/${agent.id}/live`">查看详情</RouterLink><RouterLink v-if="canWrite&&!agent.archived_at" :to="`/agents/${agent.id}/config`">编辑配置</RouterLink></div></div>
+      <div class="agent-card-body"><RouterLink :to="`/agents/${agent.id}/live`" class="agent-card-name">{{agent.name}}</RouterLink><p class="agent-description">{{agent.description || '暂无说明'}}</p><div class="agent-card-meta"><span>{{agent.latest_revision.config.channels?.length ?? 0}} 个通道 · {{sourceCount(agent.latest_revision.config)}} 路视频</span><span>最新配置 v{{agent.latest_revision.revision_no}}</span></div><p class="muted">活动配置：{{agent.active_revision_nos?.length?agent.active_revision_nos.map(n=>`v${n}`).join('、'):'无 / 状态待确认'}}</p><p v-if="agent.failed_run_count" class="status bad">异常 {{agent.failed_run_count}} 路</p><p v-if="MANUAL_REVIEW_AVAILABLE" class="muted">待核查 {{agent.pending_review_count==null?'未知':agent.pending_review_count}}</p><p v-else class="muted">人工核查 · 当前版本暂未开放</p><p class="muted">今日事件 {{agent.today_event_count==null?'未知':agent.today_event_count}} · 最近报警 {{formatDate(agent.latest_event_at??null)}}</p><p class="muted">更新于 {{formatDate(agent.updated_at)}}</p><div class="agent-actions"><RouterLink :to="`/agents/${agent.id}/live`">查看详情</RouterLink><RouterLink v-if="canWrite&&!agent.archived_at" :to="`/agents/${agent.id}/config`">编辑配置</RouterLink></div></div>
     </article>
   </div>
   <section v-else-if="!loading && !error" class="panel"><EmptyState large icon="bot" :title="query || sourceId ? '没有符合条件的智能体' : '先保存你的第一个监测草稿'" description="草稿保存后会形成一张卡片，可以继续配置视频源和监测需求。"><NButton v-if="canWrite && !query && !sourceId" type="primary" @click="openCreate">新建草稿</NButton></EmptyState></section>
   <div v-if="cursor" class="agent-load-more"><NButton :loading="loading" @click="load(true)">加载更多</NButton></div>
   <NModal v-model:show="showCreate" preset="card" title="新建智能体草稿" class="agent-create-modal" :mask-closable="false" :closable="!creating" :close-on-esc="!creating">
-    <form @submit.prevent="create"><div class="field"><label for="agent-name">智能体名称</label><NInput :input-props="{id:'agent-name'}" v-model:value="name" :maxlength="160" :disabled="creating" placeholder="例如：北门人员滞留监测"/></div><div class="field"><label for="agent-description">用途说明（可选）</label><NInput :input-props="{id:'agent-description'}" v-model:value="description" type="textarea" :maxlength="2000" :disabled="creating"/></div><ErrorBanner :error="createError" :retryable="false"/><p class="muted">创建后继续添加视频源、监测需求和区域，不会直接启动任务。</p><div class="agent-actions"><NButton :disabled="creating" @click="showCreate=false">取消</NButton><NButton type="primary" attr-type="submit" :loading="creating">创建草稿</NButton></div></form>
+    <form @submit.prevent="create"><div class="field"><label for="agent-name">智能体名称</label><NInput :input-props="{id:'agent-name'}" v-model:value="name" :maxlength="160" :disabled="creating" placeholder="例如：北门人员滞留监测"/></div><div class="field"><label for="agent-description">用途说明（可选）</label><NInput :input-props="{id:'agent-description'}" v-model:value="description" type="textarea" :maxlength="2000" :disabled="creating"/></div><div class="field"><label>首个通道的视频源（可多选）</label><NSelect v-model:value="selectedSources" multiple :options="sources.map(s=>({label:`${s.name} · ${s.kind==='camera'?'监控直播':'录像'}`,value:s.id}))" :disabled="creating" clearable aria-label="创建时选择视频源" placeholder="可先选择多个视频，共用一套监测规则"/><p class="hint">会创建一个监测组，组内视频统一配置规则。之后可以添加更多通道，每通道最多16路视频。</p><p v-if="sourcesError" class="hint">视频源列表暂不可用，可以先创建空草稿。</p></div><ErrorBanner :error="createError" :retryable="false"/><p class="muted">创建后补充本通道的共同规则，并为各视频分别绘制区域；保存不会自动启动。</p><div class="agent-actions"><NButton :disabled="creating" @click="showCreate=false">取消</NButton><NButton type="primary" attr-type="submit" :loading="creating">创建草稿</NButton></div></form>
   </NModal>
 </template>

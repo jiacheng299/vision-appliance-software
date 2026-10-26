@@ -13,6 +13,7 @@ from .schemas import RevisionConfig
 
 class AgentServices:
     data_origin = 'real'
+    supports_grouped_sources = False
 
     def available(self, service: str) -> bool:
         return False

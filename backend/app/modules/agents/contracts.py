@@ -97,6 +97,7 @@ class RunPage(DTO):
 
 class ChannelOperation(DTO):
     channel_id: str
+    source_id: str | None = None
     state: Literal['pending', 'stopping_old', 'starting_new', 'succeeded', 'failed', 'canceled']
     old_run_id: str | None = None
     new_run_id: str | None = None
@@ -116,7 +117,7 @@ class OperationDTO(DTO):
 class StartInput(DTO):
     revision_id: str = Field(min_length=1, max_length=80)
     channel_ids: list[str] = Field(min_length=1, max_length=16)
-    expected_active_run_ids: list[str] = Field(default_factory=list, max_length=16)
+    expected_active_run_ids: list[str] = Field(default_factory=list, max_length=64)
     @model_validator(mode='after')
     def unique(self):
         if len(set(self.channel_ids)) != len(self.channel_ids) or len(set(self.expected_active_run_ids)) != len(self.expected_active_run_ids):
@@ -299,6 +300,7 @@ class RuntimeCommand(DTO):
     channel_ids: list[str] = Field(default_factory=list)
     expected_active_run_ids: list[str] = Field(default_factory=list)
     stop_run_id: str | None = None
+    stop_channel_id: str | None = None
     validation_id: str | None = None
     confirmation_id: str | None = None
     capability_fingerprint: str | None = None
