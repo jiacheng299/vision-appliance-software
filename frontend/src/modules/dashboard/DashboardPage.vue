@@ -10,7 +10,7 @@ import EmptyState from '../../shared/ui/EmptyState.vue'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import Icon from '../../shared/ui/Icon.vue'
 import StatusBadge from '../../shared/ui/StatusBadge.vue'
-const {data,loading,error,refresh}=useResource(api.dashboard)
+const {data,loading,error,refresh}=useResource(api.dashboard,{coalesce:true})
 const {data:runtime}=useResource(api.runtime)
 const {connected}=useRealtime(()=>void refresh())
 const clock=new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'})
