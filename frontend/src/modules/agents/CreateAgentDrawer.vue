@@ -39,7 +39,7 @@ async function create(){
 </script>
 <template>
   <NDrawer :show="true" placement="right" width="min(100vw, max(640px, 50vw))" class="agent-create-drawer" :mask-closable="!creating" :close-on-esc="!creating" @update:show="show=>{if(!show)close()}">
-    <NDrawerContent title="新建智能体草稿" closable @close="close">
+    <NDrawerContent title="新建智能体草稿" :closable="!creating" @close="close">
       <div class="agent-create-intro"><span class="agent-create-eyebrow">创建监测业务</span><h2>先确定要监测什么</h2><p>给智能体命名，选择首个通道的视频源。创建后再设置监测规则和检测区域。</p></div>
       <ol class="agent-create-steps" aria-label="配置层级"><li><strong>智能体</strong><span>一种监测业务</span></li><li><strong>通道</strong><span>共用一套规则</span></li><li><strong>视频源</strong><span>摄像头或录像</span></li></ol>
       <form id="agent-create-form" class="agent-create-form" @submit.prevent="create">
