@@ -2,7 +2,7 @@
 import { MANUAL_REVIEW_AVAILABLE } from './features'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NInput, NModal, NSelect } from 'naive-ui'
+import { NButton, NInput, NSelect } from 'naive-ui'
 import { humanError } from '../../shared/api/client'
 import { formatDate } from '../../shared/ui/resource'
 import { safeMediaUrl } from '../../shared/media/url'
@@ -10,22 +10,19 @@ import type { Source } from '../../shared/api/types'
 import EmptyState from '../../shared/ui/EmptyState.vue'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import Icon from '../../shared/ui/Icon.vue'
-import { agentApi, listAgentSources, type Agent } from './api'
-import { emptyConfig, newChannel } from './draft'
-import { setChannelSources, sourceCount } from './channelSources'
+import { agentApi, listAgentSources, type Agent, type AgentDetail } from './api'
+import { sourceCount } from './channelSources'
 import { environment } from '../../shared/environment'
 import { agentError, label } from './state'
 import AgentStatus from './AgentStatus.vue'
+import CreateAgentDrawer from './CreateAgentDrawer.vue'
 import './agents.css'
 const router = useRouter()
 const items = ref<Agent[]>([]), sources = ref<Source[]>([]), query = ref(''), sourceId = ref<string | null>(null)
 const error = ref(''), sourcesError = ref(''), loading = ref(false), cursor = ref<string | null>(null), showCreate = ref(false)
-const name = ref(''), description = ref(''), creating = ref(false), createError = ref('')
-const selectedSources=ref<string[]>([])
-const createConfig=computed(()=>{const config=emptyConfig();if(selectedSources.value.length){const channel=newChannel();channel.name='监测组 1';setChannelSources(channel,selectedSources.value);config.channels=[channel]}return config})
 const canWrite = true
 const stateFilter=ref<string|null>(null),scene=ref(''),archived=ref(false),sort=ref('updated_desc'),seeding=ref(false)
-let generation = 0, timer: ReturnType<typeof setTimeout> | undefined, createToken = '', createBody = ''
+let generation = 0, timer: ReturnType<typeof setTimeout> | undefined
 async function load(more = false) {
   const request = ++generation; loading.value = true; error.value = ''
   try {
@@ -40,19 +37,8 @@ async function loadSources() { try { sources.value = await listAgentSources(); s
 watch([query, sourceId,stateFilter,scene,archived,sort], () => { generation++; items.value = []; cursor.value = null; clearTimeout(timer); timer = setTimeout(() => void load(), 250) })
 onUnmounted(() => { generation++; clearTimeout(timer) })
 void load(); void loadSources()
-function openCreate() { selectedSources.value=[];name.value = ''; description.value = ''; createError.value = ''; createToken = ''; createBody = ''; showCreate.value = true }
-async function create() {
-  if (creating.value) return
-  if (!name.value.trim()) { createError.value = '请先给智能体起一个名称。'; return }
-  if(selectedSources.value.length>16){createError.value='首个通道最多选择16个视频源。';return}
-  const body = { name: name.value.trim(), description: description.value.trim(), config: createConfig.value }
-  const encoded = JSON.stringify(body)
-  if (!createToken || createBody !== encoded) { createToken = crypto.randomUUID(); createBody = encoded }
-  creating.value = true; createError.value = ''
-  try { const result = await agentApi.create(body, createToken); showCreate.value = false; await router.push(`/agents/${result.id}/config`) }
-  catch (e) { createError.value = humanError(e) }
-  finally { creating.value = false }
-}
+function openCreate() { showCreate.value = true; void loadSources() }
+function created(agent:AgentDetail){showCreate.value=false;void router.push(`/agents/${agent.id}/config`)}
 function thumbnail(agent: Agent) { return safeMediaUrl(sources.value.find(s => s.id === (agent.latest_revision.config.channels?.[0]?.sources?.[0]?.source_id??agent.latest_revision.config.channels?.[0]?.source_id))?.thumbnail_url ?? null) }
 async function seed(){if(seeding.value)return;seeding.value=true;error.value='';try{const result=await agentApi.seed();await loadSources();await router.push(`/agents/${result.id}/config`)}catch(e){error.value=agentError(e)}finally{seeding.value=false}}
 </script>
@@ -70,7 +56,5 @@ async function seed(){if(seeding.value)return;seeding.value=true;error.value='';
   </div>
   <section v-else-if="!loading && !error" class="panel"><EmptyState large icon="bot" :title="query || sourceId ? '没有符合条件的智能体' : '先保存你的第一个监测草稿'" description="草稿保存后会形成一张卡片，可以继续配置视频源和监测需求。"><NButton v-if="canWrite && !query && !sourceId" type="primary" @click="openCreate">新建草稿</NButton></EmptyState></section>
   <div v-if="cursor" class="agent-load-more"><NButton :loading="loading" @click="load(true)">加载更多</NButton></div>
-  <NModal v-model:show="showCreate" preset="card" title="新建智能体草稿" class="agent-create-modal" :mask-closable="false" :closable="!creating" :close-on-esc="!creating">
-    <form @submit.prevent="create"><div class="field"><label for="agent-name">智能体名称</label><NInput :input-props="{id:'agent-name'}" v-model:value="name" :maxlength="160" :disabled="creating" placeholder="例如：北门人员滞留监测"/></div><div class="field"><label for="agent-description">用途说明（可选）</label><NInput :input-props="{id:'agent-description'}" v-model:value="description" type="textarea" :maxlength="2000" :disabled="creating"/></div><div class="field"><label>首个通道的视频源（可多选）</label><NSelect v-model:value="selectedSources" multiple :options="sources.map(s=>({label:`${s.name} · ${s.kind==='camera'?'监控直播':'录像'}`,value:s.id}))" :disabled="creating" clearable aria-label="创建时选择视频源" placeholder="可先选择多个视频，共用一套监测规则"/><p class="hint">会创建一个监测组，组内视频统一配置规则。之后可以添加更多通道，每通道最多16路视频。</p><p v-if="sourcesError" class="hint">视频源列表暂不可用，可以先创建空草稿。</p></div><ErrorBanner :error="createError" :retryable="false"/><p class="muted">创建后补充本通道的共同规则，并为各视频分别绘制区域；保存不会自动启动。</p><div class="agent-actions"><NButton :disabled="creating" @click="showCreate=false">取消</NButton><NButton type="primary" attr-type="submit" :loading="creating">创建草稿</NButton></div></form>
-  </NModal>
+  <CreateAgentDrawer v-if="showCreate" :sources="sources" :sources-error="sourcesError" @close="showCreate=false" @created="created"/>
 </template>
