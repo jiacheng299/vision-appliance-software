@@ -37,7 +37,7 @@ function fail(message: string, version: number) {
   error.value = message
 }
 
-watch(() => [props.source.id, props.autoStart], () => {
+watch([() => props.source.id, () => props.autoStart], () => {
   reset()
   if (props.autoStart) void preview()
 }, { flush: 'sync' })

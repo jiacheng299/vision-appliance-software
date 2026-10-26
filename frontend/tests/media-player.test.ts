@@ -181,6 +181,32 @@ describe('media preview', () => {
 })
 
 describe('automatic wall playback', () => {
+  it.each(['hls', 'file'] as const)('keeps %s playback uninterrupted across source metadata refreshes', async (protocol) => {
+    vi.mocked(api.mediaSession).mockResolvedValue(session(protocol,
+      protocol === 'hls' ? '/api/v1/media/live/index.m3u8' : '/api/v1/media/clip.mp4'))
+    const original = { ...source(), kind: protocol === 'hls' ? 'camera' : 'file', status: protocol === 'hls' ? 'online' : 'ready' } as Source
+    const wrapper = mount(MediaPlayer, { props: { source: original, autoStart: true, loop: true } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    const video = wrapper.get('video').element
+    video.currentTime = 12
+    vi.mocked(video.pause).mockClear()
+    vi.mocked(video.load).mockClear()
+    for (let version = 2; version <= 4; version++) {
+      await wrapper.setProps({ source: { ...original, row_version: version, name: `Updated ${version}`, observed_at: `2026-10-26T06:00:0${version}Z` } })
+      await flushPromises()
+      expect(wrapper.get('video').element).toBe(video)
+      expect(video.currentTime).toBe(12)
+    }
+    expect(api.mediaSession).toHaveBeenCalledTimes(1)
+    expect(video.pause).not.toHaveBeenCalled()
+    expect(video.load).not.toHaveBeenCalled()
+    if (protocol === 'hls') {
+      expect(hls.instances).toHaveLength(1)
+      expect(hls.instances[0].destroy).not.toHaveBeenCalled()
+    }
+  })
+
   it('opens a camera automatically when requested', async () => {
     const wrapper = mount(MediaPlayer, { props: { source: source(), autoStart: true } })
     wrappers.push(wrapper)
