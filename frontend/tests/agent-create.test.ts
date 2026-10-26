@@ -71,5 +71,5 @@ it('keeps agent cards and the create button usable even when source loading fail
   expect(open.attributes('disabled')).toBeUndefined()
   await open.trigger('click');await flushPromises()
   expect(w.findComponent(CreateAgentDrawer).exists()).toBe(true)
-  expect(w.text()).toContain('暂时无法加载视频源')
+  expect(w.text()).toContain('视频源列表加载失败')
 })
