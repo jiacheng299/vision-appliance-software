@@ -1,12 +1,19 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { humanError } from '../api/client'
-export function useResource<T>(fetcher:()=>Promise<T>) {
+export function useResource<T>(fetcher:()=>Promise<T>, options:{coalesce?:boolean}={}) {
   const data=ref<T|null>(null), loading=ref(false), error=ref('')
-  let active=true, generation=0
-  async function refresh() {
+  let active=true, generation=0, inFlight:Promise<void>|null=null
+  function refresh():Promise<void> {
+    if(!active)return Promise.resolve()
+    if(options.coalesce&&inFlight)return inFlight
     const version=++generation
     loading.value=true;error.value=''
-    try {const result=await fetcher();if(active&&version===generation)data.value=result} catch(e) {if(active&&version===generation)error.value=humanError(e)} finally {if(active&&version===generation)loading.value=false}
+    const request=(async()=>{
+      try {const result=await fetcher();if(active&&version===generation)data.value=result} catch(e) {if(active&&version===generation)error.value=humanError(e)} finally {if(active&&version===generation)loading.value=false}
+    })()
+    inFlight=request
+    void request.then(()=>{if(inFlight===request)inFlight=null})
+    return request
   }
   onMounted(refresh)
   onUnmounted(()=>{active=false})

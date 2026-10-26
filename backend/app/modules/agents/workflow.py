@@ -217,7 +217,7 @@ def stop_channel(db, provider, agent_id, channel_id, actor_id, key):
     if not targets:
         raise Error(409, 'run_scope_changed', '该通道当前没有活动运行，请刷新后查看。')
     if not provider.supports_grouped_sources and len(targets) > 1:
-        raise Error(503, 'grouped_sources_unavailable', '运行服务尚未支持通道组停止。')
+        raise Error(503, 'grouped_sources_unavailable', '运行服务尚未支持通道停止。')
     if any(r.agent_id != agent_id for r in targets):
         raise Error(502, 'provider_contract_invalid', '运行服务返回了其他智能体的数据。')
     result = provider.submit(RuntimeCommand(kind='stop', agent_id=agent_id, channel_ids=[channel_id],

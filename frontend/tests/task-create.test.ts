@@ -35,7 +35,7 @@ async function wizard(){const w=mount(TaskCreatePage,{global:{stubs:{RouterLink:
 async function button(w:ReturnType<typeof mount>,text:string){const b=w.findAll('button').find(b=>b.text()===text);expect(b,`button ${text}`).toBeTruthy();await b!.trigger('click');await flushPromises()}
 async function ready(w:ReturnType<typeof mount>){
  await w.get('input[aria-label="任务名称"]').setValue('门口任务')
- w.findAllComponents({name:'NSelect'}).find(s=>s.attributes('aria-label')==='组内视频源')!.vm.$emit('update:value',['s']);await nextTick()
+ w.findAllComponents({name:'NSelect'}).find(s=>s.attributes('aria-label')==='通道内视频源')!.vm.$emit('update:value',['s']);await nextTick()
  await button(w,'下一步');await w.get('input[aria-label="监测需求"]').setValue('有人停留30秒');await w.get('input[aria-label="监测目标"]').setValue('person');await w.get('input[aria-label="触发规则"]').setValue('dwell');await w.get('input[aria-label="持续时长"]').setValue('30');await button(w,'下一步')
  w.findAllComponents({name:'NSelect'}).find(s=>s.attributes('aria-label')==='模型与模板')!.vm.$emit('update:value',JSON.stringify(reference));await nextTick();await w.get('input[type="checkbox"]').setValue(true);await button(w,'保存并验证可执行性')
 }
@@ -44,7 +44,7 @@ describe('wizard execution guards',()=>{
 
  it('invalidates executable evaluation when a business field changes',async()=>{const w=await wizard();await ready(w);expect(w.text()).toContain('可执行');await button(w,'上一步');await button(w,'上一步');await w.get('input[aria-label="持续时长"]').setValue('60');await button(w,'下一步');await button(w,'下一步');expect(w.findAll('button').find(b=>b.text()==='确认并启动')!.attributes('disabled')).toBeDefined();expect(w.text()).toContain('需要重新验证');expect(m.submit).not.toHaveBeenCalled()})
  it('does not call a pending operation successful or submit it twice',async()=>{const w=await wizard();await ready(w);await w.findAll('input[type="checkbox"]').at(-1)!.setValue(true);await button(w,'确认并启动');expect(m.submit).toHaveBeenCalledTimes(1);expect(w.text()).toContain('已受理');expect(m.router.push).not.toHaveBeenCalled();expect(w.text()).not.toContain('启动完成')})
- it('does not invent a duration for vague natural language',async()=>{const w=await wizard();await button(w,'下一步');await w.get('input[aria-label="监测需求"]').setValue('有人停留太久报警');await button(w,'解析当前组需求');expect(w.get('input[aria-label="持续时长"]').element).toHaveProperty('value','');expect(w.text()).toContain('请明确持续时长')})
+ it('does not invent a duration for vague natural language',async()=>{const w=await wizard();await button(w,'下一步');await w.get('input[aria-label="监测需求"]').setValue('有人停留太久报警');await button(w,'解析当前通道需求');expect(w.get('input[aria-label="持续时长"]').element).toHaveProperty('value','');expect(w.text()).toContain('请明确持续时长')})
  it('blocks an unsupported verdict',async()=>{m.validate.mockResolvedValue({id:'v',verdict:'unsupported',missing_conditions:[],unsupported_conditions:['未支持'],evidence_limitations:[],expires_at:'2099-01-01T00:00:00Z'});const w=await wizard();await ready(w);expect(w.text()).toContain('暂不支持');expect(w.findAll('button').find(b=>b.text()==='确认并启动')!.attributes('disabled')).toBeDefined()})
 })
 describe('grouped draft and idempotency',()=>{
