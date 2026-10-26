@@ -35,7 +35,7 @@ async function wizard(){const w=mount(TaskCreatePage,{global:{stubs:{RouterLink:
 async function button(w:ReturnType<typeof mount>,text:string){const b=w.findAll('button').find(b=>b.text()===text);expect(b,`button ${text}`).toBeTruthy();await b!.trigger('click');await flushPromises()}
 async function ready(w:ReturnType<typeof mount>){
  await w.get('input[aria-label="任务名称"]').setValue('门口任务')
- w.findAllComponents({name:'NSelect'}).find(s=>s.attributes('aria-label')==='组内视频源')!.vm.$emit('update:value',['s']);await nextTick()
+ w.findAllComponents({name:'NSelect'}).find(s=>s.attributes('aria-label')==='通道内视频源')!.vm.$emit('update:value',['s']);await nextTick()
  await button(w,'下一步');await w.get('input[aria-label="监测需求"]').setValue('有人停留30秒');await w.get('input[aria-label="监测目标"]').setValue('person');await w.get('input[aria-label="触发规则"]').setValue('dwell');await w.get('input[aria-label="持续时长"]').setValue('30');await button(w,'下一步')
  w.findAllComponents({name:'NSelect'}).find(s=>s.attributes('aria-label')==='模型与模板')!.vm.$emit('update:value',JSON.stringify(reference));await nextTick();await w.get('input[type="checkbox"]').setValue(true);await button(w,'保存并验证可执行性')
 }

@@ -122,7 +122,7 @@ def check_capability(catalog, ref, target, rule):
 def deterministic_assessment(config, sources, catalog):
     missing, unsupported, chosen = [], [], []
     if not config.channels:
-        missing.append('请至少添加一个监测组。')
+        missing.append('请至少添加一个通道。')
     for channel in config.channels:
         prefix = channel.name + '：'
         if not channel.requirement_text:

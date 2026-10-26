@@ -115,7 +115,7 @@ class DemoServices(AgentServices):
             if command.kind == 'stop' and command.stop_channel_id:
                 scope = [command.stop_channel_id]
                 if set(r.id for r in active) != set(command.expected_active_run_ids):
-                    raise Error(409, 'run_scope_changed', '通道组运行已变化，请刷新。')
+                    raise Error(409, 'run_scope_changed', '通道运行已变化，请刷新。')
                 pairs = [(r.channel_id, r.source_id) for r in active]
             elif command.kind == 'stop':
                 target = self.run_rows.get(command.stop_run_id)
@@ -135,9 +135,9 @@ class DemoServices(AgentServices):
             if not pairs:
                 raise Error(422, 'invalid_channel_scope', '所选通道没有可执行的视频源。')
             if any((command.agent_id, c) in self.busy for c in scope):
-                raise Error(409, 'channel_busy', '通道组正在执行另一项操作，请等待结果。')
+                raise Error(409, 'channel_busy', '通道正在执行另一项操作，请等待结果。')
             op = OperationDTO(id=identifier(), agent_id=command.agent_id, kind=command.kind, state='pending',
-                channels=[ChannelOperation(channel_id=c, source_id=sid, state='pending', old_run_id=next((r.id for r in active if r.channel_id == c and r.source_id == sid), None)) for c,sid in pairs], message='模拟操作已受理，按通道组处理，各视频独立记录结果。', data_origin='mock')
+                channels=[ChannelOperation(channel_id=c, source_id=sid, state='pending', old_run_id=next((r.id for r in active if r.channel_id == c and r.source_id == sid), None)) for c,sid in pairs], message='模拟操作已受理，按通道处理，各视频独立记录结果。', data_origin='mock')
             self.operations[op.id] = op; self.commands[op.id] = command.model_copy(deep=True); self.started[op.id] = self.clock()
             for c in scope:
                 self.busy[(command.agent_id, c)] = op.id
