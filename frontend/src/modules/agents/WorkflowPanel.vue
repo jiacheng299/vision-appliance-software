@@ -19,7 +19,7 @@ const changes=computed(()=>oldRuns.value.flatMap(r=>configChanges(r.config_snaps
 let generation=0,disposed=false
 watch(busy,value=>emit('busy',value))
 watch(()=>props.revision.config.channels?.map(c=>c.channel_id).join('|'),()=>{selectedChannels.value=(props.revision.config.channels??[]).flatMap(c=>c.channel_id?[c.channel_id]:[])},{immediate:true})
-watch(()=>[props.revision.id,props.revision.latest_validation_id],async()=>{
+watch([()=>props.revision.id,()=>props.revision.latest_validation_id],async()=>{
   const current=++generation;validation.value=null;error.value='';notice.value=''
   if(props.revision.latest_validation_id)try{const result=await agentApi.validation(props.revision.latest_validation_id);if(current===generation&&!disposed)validation.value=result}catch(e){if(current===generation)error.value=agentError(e)}
 },{immediate:true})
