@@ -1553,6 +1553,12 @@ export interface components {
         };
         /** AgentReference */
         AgentReference: {
+            /**
+             * Reference Kind
+             * @default agent
+             * @enum {string}
+             */
+            reference_kind: "agent" | "template";
             /** Agent Id */
             agent_id: string;
             /** Agent Name */
@@ -3115,6 +3121,8 @@ export interface components {
             };
             /** Limitations */
             limitations?: string[];
+            /** Parameter Keys */
+            parameter_keys?: string[];
         };
         /** TemplatePage */
         TemplatePage: {

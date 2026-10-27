@@ -108,7 +108,7 @@ def catalog(db, origin):
         t = definition.template
         items.append(CapabilityItem(name=f'{definition.name} + {t.name}', reference=CapabilityRef(model_id=pair.model_id, model_version=pair.version,
             template_id=pair.template_id, template_version=pair.template_version), targets=t.targets, rules=t.rules,
-            requires_region=t.requires_region, requires_duration=t.requires_duration, limitations=t.limitations))
+            requires_region=t.requires_region, requires_duration=t.requires_duration, limitations=t.limitations,parameter_keys=t.parameter_keys))
     return CapabilityCatalog(items=items, fingerprint=digest([[p.model_id, p.version, p.template_version, p.file_id, p.row_version, p.definition] for p in pairs]), data_origin=origin)
 
 

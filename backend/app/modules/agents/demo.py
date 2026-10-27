@@ -50,10 +50,11 @@ class DemoServices(AgentServices):
 
     def catalog(self, actor_id):
         self.check('capability')
+        from ...shared.monitoring_parameters import BY_KEY
         return CapabilityCatalog(items=[CapabilityItem(name='模拟人员模型 + 模拟区域模板',
             reference=CapabilityRef(model_id='MOCK-person', model_version='1.0', template_id='MOCK-region', template_version='1.0'),
             targets=['person'], rules=['intrusion', 'dwell', 'absence'], requires_region=['intrusion', 'dwell', 'absence'],
-            requires_duration=['dwell', 'absence'], limitations=['仅用于演示接口交互，不执行人员识别，也不能证明任何场景效果。'])], fingerprint=self.fingerprint, data_origin='mock')
+            requires_duration=['dwell', 'absence'], parameter_keys=list(BY_KEY),limitations=['仅用于演示接口交互，不执行人员识别，也不能证明任何场景效果。'])], fingerprint=self.fingerprint, data_origin='mock')
 
     def assess(self, config, sources, actor_id):
         catalog = self.catalog(actor_id); item = catalog.items[0]

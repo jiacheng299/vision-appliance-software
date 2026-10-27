@@ -320,6 +320,7 @@ class EnvironmentDTO(DTO):
 
 
 class AgentReference(DTO):
+    reference_kind: Literal['agent','template'] = 'agent'
     agent_id: str
     agent_name: str
     revision_id: str

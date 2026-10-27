@@ -16,14 +16,18 @@ class TemplateInput(DTO):
     requires_duration: list[str] = Field(default_factory=list, max_length=100)
     defaults: dict[str, str | int | float | bool | None] = Field(default_factory=dict, max_length=50)
     limitations: list[str] = Field(default_factory=list, max_length=100)
+    parameter_keys: list[str] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode='after')
     def coherent(self):
-        for values in (self.targets, self.rules, self.requires_region, self.requires_duration, self.limitations):
+        for values in (self.targets, self.rules, self.requires_region, self.requires_duration, self.limitations,self.parameter_keys):
             if len(values) != len(set(values)) or any(not v.strip() or len(v) > 2000 for v in values):
                 raise ValueError('Empty, duplicate or excessively long template fields')
         if not set(self.requires_region + self.requires_duration) <= set(self.rules):
             raise ValueError('Required-condition rules must be declared supported rules')
+        from ...shared.monitoring_parameters import BY_KEY
+        if not set(self.parameter_keys)<=set(BY_KEY):
+            raise ValueError('Model parameter declarations must use the developer-owned catalog')
         return self
 
 

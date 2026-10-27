@@ -74,6 +74,21 @@ def references(source_id: str | None = Query(None, max_length=80), model_id: str
             active_run_ids=[r.id for r in runs if r.revision_id == revision.id and r.channel_id in matches and (not source_id or r.source_id == source_id) and r.state in ACTIVE_STATES] if runs is not None else None))
         if len(result) > limit:
             break
+    if model_id and not source_id:
+        from ..agent_templates.models import AgentTemplate,AgentTemplateRevision
+        templates=select(AgentTemplateRevision).order_by(AgentTemplateRevision.id)
+        if cursor: templates=templates.where(AgentTemplateRevision.id>cursor)
+        count=0
+        for revision in db.scalars(templates):
+            ref=revision.config.get('model_ref') or {}
+            if ref.get('model_id')!=model_id or (model_version and ref.get('model_version')!=model_version): continue
+            template=db.get(AgentTemplate,revision.template_id)
+            result.append(AgentReference(reference_kind='template',agent_id=template.id,agent_name=template.name,
+                revision_id=revision.id,revision_no=revision.revision_no,revision_state=revision.state,channel_ids=[],
+                archived=bool(template.archived_at),runtime_checked=True,active_run_ids=[]))
+            count+=1
+            if count>limit: break
+    result.sort(key=lambda item:item.revision_id)
     return ReferencePage(items=result[:limit], next_cursor=result[limit-1].revision_id if len(result)>limit else None, data_origin=provider.data_origin)
 
 

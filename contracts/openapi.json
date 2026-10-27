@@ -13508,6 +13508,15 @@
       },
       "AgentReference": {
         "properties": {
+          "reference_kind": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "template"
+            ],
+            "title": "Reference Kind",
+            "default": "agent"
+          },
           "agent_id": {
             "type": "string",
             "title": "Agent Id"
@@ -18073,6 +18082,14 @@
             "type": "array",
             "maxItems": 100,
             "title": "Limitations"
+          },
+          "parameter_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Parameter Keys"
           }
         },
         "additionalProperties": false,

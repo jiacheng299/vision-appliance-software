@@ -56,6 +56,11 @@ def test_template_creation_publish_and_task_instantiation_are_idempotent(templat
     assert card['task_count']==card['source_count']==1
     rows=c.get(API+f'/agent-templates/{t["id"]}/tasks').json()['items']
     assert rows[0]['agent']['id']==data['id'] and rows[0]['sources'][0]['id']==source
+    sources=c.get(API+f'/agent-templates/{t["id"]}/sources').json()['items']
+    assert [s['id'] for s in sources]==[source]
+    references=c.get(API+'/agent-services/references',params={'model_id':ref['model_id'],'model_version':ref['model_version']}).json()['items']
+    assert any(i['reference_kind']=='template' and i['agent_id']==t['id'] for i in references)
+    assert any(i['reference_kind']=='agent' and i['agent_id']==data['id'] for i in references)
 
 def test_template_changes_never_rewrite_existing_tasks(templates):
     c,_,ref,source=templates
@@ -83,7 +88,8 @@ def test_tasks_cannot_forge_template_version_model_or_parameter_pool(templates):
     config=r.json()['latest_revision']['config'];revision=r.json()['latest_revision']
     import copy
     for mutate in [lambda x:x['agent_template_ref'].update(revision_no=99),lambda x:x['channels'][0]['capability_ref'].update(model_id='forged'),
-                   lambda x:x['channels'][0]['parameters'].append({'key':'color','value':'red'}),lambda x:x.update(agent_template_ref=None)]:
+                   lambda x:x['channels'][0]['parameters'].append({'key':'color','value':'red'}),lambda x:x.update(agent_template_ref=None),
+                   lambda x:x['channels'][0]['parameters'][0].update(required=False)]:
         altered=copy.deepcopy(config);mutate(altered)
         response=c.patch(API+'/revisions/'+revision['id'],json={'row_version':revision['row_version'],'config':altered})
         assert response.status_code==422,response.text
@@ -123,3 +129,37 @@ def test_unknown_parameter_support_fails_closed(templates):
     app.state.agent_services.supports_configurable_parameters=False
     response=post(c,f'/revisions/{r["id"]}/validations',{'row_version':r['row_version']})
     assert response.status_code==503,response.text
+
+
+def test_model_must_explicitly_declare_parameter_support(templates,monkeypatch):
+    c,app,ref,source=templates
+    t=publish(c,make(c,ref,[{'key':'color','value':'red'}]))
+    result=task(c,t,source).json();r=result['latest_revision']
+    original=app.state.agent_services.catalog
+    def without_color(actor):
+        catalog=original(actor)
+        for item in catalog.items: item.parameter_keys=[]
+        return catalog
+    monkeypatch.setattr(app.state.agent_services,'catalog',without_color)
+    response=post(c,f'/revisions/{r["id"]}/validations',{'row_version':r['row_version']})
+    assert response.status_code==201,response.text
+    validation=response.json()
+    assert validation['verdict']=='unsupported'
+    assert any('目标颜色' in message for message in validation['unsupported_conditions'])
+
+
+def test_model_references_paginate_templates_and_tasks_without_omission(templates):
+    c,_,ref,source=templates
+    for _ in range(3):
+        t=publish(c,make(c,ref));assert task(c,t,source).status_code==201
+    parameters={'model_id':ref['model_id'],'model_version':ref['model_version'],'limit':1}
+    seen=[]
+    while True:
+        response=c.get(API+'/agent-services/references',params=parameters)
+        assert response.status_code==200,response.text
+        page=response.json();seen.extend((row['reference_kind'],row['revision_id']) for row in page['items'])
+        if not page['next_cursor']: break
+        parameters['cursor']=page['next_cursor']
+        assert len(seen)<10
+    assert len(seen)==len(set(seen))==6
+    assert {kind for kind,_ in seen}=={'agent','template'}
