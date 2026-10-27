@@ -89,7 +89,9 @@ def test_tasks_cannot_forge_template_version_model_or_parameter_pool(templates):
     import copy
     for mutate in [lambda x:x['agent_template_ref'].update(revision_no=99),lambda x:x['channels'][0]['capability_ref'].update(model_id='forged'),
                    lambda x:x['channels'][0]['parameters'].append({'key':'color','value':'red'}),lambda x:x.update(agent_template_ref=None),
-                   lambda x:x['channels'][0]['parameters'][0].update(required=False)]:
+                   lambda x:x['channels'][0]['parameters'][0].update(required=False),
+                   lambda x:x['channels'][0].update(task_mode='natural_language'),
+                   lambda x:x['channels'][0].update(execution_plan={'plan_id':'forged','executor_kind':'multimodal','deployment_id':'other','deployment_version':'1','instruction':'different task','reason':'forged'})]:
         altered=copy.deepcopy(config);mutate(altered)
         response=c.patch(API+'/revisions/'+revision['id'],json={'row_version':revision['row_version'],'config':altered})
         assert response.status_code==422,response.text

@@ -180,6 +180,8 @@ def assert_task_binding(db,agent_id,config):
     template=TemplateConfig.model_validate(version.config)
     if len(config.channels)!=1: raise Error(422,'template_task_scope_invalid','模板任务仅允许一路视频配置。')
     channel=config.channels[0]
+    if channel.task_mode!=previous['channels'][0].get('task_mode') or channel.execution_plan is not None:
+        raise Error(422,'template_execution_immutable','模板任务不能切换执行模式或覆盖模型执行方案。')
     if channel.capability_ref!=template.model_ref or len(channel_sources(channel))!=1:
         raise Error(422,'template_model_immutable','任务必须使用创建时模板的模型及单视频结构。')
     if {p.key for p in channel.parameters}!={p.key for p in template.parameters}:
