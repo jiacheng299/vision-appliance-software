@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { newId } from '../ids'
 import { computed, ref, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import type { components } from '../api/generated'
@@ -37,7 +38,7 @@ function finish() {
   if(!closed.value){error.value='区域尚未闭合，请沿边界绘制至少三个点，再点击起点附近闭合。';return}
   error.value=regionError(points.value)
   if(error.value)return
-  emit('change', [...props.regions, { id: crypto.randomUUID(), name: `区域 ${props.regions.length + 1}`, points: points.value.map(p => [...p]) }])
+  emit('change', [...props.regions, { id: newId(), name: `区域 ${props.regions.length + 1}`, points: points.value.map(p => [...p]) }])
   points.value = []
   closed.value=false;notice.value='封闭区域已添加，请继续保存配置草稿。'
 }

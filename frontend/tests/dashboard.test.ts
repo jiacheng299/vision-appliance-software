@@ -82,3 +82,19 @@ describe('dashboard video wall', () => {
     } finally {wrapper.unmount();vi.restoreAllMocks()}
   })
 })
+
+
+describe('integrated execution overview',()=>{
+  it('shows unavailable services as unknown instead of reporting zero executions',async()=>{
+    vi.spyOn(api,'dashboard').mockResolvedValue({sources:[],counts:{sources_total:0,sources_online:0,active_runs:null,today_events:null},recent_events:[],task_summary:{running:null,completed:null,waiting:null},runtime_available:false,events_available:false} as any)
+    vi.spyOn(api,'runtime').mockResolvedValue({disk:{used_bytes:1,total_bytes:10}} as any)
+    const wrapper=mount(DashboardPage,{global:{stubs:{RouterLink:{template:'<a><slot /></a>'},MediaPlayer:true}}})
+    try{await flushPromises();expect(wrapper.text()).toContain('报警服务尚未接入');expect(wrapper.findAll('.task-counts strong').map(e=>e.text())).toEqual(['—','—','—']);expect(wrapper.text()).toContain('运行数量未知')}finally{wrapper.unmount();vi.restoreAllMocks()}
+  })
+  it('links owner-provided alarm summaries back to the originating agent',async()=>{
+    vi.spyOn(api,'dashboard').mockResolvedValue({sources:[],counts:{sources_total:0,sources_online:0,active_runs:2,today_events:1},recent_events:[{id:'event',agent_id:'fire-agent',event_type:'火源出现（模拟）',source_name:'联调录像',reason:'模拟事件',occurred_at:'2026-10-26T08:00:00Z'}],task_summary:{running:2,completed:0,waiting:0},data_origin:'mock',runtime_available:true,events_available:true} as any)
+    vi.spyOn(api,'runtime').mockResolvedValue({disk:{used_bytes:1,total_bytes:10}} as any)
+    const wrapper=mount(DashboardPage,{global:{stubs:{RouterLink:{props:['to'],template:'<a :href="to"><slot /></a>'},MediaPlayer:true}}})
+    try{await flushPromises();expect(wrapper.get('a[href="/agents/fire-agent/live"]').text()).toBe('火源出现（模拟）');expect(wrapper.findAll('.task-counts strong').map(e=>e.text())).toEqual(['2','0','0'])}finally{wrapper.unmount();vi.restoreAllMocks()}
+  })
+})

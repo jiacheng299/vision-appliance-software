@@ -1,3 +1,4 @@
+import { newId } from '../../shared/ids'
 import type { MonitorEvent, Run, RevisionConfig } from './api'
 import { humanError } from '../../shared/api/client'
 import { runSourceKey } from './channelSources'
@@ -22,7 +23,7 @@ export function actualRuns(runs: Run[]): Run[] {
 }
 export function configChanges(before: RevisionConfig, after: RevisionConfig): {channel:string;field:string;before:string;after:string}[] {
   const result:{channel:string;field:string;before:string;after:string}[]=[]
-  const fields={sources:'通道内视频源、区域与录像范围',source_id:'视频源',requirement_text:'监测需求',target:'监测对象',rule:'触发规则',duration_seconds:'持续时长（秒）',start_media_ms:'录像开始位置（毫秒）',end_media_ms:'录像结束位置（毫秒）',capability_ref:'模型与模板版本',regions:'监测区域'} as const
+  const fields={task_mode:'任务模式',execution_plan:'执行方案与大模型版本',sources:'通道内视频源、区域与录像范围',source_id:'视频源',requirement_text:'监测需求',target:'监测对象',rule:'触发规则',duration_seconds:'持续时长（秒）',start_media_ms:'录像开始位置（毫秒）',end_media_ms:'录像结束位置（毫秒）',capability_ref:'模型与模板版本',regions:'监测区域'} as const
   for(const current of after.channels??[]){
     const old=before.channels?.find(c=>c.channel_id===current.channel_id)
     if(!old){result.push({channel:current.name,field:'通道',before:'无',after:'新增通道'});continue}
@@ -43,12 +44,12 @@ export function requestKey(scope: string, payload: unknown): string {
     const old = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as {signature:string;key:string}|null
     if (old?.signature === signature) return old.key
   } catch { /* An interrupted storage write does not authorize reusing another request. */ }
-  const key = crypto.randomUUID()
+  const key = newId()
   sessionStorage.setItem(storageKey,JSON.stringify({signature,key}))
   return key
 }
 export function received(scope: string) { sessionStorage.removeItem(`vision.agent.request.${scope}`) }
-const businessCodes = new Set(['grouped_sources_unavailable','validation_stale','validation_blocked','confirmation_required','published_revision_required','invalid_channel_scope','run_scope_changed','channel_busy','agent_archived','agent_in_use','baseline_running','feedback_conflict','invalid_media_range','invalid_time','evidence_unavailable','playback_unavailable','invalid_baseline','invalid_export_scope','export_state_conflict','export_not_ready','runtime_service_unavailable','events_service_unavailable','media_service_unavailable','exports_service_unavailable','provider_contract_invalid'])
+const businessCodes = new Set(['execution_plan_stale','execution_plan_blocked','task_planning_unavailable','multimodal_execution_unavailable','multimodal_service_unavailable','grouped_sources_unavailable','validation_stale','validation_blocked','confirmation_required','published_revision_required','invalid_channel_scope','run_scope_changed','channel_busy','agent_archived','agent_in_use','baseline_running','feedback_conflict','invalid_media_range','invalid_time','evidence_unavailable','playback_unavailable','invalid_baseline','invalid_export_scope','export_state_conflict','export_not_ready','runtime_service_unavailable','events_service_unavailable','media_service_unavailable','exports_service_unavailable','provider_contract_invalid'])
 export function agentError(error: unknown): string {
   const detail = (error as {response?:{data?:{error?:{code?:string;message?:string}}}})?.response?.data?.error
   if (detail?.code && businessCodes.has(detail.code) && detail.message) return detail.message.slice(0,1000)

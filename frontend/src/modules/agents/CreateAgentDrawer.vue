@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { newId } from '../../shared/ids'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { NButton, NDrawer, NDrawerContent, NInput, NSelect } from 'naive-ui'
@@ -31,7 +32,7 @@ async function create(){
   if(selectedSources.value.length>MAX_CHANNEL_SOURCES){error.value='一个通道最多选择16个视频源。';return}
   const body={name:name.value.trim(),description:description.value.trim(),config:config.value}
   const encoded=JSON.stringify(body)
-  if(!token||encodedBody!==encoded){token=crypto.randomUUID();encodedBody=encoded}
+  if(!token||encodedBody!==encoded){token=newId();encodedBody=encoded}
   creating.value=true;error.value=''
   try{const agent=await agentApi.create(body,token);completed=true;emit('created',agent)}
   catch(e){error.value=humanError(e)}finally{creating.value=false}

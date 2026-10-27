@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { newId } from '../../shared/ids'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NCheckbox, NDrawer, NDrawerContent, NInput, NSelect, NTabs, NTabPane } from 'naive-ui'
@@ -26,7 +27,7 @@ async function inspect(m:Model){const g=++generation;selected.value=m;archiveAck
 async function openForm(m?:Model){base.value=m??null;file.value=null;uploaded.value=m?.file_id??'';progress.value=0;formError.value='';Object.assign(form,{name:m?.name??'',version:'',runtime_type:m?.runtime_type??'',template_name:m?.template.name??'',template_version:'',targets:m?.template.targets.join(', ')??'',rules:m?.template.rules.join(', ')??'',regions:m?.template.requires_region?.join(', ')??'',durations:m?.template.requires_duration?.join(', ')??'',limitations:m?.template.limitations?.join('\n')??'',defaults:JSON.stringify(m?.template.defaults??{},null,2)});showForm.value=true}
 function chooseFile(event:Event){file.value=(event.target as HTMLInputElement).files?.[0]??null;uploaded.value=file.value?'':base.value?.file_id??'';progress.value=0}
 function closeForm(){if(busy.value)return;if(window.confirm('关闭导入表单？尚未提交的字段不会保存。'))showForm.value=false}
-function operationKey(payload:unknown){const signature=JSON.stringify(payload),old=sessionStorage.getItem('vision.model.import');if(old){try{const saved=JSON.parse(old) as {signature:string;key:string};if(saved.signature===signature)return saved.key}catch{/* invalid storage */}}const key=crypto.randomUUID();sessionStorage.setItem('vision.model.import',JSON.stringify({signature,key}));return key}
+function operationKey(payload:unknown){const signature=JSON.stringify(payload),old=sessionStorage.getItem('vision.model.import');if(old){try{const saved=JSON.parse(old) as {signature:string;key:string};if(saved.signature===signature)return saved.key}catch{/* invalid storage */}}const key=newId();sessionStorage.setItem('vision.model.import',JSON.stringify({signature,key}));return key}
 async function submit(){
   if(busy.value)return;formError.value=''
   let defaults:ModelInput['template']['defaults']

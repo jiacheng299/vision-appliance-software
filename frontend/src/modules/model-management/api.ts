@@ -8,7 +8,12 @@ export type Usage = Deployments['selections'][number]['usage']
 export type ModelFile = components['schemas']['ModelFileDTO']
 export type References = components['schemas']['ReferencePage']
 export type ParseResult = components['schemas']['ParseResult']
+export type FixedTemplate = components['schemas']['FixedTaskTemplate']
+export type TaskPlan = components['schemas']['PlanResult']
+export type PlanningChannel = components['schemas']['ChannelConfig']
 export const modelApi = {
+  templates: () => client.get<components['schemas']['FixedTemplatePage']>('/task-templates').then(r=>r.data),
+  plan: (channel:PlanningChannel) => client.post<TaskPlan>('/requirements/plan',{channel}).then(r=>r.data),
   list: (q='',validation='',cursor?:string) => client.get<ModelPage>('/models',{params:{q,validation:validation||undefined,cursor,limit:24}}).then(r=>r.data),
   detail: (id:string,version?:string) => client.get<Model>(`/models/${encodeURIComponent(id)}`,{params:{version}}).then(r=>r.data),
   upload: (file:File, progress:(n:number)=>void) => client.post<ModelFile>('/model-files',file,{params:{filename:file.name},headers:{'Content-Type':'application/octet-stream'},timeout:0,onUploadProgress:event=>progress(Math.round(event.loaded/file.size*100))}).then(r=>r.data),
@@ -24,7 +29,7 @@ export const modelApi = {
   select: (usage:Usage,deployment_id:string,row_version:number) => client.put(`/llm/selections/${usage}`,{deployment_id,row_version}),
   parse: (requirement_text:string) => client.post<ParseResult>('/requirements/parse',{requirement_text}).then(r=>r.data),
 }
-const publicCodes = new Set(['model_verifier_unavailable','model_conflict','model_archived','model_file_required','model_file_empty','model_file_too_large','model_version_exists','model_history_confirmation','model_in_use','llm_not_selected','llm_not_healthy','analysis_service_unavailable','reference_service_unavailable','catalog_changed'])
+const publicCodes = new Set(['model_verifier_unavailable','model_conflict','model_archived','model_file_required','model_file_empty','model_file_too_large','model_version_exists','model_history_confirmation','model_in_use','llm_not_selected','llm_not_healthy','analysis_service_unavailable','reference_service_unavailable','catalog_changed','task_mode_invalid','execution_plan_stale','execution_plan_blocked','multimodal_service_unavailable','multimodal_execution_unavailable'])
 export function memberError(error:unknown):string{
   const detail=(error as {response?:{data?:{error?:{code?:string;message?:string}}}})?.response?.data?.error
   return detail?.code&&publicCodes.has(detail.code)&&detail.message?detail.message:humanError(error)

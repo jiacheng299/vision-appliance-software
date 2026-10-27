@@ -1,9 +1,10 @@
+import { newId } from '../../shared/ids'
 import type { Channel, RevisionConfig } from './api'
 import { regionError, type Point } from './regionGeometry'
 import { channelSources, sourceCount } from './channelSources'
 export function emptyConfig(): RevisionConfig { return { schema_version: '1.0', channels: [] } }
 export function newChannel(): Channel {
-  return { channel_id: crypto.randomUUID(), name: '监测通道', source_id: null, requirement_text: '', target: '', rule: '', duration_seconds: null, start_media_ms: null, end_media_ms: null, regions: [], capability_ref: null }
+  return { channel_id: newId(), name: '监测通道', task_mode: 'template', source_id: null, requirement_text: '', target: '', rule: '', duration_seconds: null, start_media_ms: null, end_media_ms: null, regions: [], capability_ref: null }
 }
 export function copyConfig(config: RevisionConfig): RevisionConfig {
   return JSON.parse(JSON.stringify(config)) as RevisionConfig

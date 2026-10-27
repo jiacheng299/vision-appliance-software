@@ -48,6 +48,7 @@ it('keeps fields and the same idempotency key after a timeout, then creates one 
   expect(create.mock.calls[1]![0]).toEqual(create.mock.calls[0]![0])
   expect(create.mock.calls[1]![0].config?.channels?.[0]?.sources?.map(s=>s.source_id)).toEqual(['s1','s2'])
   expect(create.mock.calls[1]![0].config?.channels?.[0]?.name).toBe('通道 1')
+  expect(create.mock.calls[1]![0].config?.channels?.[0]?.task_mode).toBe('template')
   expect(w.emitted('created')).toHaveLength(1)
 })
 it('prevents duplicate submission or dismissal while creation is in flight',async()=>{
