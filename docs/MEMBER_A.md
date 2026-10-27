@@ -1,96 +1,113 @@
 # 成员 A：任务创建与模型管理
 
-2026-10-26。基于 `e6cb3dd` 的 Vue 3 / TypeScript / Naive UI、FastAPI / SQLite 实现。
+## 当前业务逻辑（2026-10-26）
 
-## 已确认范围
+每个新建任务只检测一个监控源或已上传视频，并选择以下一种任务模式：
 
-用户确认暂时没有真实模型服务，模型与文件格式尚未确定，沿用现有“智能体 → 监测组 → 多个视频源”结构。A 负责配置创建、模型/模板、公开能力校验与本地大模型用途选择。B 保持 Agent/Revision 所有权；真实 Run/Event、推理、视频网关、证据与调度依然由公共提供方负责。
+1. **固定模板**：直接选择已有模板，例如“检测火源”“检测是否有人进入区域”，补充该模板要求的视频、区域、时长后运行。无需先写自然语言，也不要求绑定需求解析或多模态大模型。
+2. **自然语言任务**：提交完整需求，系统优先匹配能完整覆盖需求的已有模板；有匹配则使用该模板及绑定的小模型。如果已有模板不能完整覆盖，使用已部署的多模态大模型分析任务，并生成由该大模型执行的方案。不能把额外条件删掉后声称模板匹配成功。
 
-模型文件作为惰性二进制保存，不根据扩展名声称支持 ONNX/PyTorch，不解压、不导入 Python、不反序列化 pickle。上传计算 SHA-256；算法验证需提供方确认运行接口、文件、模板声明与自检。正式模式没有适配器时保留 pending，不能进入可用目录。模拟通过仅存在显式隔离演示模式。
+例如“检测是否有人进入区域”可以匹配人员入侵模板；“检测是否有穿红色衣服的人进入区域”若现有模板没有服装属性能力，就进入多模态路径，保留“红色衣服”条件。缺少区域、具体时长或明确触发定义时应提示补充，不通过换模型掩盖缺项。
+
+两条路径均创建 Agent/Revision，经过服务端验证和用户确认，再提交异步运行命令。多模态路径没有伪造的 modelId/templateId：配置中保留真实执行器类型、部署 ID/版本、完整任务指令和服务端 plan_id。
+
+## 模块边界
+
+用户确认尚无真实模型服务、文件格式未定。公共智能体结构继续兼容多视频，任务创建向导按最新要求每次仅创建单视频任务。前端保持 Vue 3/TypeScript/Naive UI，后端保持 FastAPI/SQLite。
+
+A 负责任务创建、模板与模型目录/版本、规划与能力接口、本地大模型用途选择。B 保持 Agent/Revision 所有权；Run/Event、视频、证据和调度由公共提供方拥有。A 不写 B 的表；模型引用检查经 B 的公开 `/agent-services/references` 查询。
+
+真实视觉推理和多模态任务分析/执行适配器尚未提供。正式模式下缺失依赖会明确不可用；模拟模式可以演示两种路径及运行状态，不能作为模型效果验收。上传模型文件只做惰性存储与 SHA-256，不加载 Python 对象、不根据扩展名声称支持算法。
 
 ## 启动与演示
 
-保持原安装命令与依赖，运行时不需要 CDN、云模型或新账户。安装后 `start.cmd` 正常启动，进入 `/create` 或 `/models`。新安装正式模式下本地大模型部署列表为空，解析与完整执行能力如实不可用；草稿与模型管理正常可用。
+沿用根 README 和原依赖，安装后 `start.cmd` 打开正式模式。`start-agents-demo.cmd` 打开独立的显式模拟模式（默认 8004 端口），模拟目录与真实数据隔离。
 
-运行 `start-agents-demo.cmd` 使用现有隔离演示目录与 8004 端口，无需新启动脚本：
+固定模板演示：
 
-1. 在“模型管理 → 本地大模型”选择模拟解析器，点击应用用途选择。也可绑定模拟多模态部署用于展示用途切换。
-2. 进入“任务创建”，点击“加载模拟素材”。此按钮复用 B 的公开演示种子 API，也会创建 B 的示例智能体。
-3. 输入任务名，选择一个或多个模拟源；分别点至少三个边界点、点击起点闭合并保存区域。录像可填写起止秒数；实际提交为毫秒。
-4. 输入“有人在区域内停留超过30秒时报警”，解析并核对目标 person、规则 dwell、时长 30。也可手工填写。未写时长不会默认填 30。
-5. 选择模拟人员模型与绑定模板，核对全部条件，保存并验证。
-6. 查看可执行性、缺项与限制，勾选最终确认并启动。页面查询异步 operation，只有 succeeded 后跳转对应智能体实时详情；每个源拥有独立 runId。
-7. 将时长留空、使用不支持的规则、移除其中一源的区域，验证应阻止启动。修改任何字段会使旧评估失效。
-8. 模型页可选择任意**测试用非私密文件**，填写名称、版本、运行接口与模板。示例目标 person，规则 dwell，需区域 dwell，需时长 dwell。模拟校验通过后该配对同步出现在 A/B 目录中；不会执行该文件。
-9. 详情可查看全部配置引用，运行中的模型归档由后端拒绝；停止后核对历史影响、勾选确认才能归档。
+1. 打开 `/create`，加载模拟素材，填写任务名并选择视频；区域按视频分别绘制。
+2. 到“任务模式与条件”，选择“固定模板”，选择“检测火源”或“检测是否有人进入区域”。
+3. 模板要求区域/时长时补齐；不需要填写自然语言，也不需要先选择大模型。
+4. 核对执行方案、验证、确认启动，等待各源 operation 的最终结果。
 
-模拟素材、画面、关键词解析、校验和运行均不代表真实识别效果；模拟运行/事件由 B 的内存提供方维护，重启后重置，配置/模型管理项保留。
+自然语言演示：
 
-## 页面与代码
+1. 同样选择视频与区域，再选择“自然语言任务”。
+2. 输入“检测是否有人进入区域”，点击“生成执行方案”，应显示优先匹配已有模板。
+3. 为演示未匹配路径，先在“模型管理 → 本地大模型”给多模态用途绑定“模拟多模态模型”。
+4. 输入“检测是否有穿红色衣服的人进入区域”，生成方案，应显示多模态执行器及完整指令，且不强制选择小模型模板。
+5. 再验证、确认和启动。本次所选视频建立独立 Run，运行快照保留原方案/模型版本。
+6. 修改需求、区域、视频、时长等条件后，旧方案与旧验证不能复用，须重新生成和验证。
 
-- `frontend/src/modules/task-create/`：四步创建页与本模块状态规则；只消费 SDK，不操作 B 私有 Store。
-- `frontend/src/modules/model-management/`：小模型/模板管理、本地大模型用途选择、A SDK。
-- `frontend/src/shared/media/RegionEditor.vue`、`regionGeometry.ts`：共用划区与几何校验。B 原导出路径保留兼容包装，不改变既有交互。
-- `backend/app/modules/models/`：A 的数据库、校验、接口和算法接入端口。
-- `backend/alembic/versions/0005_member_a_models.py`：在既有单一迁移链尾部增加模型文件、配对版本、幂等记录和 LLM 用途表。
-- `tests/backend/test_member_a.py`、`frontend/tests/task-create.test.ts`：成员 A 的主要验收自动化。
+模拟模板匹配使用有限的完整句式语法；额外属性、合取和否定等不会被关键词匹配吞掉。真实环境由算法提供方实现完整语义匹配。模拟多模态方案不执行真实视觉识别。
 
-草稿由 B 服务持久化，保存后 URL 带 `?draft=<agentId>`；用户可保存该地址继续编辑。新任务从已有配置复制时生成新的实例/首版 Revision 和监测组标识，原配置不变。模型业务编辑创建新版本；同 modelId 的模型版本与模板版本都不得重复，旧版本配对和文件保留。
+## 模型管理
 
-## 接口约定
+`/models` 包含“小模型与对应模板”和“本地大模型”两个页签。
 
-沿用仓库已冻结的 **snake_case、裸 DTO、row_version、Idempotency-Key**；附件中的 camelCase/统一封装/路径是建议，不另造第二套不兼容合同。最终 OpenAPI 位于 `contracts/openapi.json`，前端类型由它生成。UTC ISO8601、归一化区域、cursor 分页、统一公共错误保持不变。
+模型文件流式写入随机 UUID 路径，返回大小与 SHA-256，不返回服务器路径。模型版本与对应模板版本严格绑定，编辑必须创建新配对版本，历史不可覆盖。算法验证未通过的管理项不进入可用能力目录。活动运行引用会阻止归档；运行状态不可确认且有已发布引用时也会阻止归档。历史引用需确认影响，所有历史快照和文件保留。
+
+本地大模型由服务端声明部署、用途、输入类型、版本和健康状态。用途切换只影响后续新请求，不重写已有运行或规划快照。固定模板模式不依赖大模型用途绑定。
+
+## API 与公共字段
+
+沿用仓库已采用的 snake_case、裸 DTO、UTC ISO8601、cursor、row_version、Idempotency-Key 和统一错误结构。契约在 `contracts/openapi.json`，前端类型从其生成。
 
 | 接口 | 行为 |
 | --- | --- |
-| POST `/api/v1/model-files?filename=` | 原始二进制流式上传，返回文件 ID/大小/SHA-256；不返回服务器路径 |
-| GET/POST `/api/v1/models` | 查询各模型版本（q/validation/cursor/limit）或创建模型与唯一模板配对；写入须幂等键 |
-| GET `/api/v1/models/{id}?version=` | 查询指定版本；省略 version 返回最新创建版本 |
-| POST `/api/v1/models/{id}/versions` | 创建新配对版本，旧版本不可覆盖；可沿用原 file_id |
-| POST `/api/v1/models/{id}/versions/{version}/verify` | 接受 row_version；完整性 + 算法适配校验；返回 pending/passed/failed |
-| POST `/api/v1/models/{id}/versions/{version}/archive` | 引用检查后软归档；row_version + acknowledge_history |
-| GET `/api/v1/capabilities/models` | 只返回通过校验、未归档且来源匹配的模型/模板，支持 cursor |
-| GET `/api/v1/capabilities/models/{id}?version=` | 指定版本能力；存在多个可用版本时必须指定 version |
-| POST `/api/v1/capabilities/validate` | 校验 capability_ref、target、rule，返回 valid、unsupported_conditions、fingerprint |
-| GET `/api/v1/llm/deployments` | 提供方声明的本地部署/健康状态、用途绑定及 row_version |
-| PUT `/api/v1/llm/selections/{usage}` | deployment_id + row_version；只允许健康且支持用途的部署 |
-| POST `/api/v1/requirements/parse` | requirement_text；返回结构化建议、缺项、限制、实际部署 ID/版本和 data_origin |
-| POST `/api/v1/requirements/evaluate` | config；即时评估，不生成可启动凭据；启动必须走 B 的持久化 validation/confirmation |
+| GET `/api/v1/task-templates` | 固定任务模板选项及要求，来自经过校验的模型/模板目录 |
+| POST `/api/v1/requirements/plan` | 输入完整 channel；返回模板优先或多模态执行方案、缺项、限制与有效期 |
+| POST `/api/v1/requirements/evaluate` | 即时评估完整 config，不生成运行凭据 |
+| POST `/api/v1/requirements/parse` | 保留原结构化解析接口供兼容使用；固定模板不要求调用它 |
+| POST `/api/v1/model-files?filename=` | 本地二进制流式导入，不执行文件 |
+| GET/POST `/api/v1/models` | 查询各版本或幂等创建配对管理项 |
+| GET `/api/v1/models/{id}?version=` | 指定版本详情 |
+| POST `/api/v1/models/{id}/versions` | 新模型与模板版本配对 |
+| POST `/api/v1/models/{id}/versions/{version}/verify` | 文件与算法适配器校验 |
+| POST `/api/v1/models/{id}/versions/{version}/archive` | 引用保护的软归档 |
+| GET `/api/v1/capabilities/models` | 可用能力目录、fingerprint 与分页 |
+| GET `/api/v1/capabilities/models/{id}?version=` | 可用能力的指定版本 |
+| POST `/api/v1/capabilities/validate` | 小模型/模板引用、目标和规则校验 |
+| GET `/api/v1/llm/deployments` | 本地部署及用途绑定 |
+| PUT `/api/v1/llm/selections/{usage}` | 健康部署用途选择与版本冲突保护 |
 
-任务创建复用现有 `/agents`、`/revisions/{id}`、`/validations`、`/confirmations`、`/run-groups`、`/operations/{id}`。A 查询引用时经 B 的公开 `/agent-services/references` API（同进程 ASGI HTTP，分页完整拉取），不导入 B 的数据库模型。归档保留历史文件、配置与事件。运行状态不可查询且有已发布引用时，后端拒绝归档。
+新增 ChannelConfig 可选字段：`task_mode: template|natural_language`，`execution_plan`。缺省字段在序列化时省略，旧配置和历史哈希保持兼容，不重写旧运行。
 
-`RegistryAgentServices`/`RegistryDemoServices` 在组合入口实现 B 公布的能力端口，因此 B 的目录、验证和发布使用与 A 相同的 fingerprint。显式传入的既有 `agent_services` 不被替换；接入新公共服务时应将 A 的 catalog/assess 与其运行端口组合，而非继续使用独立能力目录。
+`execution_plan` 包含 plan_id、executor_kind、部署 ID/版本（多模态路径）、完整 instruction、需要区域/时长的声明、路由原因和限制。服务端规划回执存于 A 的 `requirement_plans` 表（迁移 0006）；用户修改任意配置、伪造 plan_id、计划过期或相关能力变化会使其失效。验证和启动均核对回执，避免校验后过期仍启动。
 
-## 真实算法适配
+B 的运行配置继续通过 RuntimeCommand.config 传递；新增提供方能力 `supports_task_plans` 与 `supports_multimodal_tasks`，旧运行适配器未声明支持时不会接收新方案。真实运行适配器须按 executor_kind 路由到小模型模板执行器或多模态任务执行器，并保证操作幂等、资源检查和按源独立运行。
 
-在 `create_app(model_services=...)` 注入 `ModelServices` 实现：
+## 算法接入端口
 
-- `verify(definition, path, checksum)`：受信算法适配器核验完整文件与声明模板，返回 passed/failed 和说明。不得因为用户表单填写了规则就确认能力；不能加载不可信 Python 对象。
-- `deployments()`：由服务端配置本地部署，返回公开显示信息和健康状态；不得暴露带凭据 URL。
-- `parse(text, deployment)`：使用请求开始时选定的部署，返回符合 ParseResult 的结构化结果；必须准确回传部署 ID/版本和 data_origin。
-- `evaluate(config, sources, catalog, deployment)`：对原始需求、逐源证据条件和执行能力做真实判断，返回 Assessment（包含相同 fingerprint 与全部 chosen_capabilities）。
+在 `create_app(model_services=...)` 注入 `ModelServices`：
 
-生产适配器 data_origin 必须 real；非 testing/显式 demo 模式不允许注入 mock。`verify` 的路径只传给服务端可信适配器，不提供浏览器任意文件访问。
+- `verify(definition, path, checksum)`：核验文件及声明能力，返回 passed/failed。
+- `deployments()`：返回本地部署与健康状态，不暴露秘密 URL。
+- `match_template(text, catalog)`：只在已有能力能完整覆盖需求时返回 `TemplateMatch(covers_all_requirements=True)`；仅部分匹配不能通过。无匹配返回 None。
+- `analyze_multimodal(channel, sources, deployment)`：分析视频证据与完整原始需求，返回受控结构、缺项/限制、可执行性及完整任务 instruction；不能删减原文，也不能生成任意执行代码。
+- `parse(text, deployment)`、`evaluate(...)`：保留原兼容接口；已有旧配置仍可使用旧验证流程。
 
-大模型用途切换仅修改绑定表，既有 AgentRevision、Run 和解析响应不会回写。正式模式默认 runtime 仍未接入，不因模型导入而变成可运行。运行适配器仍须在提交时原子检查活动范围、最新能力目录/资源并保证幂等。
+真实分析与执行分离：规划确认是执行依据，不表示任务已经运行。用户确认后才通过公共运行服务执行；正式运行状态和事件必须由实际执行器返回，不能用分析成功替代运行成功。
 
-## 文件与并发
+## 主要文件
 
-上传上限 `VISION_MAX_MODEL_FILE_BYTES` 默认 1 GiB；请求流写随机 UUID `.part`，成功后原子改名，异常清理半成品，数据库只记文件引用。额外保留 32 MiB 磁盘余量。不信任文件名路径。新建模型幂等回执与数据同事务提交；模型版本变更/校验/用途切换/归档都进行服务端校验与冲突保护。
+- `frontend/src/modules/task-create/`：两种任务模式、逐源配置、规划、确认和异步启动。
+- `frontend/src/modules/model-management/`：模型/模板与本地大模型用途、公开 SDK。
+- `backend/app/modules/models/planning.py`：模板优先选择与独立多模态执行方案。
+- `backend/app/modules/models/`：模型目录、文件、用途与规划回执的所有权。
+- `backend/app/modules/agents/{schemas,workflow,integrations}.py`：兼容的公共配置和运行提供方端口扩展。
+- `frontend/src/shared/media/`：A/B 共用划区组件；`shared/ids.ts` 兼容局域网 HTTP 的密码学 UUID。
+- `tests/backend/test_task_modes.py` 与 `frontend/tests/task-create.test.ts`：两种模式、模板优先、无法完整匹配后的多模态、修改失效与运行快照测试。
 
-任务保存、确认、启动使用 B 的幂等与版本合同。创建/确认/启动请求键在当前浏览器会话保留，用于丢失响应时重试。启动只轮询服务器操作结果；网络断开不会显示伪成功，可恢复查询或进入智能体详情。
+## 验证结果
 
-## 验证与当前限制
+本次两种任务模式修改通过后端 124 项、前端 69 项、部署脚本 10 项测试，前端类型检查与生产构建通过。浏览器实测固定模板、自然语言模板优先匹配及多模态回退；包括服务端返回字段顺序不同的方案保留回归。
 
-测试命令沿用根 README；新增自动化覆盖 A-01 的录像范围验证、A-02/A-03 缺项与逐源 ROI、A-04 不支持、A-05 旧结论失效、A-06 无效模板/文件不进入目录、A-07 活动引用保护、A-08 用途绑定切换、A-09 幂等及 A-10 依赖未接入降级。
+## 当前限制
 
-当前限制：真实模型包格式/执行器、解析与多模态评估、模型效果与硬件性能均未确定，不属于本次虚构实现。可用条件来自算法确认或显式模拟声明。没有原生矩形专用工具，四点多边形可表达矩形；划区基于源原始宽高比例。模型上传为单次流式请求，可显示进度但暂不支持断点续传。模型历史不物理删除，未绑定的上传文件当前也保留，需后续受控清理策略。草稿冲突保留输入并提示刷新，尚无自动合并界面。
+真实模型、文件包格式、语义匹配、多模态分析/执行、视频推理和硬件效果仍需团队提供方接入。模拟数据不代表真实效果。模型上传暂不支持断点续传；未绑定文件和历史配对保留。区域绘制使用多边形，四点可表达矩形。草稿冲突保留输入，尚无自动合并界面。
 
-## 本轮实测记录
 
-- 后端完整回归：107 项通过（含新增 12 项 A 验收测试）。
-- 前端完整回归：16 个测试文件、61 项通过；新增任务页 8 项、模型页 2 项。
-- 部署检查：10 项通过。
-- TypeScript 检查与生产构建通过；保留现有 HLS 分包体积提示。
-- 本轮未完成浏览器人工验收：云浏览器无法连接当前本地服务，环境内 Chromium 安装包下载也未成功；不将组件测试说成浏览器端到端测试。
-- 一次初始完整回归在既有后台资源采样器中出现 SQLite 锁竞争；对应单项及其后两轮完整回归通过。本次未调整公共资源采样逻辑，审查时建议关注高并发长事务场景。
+## 单视频任务创建调整（2026-10-26）
+
+固定任务模板按目标与规则合并同类选项，原始能力目录、模型版本和旧引用保留。每个任务只选择一路视频，向导不再显示添加通道或多选视频；保存和启动均检查单输入。复制多路历史配置时必须明确选择具体一路，保留该路的区域、区间和业务条件，清除旧执行方案，并分配新通道标识，原配置不变。复制名称不添加“（副本）”，已有自动生成后缀在概览中清理展示。当前调整的前端90项测试、类型检查与生产构建通过；后台契约及多源智能体功能保持兼容。
