@@ -18,9 +18,10 @@ const sections=[
 <template>
   <header class="agent-workspace-header">
     <div class="agent-heading-card">
-      <div class="agent-heading-main"><RouterLink class="agent-back-link" to="/agents">‹ 返回智能体列表</RouterLink><div class="agent-heading-title"><span class="agent-heading-icon"><Icon name="bot" :size="26"/></span><div><span class="agent-eyebrow">智能体工作空间</span><h1>{{agent.name}}</h1></div></div><p>{{agent.description||'管理监测需求，查看画面、报警与实际运行版本。'}}</p></div>
+      <div class="agent-heading-main"><RouterLink class="agent-back-link" to="/agents">‹ 返回智能体模板列表</RouterLink><div class="agent-heading-title"><span class="agent-heading-icon"><Icon name="bot" :size="26"/></span><div><span class="agent-eyebrow">{{revision.config.agent_template_ref?'任务工作空间':'历史任务工作空间'}}</span><h1>{{agent.name}}</h1></div></div><p>{{agent.description||'管理监测需求，查看画面、报警与实际运行版本。'}}</p></div>
       <div class="agent-header-actions"><NButton :loading="loading" :disabled="disabled" @click="emit('refresh')">刷新</NButton><template v-if="canWrite"><NButton v-if="!agent.archived_at" :disabled="disabled" @click="emit('rename')">修改名称</NButton><NButton :disabled="disabled" @click="emit('archive')">{{agent.archived_at?'恢复智能体':'归档'}}</NButton></template></div>
     </div>
+    <p v-if="revision.config.agent_template_ref" class="notice">所属模板：<RouterLink :to="`/agent-templates/${revision.config.agent_template_ref.template_id}`">{{revision.config.agent_template_ref.name}}</RouterLink> · 固定模板版本 v{{revision.config.agent_template_ref.revision_no}}</p>
     <div class="agent-overview-grid">
       <div class="agent-overview-cell"><span class="agent-meta-label">当前状态</span><AgentStatus :value="status"/></div>
       <div class="agent-overview-cell agent-version-cell"><label class="agent-meta-label">查看配置版本</label><NSelect :value="revision.id" :options="agent.revisions.map(r=>({label:`v${r.revision_no} · ${r.state==='published'?'已发布':'草稿'}`,value:r.id}))" :disabled="disabled" aria-label="选择配置版本" @update:value="emit('select',$event)"/></div>

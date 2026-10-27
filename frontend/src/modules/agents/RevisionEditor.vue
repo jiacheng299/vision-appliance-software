@@ -10,10 +10,15 @@ import type { Source } from '../../shared/api/types'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import RegionEditor from './RegionEditor.vue'
 import { channelSources, setChannelSources, MAX_CHANNEL_SOURCES } from './channelSources'
+import ParameterFields from './ParameterFields.vue'
+import { templatesApi,type ParameterDefinition,type ParameterSetting,type TemplateConfig } from './templatesApi'
 const props = defineProps<{ revision: Revision; sources: Source[] }>()
 const emit = defineEmits<{ close: []; saved: [revision: Revision]; dirty: [dirty: boolean]; saving: [saving: boolean] }>()
 const config = ref(copyConfig(props.revision.config)), error = ref(''), saving = ref(false)
 const catalog=ref<CapabilityCatalog|null>(null),catalogError=ref(''),fixedTemplates=ref<FixedTemplate[]>([])
+const parameterDefinitions=ref<ParameterDefinition[]>([]),templateDefaults=ref<TemplateConfig|null>(null)
+if(config.value.agent_template_ref){const reference=config.value.agent_template_ref;void Promise.all([templatesApi.parameters(),templatesApi.detail(reference.template_id)]).then(([pool,template])=>{parameterDefinitions.value=pool.items;templateDefaults.value=template.revisions.find(r=>r.id===reference.revision_id)?.config??null}).catch(()=>{error.value='任务引用的模板版本或配置项目录暂时不可用，请重新打开编辑器。'})}
+function updateTaskParameters(channel:Channel,values:ParameterSetting[]){channel.parameters=values;const fields=Object.fromEntries(values.filter(p=>p.value!=null&&p.value!=='').map(p=>[p.key,p.value]));channel.target=String(fields.target??templateDefaults.value?.default_target??channel.target);channel.rule=String(fields.rule??templateDefaults.value?.default_rule??channel.rule);channel.duration_seconds=typeof fields.duration_seconds==='number'?fields.duration_seconds:null}
 void modelApi.templates().then(page=>fixedTemplates.value=page.items).catch(()=>{})
 async function loadCatalog(){try{catalog.value=await agentApi.catalog();catalogError.value=''}catch(e){catalogError.value=agentError(e)}}
 void loadCatalog()
@@ -33,9 +38,9 @@ const dirty = computed(() => pending.value || JSON.stringify(config.value) !== J
 watch(dirty, value => emit('dirty', value), { immediate: true })
 const options = computed(() => props.sources.map(s => ({ label: s.name, value: s.id })))
 function close() { if (!saving.value && (!dirty.value || window.confirm('尚有未保存的配置，确定放弃这些修改？'))) emit('close') }
-function changeSources(index:number,values:string[]|string){
+function changeSources(index:number,values:string[]|string|null){
   const channel=config.value.channels?.[index];if(!channel)return
-  const ids=typeof values==='string'?[values]:values
+  const ids=typeof values==='string'?[values]:values??[]
   if(ids.length>MAX_CHANNEL_SOURCES){error.value='一个通道最多选择16个视频源。';return}
   const removed=channelSources(channel).filter(b=>!ids.includes(b.source_id))
   if(removed.some(b=>pendingRegions.value[`${channel.channel_id}:${b.source_id}`])&&!window.confirm('移除视频源将放弃其正在绘制的区域，确定继续？'))return
@@ -45,6 +50,7 @@ function changeSources(index:number,values:string[]|string){
 
 async function save() {
   if (saving.value) return
+  if(config.value.agent_template_ref&&!templateDefaults.value){error.value='模板版本尚未加载，暂不能保存任务。';return}
   if (pending.value) { error.value = '还有正在绘制的区域，请先保存区域或撤销全部边界点，再保存草稿。'; return }
   error.value = draftError(config.value)
   if (error.value) return
@@ -62,9 +68,11 @@ async function save() {
       <ErrorBanner :error="catalogError" @retry="loadCatalog"/>
       <fieldset :disabled="saving" class="agent-editor-fields">
       <div v-for="(channel, index) in config.channels" :key="channel.channel_id" class="agent-channel-form">
-        <div class="panel-title"><h3>通道 {{index + 1}}</h3><NButton size="small" :disabled="saving" @click="config.channels?.splice(index, 1)">移除通道</NButton></div>
+        <div class="panel-title"><h3>通道 {{index + 1}}</h3><NButton v-if="!config.agent_template_ref" size="small" :disabled="saving" @click="config.channels?.splice(index, 1)">移除通道</NButton></div>
         <div class="field"><label :for="`channel-name-${index}`">通道名称</label><NInput :input-props="{ id: `channel-name-${index}` }" v-model:value="channel.name" :maxlength="160" :disabled="saving"/></div>
-        <div class="field"><label :id="`source-label-${index}`">通道内视频源（可多选）</label><NSelect multiple :aria-labelledby="`source-label-${index}`" :value="channelSources(channel).map(b=>b.source_id)" :options="options" :disabled="saving" clearable placeholder="选择监控直播或录像，可混合选择" @update:value="changeSources(index, $event)"/><p class="hint">本通道的所有视频共用下方需求、模型和规则，统一启停；区域与录像区间在各视频中分别设置。</p></div>
+        <div class="field"><label :id="`source-label-${index}`">{{config.agent_template_ref?'检测视频源':'通道内视频源（可多选）'}}</label><NSelect :multiple="!config.agent_template_ref" :aria-labelledby="`source-label-${index}`" :value="config.agent_template_ref?(channelSources(channel)[0]?.source_id??null):channelSources(channel).map(b=>b.source_id)" :options="options" :disabled="saving" clearable placeholder="选择监控直播或录像，可混合选择" @update:value="changeSources(index, $event)"/><p class="hint">本通道的所有视频共用下方需求、模型和规则，统一启停；区域与录像区间在各视频中分别设置。</p></div>
+        <template v-if="config.agent_template_ref"><p class="notice">模板：{{config.agent_template_ref.name}} · v{{config.agent_template_ref.revision_no}}。模型和配置项固定来自该版本，仅可调整任务条件值和视频范围。</p><p>模型：{{channel.capability_ref?.model_id}} · {{channel.capability_ref?.model_version}}</p><ParameterFields :settings="channel.parameters??[]" :definitions="parameterDefinitions" :model="capability(channel)" :disabled="saving||!templateDefaults" @update:settings="updateTaskParameters(channel,$event)"/></template>
+        <template v-else>
         <div class="field"><label>任务模式</label><NSelect :value="channel.task_mode??'template'" :options="[{label:'固定模板',value:'template'},{label:'自然语言（模板优先，必要时多模态执行）',value:'natural_language'}]" :disabled="saving" aria-label="通道任务模式" @update:value="setMode(channel,$event)"/></div>
         <div class="field"><label :for="`requirement-${index}`">监测需求</label><NInput :input-props="{ id: `requirement-${index}` }" v-model:value="channel.requirement_text" :readonly="channel.task_mode==='template'" type="textarea" :maxlength="8000" :disabled="saving" placeholder="例如：有人在指定区域停留超过 30 秒时报警"/></div>
         <div v-if="channel.task_mode==='natural_language'" class="field"><label>自然语言执行方案</label><p class="hint">优先匹配已有模板，不能完整匹配时由多模态大模型分析并执行。修改需求、时长、视频或区域后请重新生成。</p><NButton :disabled="saving||!channel.requirement_text.trim()" @click="generatePlan(channel)">重新生成执行方案</NButton><p v-if="channel.execution_plan">{{channel.execution_plan.reason}}</p><p v-if="channel.execution_plan?.executor_kind==='multimodal'">多模态模型 {{channel.execution_plan.deployment_id}} · {{channel.execution_plan.deployment_version}}；指令：{{channel.execution_plan.instruction}}</p></div>
@@ -73,6 +81,7 @@ async function save() {
         <div v-if="capability(channel)&&channel.task_mode==null" class="field-grid"><div class="field"><label>从模型声明选择目标</label><NSelect v-model:value="channel.target" :options="capability(channel)!.targets.map(value=>({label:businessLabel(value),value}))" :disabled="saving" aria-label="模型支持的监测对象"/></div><div class="field"><label>从模板声明选择规则</label><NSelect v-model:value="channel.rule" :options="capability(channel)!.rules.map(value=>({label:businessLabel(value),value}))" :disabled="saving" aria-label="模板支持的规则"/></div></div>
         <div v-if="channel.task_mode==null" class="field-grid"><div class="field"><label :for="`target-${index}`">监测对象（待校验）</label><NInput :input-props="{ id: `target-${index}` }" v-model:value="channel.target" :maxlength="160" :disabled="saving" placeholder="例如：人员"/></div><div class="field"><label :for="`rule-${index}`">触发规则（待校验）</label><NInput :input-props="{ id: `rule-${index}` }" v-model:value="channel.rule" :maxlength="160" :disabled="saving" placeholder="例如：区域滞留"/></div></div>
         <div class="field"><label>触发条件持续时长（秒，选填）</label><NInputNumber v-model:value="channel.duration_seconds" :min="1" :max="86400" :precision="0" :disabled="saving" aria-label="持续时长（秒）"/></div>
+        </template>
         <section v-for="binding in channelSources(channel)" :key="binding.source_id" class="channel-source-editor">
           <h4>{{sources.find(s=>s.id===binding.source_id)?.name??binding.source_id}}</h4><p v-if="!sources.some(s=>s.id===binding.source_id)" class="hint">原视频源已归档或不可用，历史引用保留，可从上方取消选择。</p>
           <template v-if="sources.find(s=>s.id===binding.source_id)?.kind==='file'"><div class="field-grid"><div class="field"><label>录像开始位置（秒）</label><NInputNumber :value="binding.start_media_ms==null?null:binding.start_media_ms/1000" :min="0" :precision="3" :disabled="saving" aria-label="录像开始位置（秒）" @update:value="binding.start_media_ms=$event==null?null:Math.round($event*1000)"/></div><div class="field"><label>录像结束位置（秒）</label><NInputNumber :value="binding.end_media_ms==null?null:binding.end_media_ms/1000" :min="0" :precision="3" :disabled="saving" aria-label="录像结束位置（秒）" @update:value="binding.end_media_ms=$event==null?null:Math.round($event*1000)"/></div></div></template>
@@ -80,7 +89,7 @@ async function save() {
         </section>
         <p class="muted">{{catalog ? '能力字段来自模型服务。更换模型不会自动删减原始需求，保存后必须重新验证。' : '能力目录暂不可用，原引用保留。填写规则不代表系统已支持此能力。'}}</p>
       </div>
-      <NButton dashed block :disabled="saving || (config.channels?.length ?? 0) >= 16" @click="config.channels?.push(newChannel())">添加通道</NButton>
+      <NButton v-if="!config.agent_template_ref" dashed block :disabled="saving || (config.channels?.length ?? 0) >= 16" @click="config.channels?.push(newChannel())">添加通道</NButton>
       </fieldset>
       <template #footer><div class="agent-actions"><NButton :disabled="saving" @click="close">取消</NButton><NButton type="primary" :loading="saving" :disabled="!dirty" @click="save">保存草稿</NButton></div></template>
     </NDrawerContent>
