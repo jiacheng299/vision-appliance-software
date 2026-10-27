@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 from ...schemas import DTO
 from ...shared.models import uid
+from ...shared.monitoring_parameters import ParameterSetting
 
 
 Coordinate = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
@@ -104,6 +105,7 @@ class ChannelConfig(DTO):
     # Omit absent fields so old immutable configuration hashes remain unchanged.
     task_mode: Literal['template', 'natural_language'] | None = Field(default=None, exclude_if=lambda v: v is None)
     execution_plan: ExecutionPlanRef | None = Field(default=None, exclude_if=lambda v: v is None)
+    parameters: list[ParameterSetting] = Field(default_factory=list, max_length=32, exclude_if=lambda v: not v)
 
     @model_validator(mode='after')
     def consistent(self):
@@ -132,9 +134,17 @@ def channel_sources(channel):
         start_media_ms=channel.start_media_ms, end_media_ms=channel.end_media_ms)] if channel.source_id else [])
 
 
+class AgentTemplateRef(DTO):
+    template_id: str
+    revision_id: str
+    revision_no: int
+    name: str
+
+
 class RevisionConfig(DTO):
     schema_version: Literal['1.0'] = '1.0'
     channels: list[ChannelConfig] = Field(default_factory=list, max_length=16)
+    agent_template_ref: AgentTemplateRef | None = Field(default=None, exclude_if=lambda v: v is None)
 
     @model_validator(mode='after')
     def unique_channels(self):

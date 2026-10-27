@@ -21,6 +21,7 @@ from .modules.models.integrations import ModelServices, DemoModelServices
 from .modules.models.bridge import RegistryAgentServices, RegistryDemoServices
 from .modules.agents import routes as agents
 from .modules.agents import gateway_routes as agent_workflow
+from .modules.agent_templates import routes as agent_templates
 
 async def sample_runtime(app):
     while True:
@@ -92,7 +93,7 @@ def create_app(var_root=None,testing=False,agent_services=None,model_services=No
     @app.exception_handler(HTTPException)
     async def http_error(request,exc):
         return error_response(request,exc.status_code,'not_found' if exc.status_code==404 else 'http_error','请求资源不存在。' if exc.status_code==404 else '请求无法完成。')
-    for module in (sources,settings,runtime,realtime,models,agent_workflow,agents):
+    for module in (sources,settings,runtime,realtime,models,agent_workflow,agents,agent_templates):
         app.include_router(module.router,prefix='/api/v1',responses={code:{'model':ErrorDTO} for code in (400,401,403,404,409,413,422,429,500,503)})
     @app.get('/{path:path}',include_in_schema=False)
     def frontend(path:str):

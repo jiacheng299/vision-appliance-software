@@ -22,6 +22,13 @@ def writable(agent):
 
 
 def check_group_support(provider, config):
+    from ...shared.monitoring_parameters import CORE_KEYS, validate_settings
+    for channel in config.channels:
+        values=validate_settings(channel.parameters,complete=True,extra_choices={'target':[channel.target],'rule':[channel.rule]})
+        if any(key in values and values[key]!=getattr(channel,key) for key in CORE_KEYS):
+            raise Error(422,'template_parameter_mismatch','配置项与实际执行条件不一致。')
+        if any(key not in CORE_KEYS for key in values) and not provider.supports_configurable_parameters:
+            raise Error(503,'configurable_parameters_unavailable','执行器尚未声明支持扩展配置项，不能忽略条件后执行。')
     if any(c.task_mode == 'natural_language' or c.execution_plan for c in config.channels) and not provider.supports_task_plans:
         raise Error(503, 'task_planning_unavailable', '公共服务尚未支持模板优先的自然语言执行方案。')
     if any(c.execution_plan and c.execution_plan.executor_kind == 'multimodal' for c in config.channels) and not provider.supports_multimodal_tasks:

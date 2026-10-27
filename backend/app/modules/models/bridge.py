@@ -14,6 +14,7 @@ from . import service
 class RegistryCapabilities:
     supports_multimodal_tasks = True
     supports_task_plans = True
+    supports_configurable_parameters = True
     def init_registry(self, sessions, adapter):
         self.registry_sessions, self.model_adapter = sessions, adapter
 
@@ -27,7 +28,11 @@ class RegistryCapabilities:
             value.fingerprint = service.digest([builtin.fingerprint, value.fingerprint])
         # Selection changes affect future planning, not existing plan snapshots.
         deployments = [[d.id, d.version, d.health, d.usages, d.inputs] for d in self.model_adapter.deployments()]
+        if self.data_origin=='mock':
+            from ...shared.monitoring_parameters import BY_KEY
+            for item in value.items: item.parameter_keys=list(BY_KEY)
         value.fingerprint = service.digest([value.fingerprint, deployments])
+        value.fingerprint = service.digest([value.fingerprint,[[i.reference.model_dump(),i.parameter_keys] for i in value.items]])
         return value
 
     def verify_execution_plans(self, config, actor_id):

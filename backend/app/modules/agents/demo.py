@@ -25,6 +25,7 @@ def identifier():
 class DemoServices(AgentServices):
     data_origin = 'mock'
     supports_grouped_sources = True
+    supports_configurable_parameters = True
 
     def __init__(self):
         self.lock = RLock(); self.scenario = 'normal'; self.offset = 0

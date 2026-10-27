@@ -16,6 +16,7 @@ class AgentServices:
     supports_grouped_sources = False
     supports_multimodal_tasks = False
     supports_task_plans = False
+    supports_configurable_parameters = False
 
     def available(self, service: str) -> bool:
         return False
