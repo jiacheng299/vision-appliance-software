@@ -8,6 +8,8 @@ from ..shared.db import get_db
 from ..shared.models import Source, Worker, Log, now
 from ..schemas import RuntimeDTO, DashboardDTO, EventPage, LogPage
 from .sources import source_dto
+from .agents.workspace import WORKSPACE_ACTOR_ID
+from .agents.contracts import ExecutionSummary
 
 router = APIRouter(tags=['runtime'])
 
@@ -31,29 +33,44 @@ def dependency_services(app,db):
         {'key':'gpu','name':'GPU 采集器','status':'unavailable','message':'未接入 GPU 采集器，使用率未知。','observed_at':observed},
     ]
 
+def execution_summary(app):
+    return ExecutionSummary.model_validate(app.state.agent_services.summary(WORKSPACE_ACTOR_ID))
+
+
+def summary_events(db, summary):
+    names = dict(db.execute(select(Source.id, Source.name)).all())
+    return [dict(id=e.id, agent_id=e.agent_id, event_type=e.event_type, source_id=e.source_id,
+        source_name=names.get(e.source_id), run_id=e.run_id, revision_id=e.revision_id,
+        occurred_at=e.occurred_at, start_media_ms=e.start_media_ms, reason=e.reason,
+        evidence_status=e.evidence_status, review_status=e.review_status) for e in summary.recent_events]
+
+
 def runtime_snapshot(app,db,record=True):
+    summary = execution_summary(app)
     sample = {'observed_at':now(),'cpu_percent':psutil.cpu_percent(interval=0.1),'memory_percent':psutil.virtual_memory().percent,'gpu_percent':None}
     if record:
         app.state.runtime_history.append(sample)
     usage = shutil.disk_usage(app.state.config.var_root)
     total = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False))
     online = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False,Source.kind=='camera',Source.status=='online'))
-    return {**sample,'disk':{'used_bytes':usage.used,'total_bytes':usage.total,'free_bytes':usage.free},'sources':{'total':total,'online':online},'runs':{'running':0,'completed':0,'failed':0},'services':dependency_services(app,db),'models':[],'workers':[{'id':w.id,'status':'online','observed_at':__import__('datetime').datetime.fromtimestamp(w.heartbeat_at,__import__('datetime').timezone.utc).isoformat().replace('+00:00','Z')} for w in worker_rows(db)],'history':list(app.state.runtime_history)}
+    return {**sample,'disk':{'used_bytes':usage.used,'total_bytes':usage.total,'free_bytes':usage.free},'sources':{'total':total,'online':online},'runs':{'running':summary.active_runs,'completed':summary.completed,'failed':summary.failed},'data_origin':summary.data_origin,'runtime_available':summary.active_runs is not None,'services':dependency_services(app,db),'models':[],'workers':[{'id':w.id,'status':'online','observed_at':__import__('datetime').datetime.fromtimestamp(w.heartbeat_at,__import__('datetime').timezone.utc).isoformat().replace('+00:00','Z')} for w in worker_rows(db)],'history':list(app.state.runtime_history)}
 
 @router.get('/runtime/overview',response_model=RuntimeDTO)
 def overview(request:Request,db=Depends(get_db)):
     return runtime_snapshot(request.app,db)
 
 @router.get('/dashboard',response_model=DashboardDTO)
-def dashboard(db=Depends(get_db)):
+def dashboard(request:Request,db=Depends(get_db)):
+    summary = execution_summary(request.app)
     sources = list(db.scalars(select(Source).where(Source.archived==False).order_by(Source.created_at.desc()).limit(100)))
     total = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False))
     online = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False,Source.kind=='camera',Source.status=='online'))
-    return {'counts':{'sources_total':total,'sources_online':online,'active_runs':0,'today_events':0},'sources':[source_dto(s) for s in sources],'recent_events':[],'task_summary':{'running':0,'completed':0,'waiting':0}}
+    return {'counts':{'sources_total':total,'sources_online':online,'active_runs':summary.active_runs,'today_events':summary.today_events},'sources':[source_dto(s) for s in sources],'recent_events':summary_events(db,summary)[:5],'task_summary':{'running':summary.running,'completed':summary.completed,'waiting':summary.waiting},'data_origin':summary.data_origin,'runtime_available':summary.active_runs is not None,'events_available':summary.today_events is not None}
 
 @router.get('/events',response_model=EventPage)
-def events():
-    return {'items':[],'next_cursor':None}
+def events(request:Request,db=Depends(get_db)):
+    summary = execution_summary(request.app)
+    return {'items':summary_events(db,summary),'next_cursor':None,'data_origin':summary.data_origin,'available':summary.today_events is not None}
 
 @router.get('/runs')
 def runs():

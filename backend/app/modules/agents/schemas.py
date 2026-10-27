@@ -52,6 +52,26 @@ class CapabilityRef(DTO):
     template_version: str = Field(min_length=1, max_length=80)
 
 
+class ExecutionPlanRef(DTO):
+    plan_id: str = Field(min_length=1, max_length=80)
+    executor_kind: Literal['template', 'multimodal']
+    deployment_id: str | None = Field(default=None, max_length=160)
+    deployment_version: str | None = Field(default=None, max_length=80)
+    instruction: str = Field(default='', max_length=8000)
+    requires_region: bool = False
+    requires_duration: bool = False
+    reason: str = Field(max_length=2000)
+    limitations: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode='after')
+    def executor_reference(self):
+        if self.executor_kind == 'multimodal' and (not self.deployment_id or not self.deployment_version or not self.instruction):
+            raise ValueError('Multimodal execution needs a versioned deployment and instruction')
+        if self.executor_kind == 'template' and (self.deployment_id or self.deployment_version):
+            raise ValueError('Template execution cannot contain a multimodal deployment')
+        return self
+
+
 class ChannelSource(DTO):
     source_id: str = Field(min_length=1, max_length=80)
     start_media_ms: int | None = Field(default=None, ge=0, strict=True)
@@ -81,9 +101,16 @@ class ChannelConfig(DTO):
     end_media_ms: int | None = Field(default=None, gt=0, strict=True)
     regions: list[Region] = Field(default_factory=list, max_length=32)
     capability_ref: CapabilityRef | None = None
+    # Omit absent fields so old immutable configuration hashes remain unchanged.
+    task_mode: Literal['template', 'natural_language'] | None = Field(default=None, exclude_if=lambda v: v is None)
+    execution_plan: ExecutionPlanRef | None = Field(default=None, exclude_if=lambda v: v is None)
 
     @model_validator(mode='after')
     def consistent(self):
+        if self.execution_plan and self.task_mode != 'natural_language':
+            raise ValueError('Server-issued execution plans belong to natural-language mode')
+        if self.execution_plan and self.execution_plan.executor_kind == 'multimodal' and (self.task_mode != 'natural_language' or self.capability_ref):
+            raise ValueError('Multimodal plans belong to natural-language tasks without a small-model reference')
         if len({s.source_id for s in self.sources}) != len(self.sources):
             raise ValueError('Duplicate sources in a channel')
         if self.sources and (self.source_id or self.regions or self.start_media_ms is not None or self.end_media_ms is not None):

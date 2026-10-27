@@ -7,13 +7,15 @@ The provider must enforce actor access, execution idempotency and atomic channel
 from ...shared.errors import Error
 from .contracts import (Assessment, CapabilityCatalog, ComparisonDTO, EventDetail, AgentEventPage,
                         ExportDTO, ExportDestinations, ExportInput, FeedbackInput, MissedDTO, MissedInput,
-                        OperationDTO, PlaybackDTO, RunDTO, RuntimeCommand)
+                        OperationDTO, PlaybackDTO, RunDTO, RuntimeCommand, ExecutionSummary)
 from .schemas import RevisionConfig
 
 
 class AgentServices:
     data_origin = 'real'
     supports_grouped_sources = False
+    supports_multimodal_tasks = False
+    supports_task_plans = False
 
     def available(self, service: str) -> bool:
         return False
@@ -28,6 +30,13 @@ class AgentServices:
 
     def assess(self, config: RevisionConfig, sources: list[dict], actor_id: str) -> Assessment:
         self.unavailable('capability')
+
+    def verify_execution_plans(self, config, actor_id):
+        if any(c.execution_plan for c in config.channels):
+            self.unavailable('capability')
+
+    def summary(self, actor_id: str) -> ExecutionSummary:
+        return ExecutionSummary(data_origin=self.data_origin)
 
     def runs(self, agent_id: str, actor_id: str) -> list[RunDTO]:
         self.unavailable('runtime')

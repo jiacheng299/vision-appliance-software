@@ -53,6 +53,6 @@ def test_account_owned_agent_history_survives_upgrade_and_rollback(tmp_path):
             migration.attributes['connection'] = connection
             command.downgrade(migration, '0003_agent_workflow')
     with engine.connect() as connection:
-        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar() == '0005_member_a_models'
+        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar() == '0006_requirement_plans'
         assert connection.execute(text("SELECT owner_id FROM agents WHERE id='agent'")).scalar() == 'workspace'
     engine.dispose()

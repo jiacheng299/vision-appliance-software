@@ -1,10 +1,10 @@
 import { client } from './client'
-import type { CameraInput, Dashboard, Event, Log, MediaSession, Page, Runtime, Settings, SettingsSection, Source, SourceTest, Upload } from './types'
+import type { CameraInput, Dashboard, Event, EventPage, Log, MediaSession, Page, Runtime, Settings, SettingsSection, Source, SourceTest, Upload } from './types'
 export const api = {
   dashboard: () => client.get<Dashboard>('/dashboard').then(r=>r.data),
   runtime: () => client.get<Runtime>('/runtime/overview').then(r=>r.data),
   logs: (q='',level='') => client.get<Page<Log>>('/logs',{params:{q,level,limit:100}}).then(r=>r.data),
-  events: () => client.get<Page<Event>>('/events').then(r=>r.data),
+  events: () => client.get<EventPage>('/events').then(r=>r.data),
   sources: (q='',kind='',status='',cursor?:string) => client.get<Page<Source>>('/sources',{params:{q,kind,status,cursor,limit:100}}).then(r=>r.data),
   source: (id:string) => client.get<Source>(`/sources/${encodeURIComponent(id)}`).then(r=>r.data),
   createCamera: (input:CameraInput) => client.post<Source>('/sources',input).then(r=>r.data),

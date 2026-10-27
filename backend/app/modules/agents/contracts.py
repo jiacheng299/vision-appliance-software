@@ -339,3 +339,15 @@ class ReferencePage(DTO):
 class DemoScenario(DTO):
     scenario: Literal['normal', 'model_unavailable', 'video_disconnected', 'events_disconnected', 'start_failed', 'resource_queued', 'stop_failed', 'duplicate_events', 'insufficient_evidence', 'run_failed', 'export_failed']
     run_id: str | None = None
+
+
+class ExecutionSummary(DTO):
+    """Workspace totals supplied by the owner of Run/Event data, never invented."""
+    data_origin: Origin = 'real'
+    active_runs: int | None = None
+    running: int | None = None
+    waiting: int | None = None
+    completed: int | None = None
+    failed: int | None = None
+    today_events: int | None = None
+    recent_events: list[AgentEventDTO] = Field(default_factory=list)

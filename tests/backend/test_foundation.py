@@ -66,7 +66,7 @@ def test_worker_fails_invalid_media_truthfully_and_persists(client,app):
 
 def test_dashboard_runtime_and_empty_extension_contracts(client):
     dashboard = client.get(API + '/dashboard').json()
-    assert dashboard['counts'] == {'sources_total':0,'sources_online':0,'active_runs':0,'today_events':0}
+    assert dashboard['counts'] == {'sources_total':0,'sources_online':0,'active_runs':None,'today_events':None}
     runtime = client.get(API + '/runtime/overview').json()
     assert 0 <= runtime['cpu_percent'] <= 100
     assert runtime['gpu_percent'] is None

@@ -587,6 +587,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/task-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Templates */
+        get: operations["task_templates_api_v1_task_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/requirements/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plan Requirement */
+        post: operations["plan_requirement_api_v1_requirements_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agent-environment": {
         parameters: {
             query?: never;
@@ -1579,6 +1613,9 @@ export interface components {
             /** Regions */
             regions?: components["schemas"]["Region"][];
             capability_ref?: components["schemas"]["CapabilityRef"] | null;
+            /** Task Mode */
+            task_mode?: ("template" | "natural_language") | null;
+            execution_plan?: components["schemas"]["ExecutionPlanRef"] | null;
         };
         /** ChannelOperation */
         ChannelOperation: {
@@ -1652,15 +1689,31 @@ export interface components {
         DashboardDTO: {
             /** Counts */
             counts: {
-                [key: string]: number;
+                [key: string]: number | null;
             };
+            /**
+             * Data Origin
+             * @default real
+             * @enum {string}
+             */
+            data_origin: "real" | "mock";
+            /**
+             * Runtime Available
+             * @default true
+             */
+            runtime_available: boolean;
+            /**
+             * Events Available
+             * @default true
+             */
+            events_available: boolean;
             /** Sources */
             sources: components["schemas"]["SourceDTO"][];
             /** Recent Events */
             recent_events: components["schemas"]["EventDTO"][];
             /** Task Summary */
             task_summary: {
-                [key: string]: number;
+                [key: string]: number | null;
             };
         };
         /** DemoScenario */
@@ -1750,6 +1803,8 @@ export interface components {
         EventDTO: {
             /** Id */
             id: string;
+            /** Agent Id */
+            agent_id?: string | null;
             /** Event Type */
             event_type: string;
             /** Source Id */
@@ -1831,6 +1886,17 @@ export interface components {
         EventPage: {
             /** Items */
             items: components["schemas"]["EventDTO"][];
+            /**
+             * Data Origin
+             * @default real
+             * @enum {string}
+             */
+            data_origin: "real" | "mock";
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -1853,6 +1919,39 @@ export interface components {
              * @default
              */
             message: string;
+        };
+        /** ExecutionPlanRef */
+        ExecutionPlanRef: {
+            /** Plan Id */
+            plan_id: string;
+            /**
+             * Executor Kind
+             * @enum {string}
+             */
+            executor_kind: "template" | "multimodal";
+            /** Deployment Id */
+            deployment_id?: string | null;
+            /** Deployment Version */
+            deployment_version?: string | null;
+            /**
+             * Instruction
+             * @default
+             */
+            instruction: string;
+            /**
+             * Requires Region
+             * @default false
+             */
+            requires_region: boolean;
+            /**
+             * Requires Duration
+             * @default false
+             */
+            requires_duration: boolean;
+            /** Reason */
+            reason: string;
+            /** Limitations */
+            limitations?: string[];
         };
         /** ExportDTO */
         ExportDTO: {
@@ -1950,6 +2049,36 @@ export interface components {
             reason: string;
             /** Row Version */
             row_version: number;
+        };
+        /** FixedTaskTemplate */
+        FixedTaskTemplate: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Target */
+            target: string;
+            /** Rule */
+            rule: string;
+            capability_ref: components["schemas"]["CapabilityRef"];
+            /** Requires Region */
+            requires_region: boolean;
+            /** Requires Duration */
+            requires_duration: boolean;
+            /** Limitations */
+            limitations: string[];
+        };
+        /** FixedTemplatePage */
+        FixedTemplatePage: {
+            /** Items */
+            items: components["schemas"]["FixedTaskTemplate"][];
+            /** Fingerprint */
+            fingerprint: string;
+            /**
+             * Data Origin
+             * @enum {string}
+             */
+            data_origin: "real" | "mock";
         };
         /** LogDTO */
         LogDTO: {
@@ -2163,6 +2292,39 @@ export interface components {
             deployment_id: string | null;
             /** Deployment Version */
             deployment_version: string | null;
+            /**
+             * Data Origin
+             * @enum {string}
+             */
+            data_origin: "real" | "mock";
+        };
+        /** PlanInput */
+        PlanInput: {
+            channel: components["schemas"]["ChannelConfig"];
+        };
+        /** PlanResult */
+        PlanResult: {
+            /** Id */
+            id: string;
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "template" | "multimodal";
+            channel: components["schemas"]["ChannelConfig"];
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "executable" | "clarification_required" | "unsupported" | "insufficient_evidence";
+            /** Missing Conditions */
+            missing_conditions: string[];
+            /** Reason */
+            reason: string;
+            /** Limitations */
+            limitations: string[];
+            /** Expires At */
+            expires_at: string;
             /**
              * Data Origin
              * @enum {string}
@@ -2398,8 +2560,19 @@ export interface components {
             };
             /** Runs */
             runs: {
-                [key: string]: number;
+                [key: string]: number | null;
             };
+            /**
+             * Data Origin
+             * @default real
+             * @enum {string}
+             */
+            data_origin: "real" | "mock";
+            /**
+             * Runtime Available
+             * @default true
+             */
+            runtime_available: boolean;
             /** Services */
             services: components["schemas"]["ServiceDTO"][];
             /**
@@ -7045,6 +7218,230 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Assessment"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    task_templates_api_v1_task_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedTemplatePage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    plan_requirement_api_v1_requirements_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResult"];
                 };
             };
             /** @description Bad Request */

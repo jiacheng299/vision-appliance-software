@@ -87,6 +87,26 @@ class DemoServices(AgentServices):
         self.receipts[(actor, key)] = (hashed, result.model_copy(deep=True))
         return result.model_copy(deep=True)
 
+    def summary(self, actor_id):
+        with self.lock:
+            self.tick()
+            result = ExecutionSummary(data_origin='mock')
+            if self.available('runtime'):
+                rows = list(self.run_rows.values())
+                result.active_runs = sum(r.state in ACTIVE_STATES for r in rows)
+                result.waiting = sum(r.state == 'queued' for r in rows)
+                result.running = result.active_runs - result.waiting
+                result.completed = sum(r.state == 'completed' for r in rows)
+                result.failed = sum(r.state == 'failed' for r in rows)
+            if self.available('events'):
+                zone = ZoneInfo('Asia/Shanghai')
+                today = datetime.now(zone).date()
+                rows = list(self.event_rows.values())
+                result.today_events = sum(datetime.fromisoformat(e.occurred_at.replace('Z', '+00:00')).astimezone(zone).date() == today for e in rows)
+                result.recent_events = [AgentEventDTO.model_validate(e.model_dump(exclude={'evidence', 'feedback_history'}))
+                    for e in sorted(rows, key=lambda e: (e.occurred_at, e.id), reverse=True)[:50]]
+            return result
+
     def runs(self, agent_id, actor_id):
         with self.lock:
             self.tick()
@@ -216,9 +236,13 @@ class DemoServices(AgentServices):
                 run.last_heartbeat_at = now()
 
     def add_event(self, run):
+        channel = next(c for c in run.config_snapshot.channels if c.channel_id == run.channel_id)
+        multimodal = channel.execution_plan and channel.execution_plan.executor_kind == 'multimodal'
+        event_type = ('多模态任务事件（模拟）' if multimodal else {'intrusion':'区域入侵（模拟）', 'presence':'火源出现（模拟）' if channel.target == 'fire' else '目标出现（模拟）', 'absence':'人员离岗（模拟）'}.get(channel.rule, '区域滞留（模拟）'))
+        reason = (f'模拟运行事件，任务指令：{channel.execution_plan.instruction}；不表示实际视频已检测到该行为。' if multimodal else '模拟事件来自所选模板条件，不来自真实视频检测。')
         event = EventDetail(id=identifier(), agent_id=run.agent_id, run_id=run.id, revision_id=run.revision_id,
             source_id=run.source_id, channel_id=run.channel_id, occurred_at=now(), updated_at=now(), row_version=1,
-            event_type='区域滞留（模拟）', severity='warning', reason='模拟目标在示意区域内达到配置时长；此依据不来自真实视频。',
+            event_type=event_type, severity='warning', reason=reason,
             evidence_status='missing' if self.scenario == 'insufficient_evidence' else 'ready', review_status='unreviewed',
             start_media_ms=(run.start_media_ms or 0) if run.source_kind == 'file' else None, end_media_ms=((run.start_media_ms or 0)+1000) if run.source_kind == 'file' else None,
             evidence=[EvidenceDTO(id=identifier(), kind='image', state='missing' if self.scenario == 'insufficient_evidence' else 'ready', message='仅可展示模拟证据示意图，不是真实截图。')], feedback_history=[], data_origin='mock')

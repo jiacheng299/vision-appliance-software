@@ -1,7 +1,7 @@
 from typing import Literal
 from pydantic import Field, StrictBool, model_validator
 from ...schemas import DTO
-from ..agents.schemas import CapabilityRef, RevisionConfig
+from ..agents.schemas import CapabilityRef, RevisionConfig, ChannelConfig
 from ..agents.contracts import CapabilityItem
 
 Usage = Literal['requirement_parse', 'multimodal_analysis']
@@ -135,3 +135,56 @@ class ParseResult(DTO):
 
 class EvaluateInput(DTO):
     config: RevisionConfig
+
+
+class FixedTaskTemplate(DTO):
+    id: str
+    name: str
+    target: str
+    rule: str
+    capability_ref: CapabilityRef
+    requires_region: bool
+    requires_duration: bool
+    limitations: list[str]
+
+
+class FixedTemplatePage(DTO):
+    items: list[FixedTaskTemplate]
+    fingerprint: str
+    data_origin: Literal['real', 'mock']
+
+
+class PlanInput(DTO):
+    channel: ChannelConfig
+
+
+class TemplateMatch(DTO):
+    capability_ref: CapabilityRef
+    target: str
+    rule: str
+    duration_seconds: int | None = Field(default=None, gt=0, le=86400)
+    covers_all_requirements: StrictBool
+
+
+class MultimodalAnalysis(DTO):
+    target: str = Field(min_length=1, max_length=160)
+    rule: str = Field(min_length=1, max_length=160)
+    instruction: str = Field(min_length=1, max_length=8000)
+    duration_seconds: int | None = Field(default=None, gt=0, le=86400)
+    requires_region: StrictBool = False
+    requires_duration: StrictBool = False
+    verdict: Literal['executable', 'clarification_required', 'unsupported', 'insufficient_evidence']
+    missing_conditions: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class PlanResult(DTO):
+    id: str
+    strategy: Literal['template', 'multimodal']
+    channel: ChannelConfig
+    verdict: Literal['executable', 'clarification_required', 'unsupported', 'insufficient_evidence']
+    missing_conditions: list[str]
+    reason: str
+    limitations: list[str]
+    expires_at: str
+    data_origin: Literal['real', 'mock']

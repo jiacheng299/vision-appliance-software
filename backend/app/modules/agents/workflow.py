@@ -22,6 +22,10 @@ def writable(agent):
 
 
 def check_group_support(provider, config):
+    if any(c.task_mode == 'natural_language' or c.execution_plan for c in config.channels) and not provider.supports_task_plans:
+        raise Error(503, 'task_planning_unavailable', '公共服务尚未支持模板优先的自然语言执行方案。')
+    if any(c.execution_plan and c.execution_plan.executor_kind == 'multimodal' for c in config.channels) and not provider.supports_multimodal_tasks:
+        raise Error(503, 'multimodal_execution_unavailable', '运行提供方尚未声明支持多模态任务执行。')
     if any(c.sources for c in config.channels) and not provider.supports_grouped_sources:
         raise Error(503, 'grouped_sources_unavailable', '公共服务尚未声明支持通道内多视频源，配置已保留，暂不能验证或启动。')
 
@@ -68,7 +72,7 @@ def validate(db, revision_id, expected_version, provider, actor_id):
     for c in config.channels:
         if not channel_sources(c):
             missing.append(f'{c.name}：请选择视频源。')
-        if not c.requirement_text:
+        if not c.requirement_text and c.task_mode != 'template':
             missing.append(f'{c.name}：请填写原始监测需求。')
     if missing:
         assessment.missing_conditions = missing + assessment.missing_conditions
@@ -78,7 +82,8 @@ def validate(db, revision_id, expected_version, provider, actor_id):
     if assessment.verdict == 'executable':
         requested = [c.capability_ref.model_dump() for c in config.channels if c.capability_ref]
         chosen = [c.model_dump() for c in assessment.chosen_capabilities]
-        if len(requested) != len(config.channels) or any(c not in chosen for c in requested):
+        multimodal = [c for c in config.channels if c.execution_plan and c.execution_plan.executor_kind == 'multimodal' and c.task_mode == 'natural_language']
+        if len(requested) + len(multimodal) != len(config.channels) or any(c not in chosen for c in requested):
             raise Error(502, 'provider_contract_invalid', '能力服务没有确认全部模型/模板引用，不能发布。')
     service.lock_write(db)
     db.expire_all()
@@ -170,6 +175,7 @@ def start(db, provider, agent_id, body, actor_id, key, kind='start'):
     catalog = provider.catalog(actor_id)
     if catalog.fingerprint != validation.capability_fingerprint or provider.data_origin != validation.data_origin:
         raise Error(409, 'validation_stale', '能力版本发生变化，请重新验证确认。')
+    provider.verify_execution_plans(config, actor_id)
     command = RuntimeCommand(kind=kind, agent_id=agent_id, revision_id=revision.id, revision_no=revision.revision_no,
                              config=config, channel_ids=body.channel_ids, expected_active_run_ids=body.expected_active_run_ids,
                              validation_id=validation.id, confirmation_id=confirmation.id,

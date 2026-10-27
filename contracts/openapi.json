@@ -5359,6 +5359,258 @@
         }
       }
     },
+    "/api/v1/task-templates": {
+      "get": {
+        "tags": [
+          "member-a"
+        ],
+        "summary": "Task Templates",
+        "operationId": "task_templates_api_v1_task_templates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixedTemplatePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request Entity Too Large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/requirements/plan": {
+      "post": {
+        "tags": [
+          "member-a"
+        ],
+        "summary": "Plan Requirement",
+        "operationId": "plan_requirement_api_v1_requirements_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request Entity Too Large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agent-environment": {
       "get": {
         "tags": [
@@ -12307,6 +12559,31 @@
                 "type": "null"
               }
             ]
+          },
+          "task_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "template",
+                  "natural_language"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Mode"
+          },
+          "execution_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionPlanRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -12521,10 +12798,36 @@
         "properties": {
           "counts": {
             "additionalProperties": {
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "type": "object",
             "title": "Counts"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Origin",
+            "default": "real"
+          },
+          "runtime_available": {
+            "type": "boolean",
+            "title": "Runtime Available",
+            "default": true
+          },
+          "events_available": {
+            "type": "boolean",
+            "title": "Events Available",
+            "default": true
           },
           "sources": {
             "items": {
@@ -12542,7 +12845,14 @@
           },
           "task_summary": {
             "additionalProperties": {
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "type": "object",
             "title": "Task Summary"
@@ -12799,6 +13109,17 @@
             "type": "string",
             "title": "Id"
           },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
           "event_type": {
             "type": "string",
             "title": "Event Type"
@@ -13052,6 +13373,20 @@
             "type": "array",
             "title": "Items"
           },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Origin",
+            "default": "real"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
           "next_cursor": {
             "anyOf": [
               {
@@ -13110,6 +13445,85 @@
           "state"
         ],
         "title": "EvidenceDTO"
+      },
+      "ExecutionPlanRef": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Plan Id"
+          },
+          "executor_kind": {
+            "type": "string",
+            "enum": [
+              "template",
+              "multimodal"
+            ],
+            "title": "Executor Kind"
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id"
+          },
+          "deployment_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Version"
+          },
+          "instruction": {
+            "type": "string",
+            "maxLength": 8000,
+            "title": "Instruction",
+            "default": ""
+          },
+          "requires_region": {
+            "type": "boolean",
+            "title": "Requires Region",
+            "default": false
+          },
+          "requires_duration": {
+            "type": "boolean",
+            "title": "Requires Duration",
+            "default": false
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Reason"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Limitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id",
+          "executor_kind",
+          "reason"
+        ],
+        "title": "ExecutionPlanRef"
       },
       "ExportDTO": {
         "properties": {
@@ -13373,6 +13787,88 @@
           "row_version"
         ],
         "title": "FeedbackInput"
+      },
+      "FixedTaskTemplate": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "capability_ref": {
+            "$ref": "#/components/schemas/CapabilityRef"
+          },
+          "requires_region": {
+            "type": "boolean",
+            "title": "Requires Region"
+          },
+          "requires_duration": {
+            "type": "boolean",
+            "title": "Requires Duration"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "target",
+          "rule",
+          "capability_ref",
+          "requires_region",
+          "requires_duration",
+          "limitations"
+        ],
+        "title": "FixedTaskTemplate"
+      },
+      "FixedTemplatePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FixedTaskTemplate"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Origin"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "fingerprint",
+          "data_origin"
+        ],
+        "title": "FixedTemplatePage"
       },
       "LogDTO": {
         "properties": {
@@ -14040,6 +14536,92 @@
         ],
         "title": "ParseResult"
       },
+      "PlanInput": {
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/ChannelConfig"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel"
+        ],
+        "title": "PlanInput"
+      },
+      "PlanResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "template",
+              "multimodal"
+            ],
+            "title": "Strategy"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/ChannelConfig"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "executable",
+              "clarification_required",
+              "unsupported",
+              "insufficient_evidence"
+            ],
+            "title": "Verdict"
+          },
+          "missing_conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Conditions"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Origin"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "strategy",
+          "channel",
+          "verdict",
+          "missing_conditions",
+          "reason",
+          "limitations",
+          "expires_at",
+          "data_origin"
+        ],
+        "title": "PlanResult"
+      },
       "PlaybackDTO": {
         "properties": {
           "id": {
@@ -14703,10 +15285,31 @@
           },
           "runs": {
             "additionalProperties": {
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "type": "object",
             "title": "Runs"
+          },
+          "data_origin": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Origin",
+            "default": "real"
+          },
+          "runtime_available": {
+            "type": "boolean",
+            "title": "Runtime Available",
+            "default": true
           },
           "services": {
             "items": {

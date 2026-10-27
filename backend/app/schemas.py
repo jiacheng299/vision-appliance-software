@@ -156,7 +156,9 @@ class RuntimeSample(DTO):
 class RuntimeDTO(RuntimeSample):
     disk: dict[str,int]
     sources: dict[str,int]
-    runs: dict[str,int]
+    runs: dict[str,int | None]
+    data_origin: Literal['real','mock'] = 'real'
+    runtime_available: bool = True
     services: list[ServiceDTO]
     models: list[dict] = []
     workers: list[dict] = []
@@ -164,6 +166,7 @@ class RuntimeDTO(RuntimeSample):
 
 class EventDTO(DTO):
     id: str
+    agent_id: str | None = None
     event_type: str
     source_id: str | None
     source_name: str | None
@@ -177,6 +180,8 @@ class EventDTO(DTO):
 
 class EventPage(DTO):
     items: list[EventDTO]
+    data_origin: Literal['real','mock'] = 'real'
+    available: bool = True
     next_cursor: str | None = None
 
 class LogDTO(DTO):
@@ -191,7 +196,10 @@ class LogPage(DTO):
     next_cursor: str | None = None
 
 class DashboardDTO(DTO):
-    counts: dict[str,int]
+    counts: dict[str,int | None]
+    data_origin: Literal['real','mock'] = 'real'
+    runtime_available: bool = True
+    events_available: bool = True
     sources: list[SourceDTO]
     recent_events: list[EventDTO]
-    task_summary: dict[str,int]
+    task_summary: dict[str,int | None]

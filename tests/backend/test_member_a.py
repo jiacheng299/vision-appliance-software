@@ -49,7 +49,7 @@ def verified(c, m):
 
 def config(c, reference=None):
     sources = c.get(API+'/sources').json()['items']
-    ref = reference or c.get(API+'/capabilities/models').json()['items'][0]['reference']
+    ref = reference or next(i['reference'] for i in c.get(API+'/capabilities/models').json()['items'] if 'person' in i['targets'] and 'dwell' in i['rules'])
     return {'schema_version': '1.0', 'channels': [{'channel_id': 'group-1', 'name': '北门组', 'sources': [
         {'source_id': s['id'], 'regions': [{'id': 'roi', 'points': [[0, 0], [1, 0], [0, 1]]}]} for s in sources[:2]],
         'requirement_text': '有人在区域停留超过30秒报警', 'target': 'person', 'rule': 'dwell', 'duration_seconds': 30, 'capability_ref': ref}]}

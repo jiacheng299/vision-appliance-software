@@ -42,3 +42,15 @@ class LLMSelection(Base):
     usage: Mapped[str] = mapped_column(String, primary_key=True)
     deployment_id: Mapped[str] = mapped_column(String)
     row_version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class RequirementPlan(Base):
+    __tablename__ = 'requirement_plans'
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    resolved_channel: Mapped[dict] = mapped_column(JSON)
+    catalog_fingerprint: Mapped[str] = mapped_column(String)
+    verdict: Mapped[str] = mapped_column(String)
+    missing_conditions: Mapped[list] = mapped_column(JSON)
+    limitations: Mapped[list] = mapped_column(JSON)
+    data_origin: Mapped[str] = mapped_column(String)
+    expires_at: Mapped[str] = mapped_column(String)

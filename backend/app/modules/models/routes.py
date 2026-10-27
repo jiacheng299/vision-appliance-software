@@ -13,7 +13,7 @@ from ..agents.contracts import Assessment, CapabilityItem
 from ..sources import resolve_agent_source
 from .models import ModelFile, ModelPair, LLMSelection
 from .schemas import *
-from . import service
+from . import service, planning
 
 router = APIRouter(tags=['member-a'])
 
@@ -202,3 +202,17 @@ def evaluate(body: EvaluateInput, request: Request, db=Depends(get_db)):
             source = resolve_agent_source(db, binding.source_id)
             sources.append({k: getattr(source, k) for k in ('id', 'kind', 'width', 'height', 'duration_ms', 'status')})
     return request.app.state.agent_services.assess(body.config, sources, 'local-workspace')
+
+
+@router.get('/task-templates', response_model=FixedTemplatePage)
+def task_templates(value=Depends(registry)):
+    return FixedTemplatePage(items=planning.templates(value), fingerprint=value.fingerprint, data_origin=value.data_origin)
+
+
+@router.post('/requirements/plan', response_model=PlanResult)
+def plan_requirement(body: PlanInput, request: Request, db=Depends(get_db), model_adapter=Depends(adapter)):
+    sources = []
+    for binding in channel_sources(body.channel):
+        source = resolve_agent_source(db, binding.source_id)
+        sources.append({k: getattr(source, k) for k in ('id', 'kind', 'width', 'height', 'duration_ms', 'status')})
+    return planning.generate(db, body.channel, registry(request), model_adapter, sources)

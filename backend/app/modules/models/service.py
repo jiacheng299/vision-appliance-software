@@ -125,25 +125,35 @@ def deterministic_assessment(config, sources, catalog):
         missing.append('请至少添加一个通道。')
     for channel in config.channels:
         prefix = channel.name + '：'
-        if not channel.requirement_text:
+        if not channel.requirement_text and channel.task_mode != 'template':
             missing.append(prefix + '请填写原始需求。')
         if not channel_sources(channel):
             missing.append(prefix + '请选择视频源。')
-        if not channel.capability_ref:
-            missing.append(prefix + '请选择经过校验的模型与模板。'); continue
-        errors = check_capability(catalog, channel.capability_ref, channel.target, channel.rule)
-        unsupported.extend(prefix + v for v in errors)
-        if errors:
-            continue
-        item = next(i for i in catalog.items if i.reference == channel.capability_ref)
-        chosen.append(item.reference)
-        if channel.rule in item.requires_duration and channel.duration_seconds is None:
+        plan = channel.execution_plan
+        if plan and plan.executor_kind == 'multimodal':
+            needs_region, needs_duration = plan.requires_region, plan.requires_duration
+        else:
+            if not channel.capability_ref:
+                missing.append(prefix + '请选择固定模板，或为自然语言任务生成执行方案。'); continue
+            errors = check_capability(catalog, channel.capability_ref, channel.target, channel.rule)
+            unsupported.extend(prefix + v for v in errors)
+            if errors:
+                continue
+            item = next(i for i in catalog.items if i.reference == channel.capability_ref)
+            chosen.append(item.reference)
+            needs_region, needs_duration = channel.rule in item.requires_region, channel.rule in item.requires_duration
+            if channel.task_mode == 'template' and channel.requirement_text:
+                from .planning import NAMES
+                name = NAMES.get((channel.target, channel.rule), f'{item.name} / {channel.target} / {channel.rule}')
+                if channel.requirement_text != name:
+                    unsupported.append(prefix + '固定模板模式不接受额外自然语言条件，请改用自然语言模式。')
+        if needs_duration and channel.duration_seconds is None:
             missing.append(prefix + '请明确持续时长。')
         for binding in channel_sources(channel):
             source = next((s for s in sources if s['id'] == binding.source_id), None)
             if not source:
                 unsupported.append(prefix + '视频源不可用。'); continue
-            if channel.rule in item.requires_region and not binding.regions:
+            if needs_region and not binding.regions:
                 missing.append(prefix + f'{binding.source_id} 尚未绘制区域。')
             if binding.start_media_ms is not None and (source['kind'] != 'file' or source.get('duration_ms') is None or binding.end_media_ms > source['duration_ms']):
                 unsupported.append(prefix + '录像区间超出视频时长，或摄像头不支持录像区间。')
