@@ -1,5 +1,9 @@
 # 开发与模块交接
 
+2026-10-27：智能体卡片改为业务模板，任务固定使用创建时的已发布版本。开发者维护配置项目录，用户仅选择与填写。操作见 [模板与任务说明](AGENT_TEMPLATES_GUIDE.md)，设计见 [模板领域设计](AGENT_TEMPLATE_DESIGN.md)。新增 `/agent-templates`、`/agent-parameter-options`；既有 `/agents` API 保留为执行任务资源，避免改写 Run/Event 公共契约。
+
+模型公共契约增加 `CapabilityItem.parameter_keys` 与模型技术模板中的同名声明，字段只能来自开发者目录。模型引用查询的 `reference_kind` 区分 `template` 和 `agent`，按同一 revision_id 游标合并分页；模型归档必须同时核对两类引用。模板本身无运行，实际活动保护仍由关联任务的 Run 返回。执行器不支持参数或模型未声明所选条件时必须阻止执行。
+
 2026-10-20 增量：智能体B端管理工作流、0003迁移、公开服务端口及独立演示已完成，见 `AGENTS_API.md`；初学者见 `AGENTS_BEGINNER_GUIDE.md`。真实推理、Run/Event存储、网关和报告引擎仍需团队接入，验收边界见 `AGENTS_IMPLEMENTATION.md`。
 
 本轮实现范围和完整产品范围分别见 `superpowers/specs/2026-10-18-foundation-design.md` 与 `MASTER_SPEC.md`。原型保存在 `reference/`。
