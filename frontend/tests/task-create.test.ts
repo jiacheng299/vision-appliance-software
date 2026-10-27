@@ -32,7 +32,7 @@ beforeEach(()=>{
  m.plan.mockImplementation(async c=>({id:'plan',strategy:'template',channel:{...c,target:'person',rule:'dwell',capability_ref:reference,execution_plan:{plan_id:'plan',executor_kind:'template',reason:'优先匹配已有模板',limitations:['mock only'],requires_region:true,requires_duration:true}},verdict:c.duration_seconds?'executable':'clarification_required',missing_conditions:c.duration_seconds?[]:['请明确持续时长'],reason:'优先匹配已有模板',limitations:['mock only'],expires_at:'2099-01-01T00:00:00Z',data_origin:'mock'}))
 })
 afterEach(()=>{for(const w of wrappers.splice(0))w.unmount();vi.restoreAllMocks()})
-async function wizard(){const w=mount(TaskCreatePage,{global:{stubs:{RouterLink:{template:'<a><slot/></a>'},RegionEditor:{template:'<div>ROI editor</div>'},MediaPlayer:true}}});wrappers.push(w);await flushPromises();return w}
+async function wizard(legacyOnly=false){const w=mount(TaskCreatePage,{props:{legacyOnly},global:{stubs:{RouterLink:{template:'<a><slot/></a>'},RegionEditor:{template:'<div>ROI editor</div>'},MediaPlayer:true}}});wrappers.push(w);await flushPromises();return w}
 async function button(w:ReturnType<typeof mount>,text:string){const b=w.findAll('button').find(b=>b.text()===text);expect(b,`button ${text}`).toBeTruthy();await b!.trigger('click');await flushPromises()}
 async function ready(w:ReturnType<typeof mount>){
  await w.get('input[aria-label="任务名称"]').setValue('门口任务')
@@ -43,6 +43,15 @@ async function ready(w:ReturnType<typeof mount>){
  await w.get('input[type="checkbox"]').setValue(true);await button(w,'保存并验证可执行性')
 }
 async function natural(w:ReturnType<typeof mount>,text:string){await button(w,'下一步');await w.get('button[aria-label="自然语言任务模式"]').trigger('click');await w.get('input[aria-label="监测需求"]').setValue(text);await button(w,'生成执行方案')}
+
+it('does not create unlinked tasks or recover creation requests through the historical editor',async()=>{
+ const body={name:'恢复任务',description:'',config:{schema_version:'1.0',channels:[newGroup()]}}
+ sessionStorage.setItem('vision.create.new',JSON.stringify({signature:JSON.stringify(body),key:'old-key'}))
+ const w=await wizard(true)
+ expect(m.create).not.toHaveBeenCalled()
+ expect(w.text()).toContain('请选择历史任务继续编辑')
+ expect(w.text()).not.toContain('使用已有任务的条件')
+})
 describe('wizard execution guards',()=>{
  it('recovers an interrupted create with the original idempotency key after refresh',async()=>{const body={name:'恢复任务',description:'',config:{schema_version:'1.0',channels:[newGroup()]}};sessionStorage.setItem('vision.create.new',JSON.stringify({signature:JSON.stringify(body),key:'original-key'}));const w=await wizard();expect(m.create).toHaveBeenCalledWith(body,'original-key');expect(w.get('input[aria-label="任务名称"]').element).toHaveProperty('value','恢复任务');expect(sessionStorage.getItem('vision.create.new')).toBeNull()})
 

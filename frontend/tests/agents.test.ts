@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import RevisionEditor from '../src/modules/agents/RevisionEditor.vue'
+import { modelApi } from '../src/modules/model-management/api'
 import { agentApi, type Revision } from '../src/modules/agents/api'
 import { copyConfig, newChannel } from '../src/modules/agents/draft'
 import { channelSources } from '../src/modules/agents/channelSources'
 import { agentJson } from '../src/modules/agents/json'
+import { templatesApi } from '../src/modules/agents/templatesApi'
+import ParameterFields from '../src/modules/agents/ParameterFields.vue'
+import { task,template,pool,catalog } from './fixtures/agentTemplates'
 
 vi.mock('naive-ui', async () => {
   const { defineComponent } = await import('vue')
@@ -14,7 +18,7 @@ vi.mock('naive-ui', async () => {
     NButton: defineComponent({ props: ['disabled', 'loading'], template: '<button :disabled="disabled || loading"><slot/></button>' }),
     NInput: defineComponent({ props: ['value', 'inputProps'], emits: ['update:value'], template: '<input v-bind="inputProps" :value="value" @input="$emit(\'update:value\', $event.target.value)"/>' }),
     NSelect: defineComponent({ props: ['value'], emits: ['update:value'], template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><option value="source-new">新视频源</option></select>' }),
-    NInputNumber: Box,
+    NInputNumber: Box, NCheckbox: Box,
   }
 })
 function revision(): Revision {
@@ -25,9 +29,29 @@ function editor(value = revision()) {
 }
 function button(wrapper: ReturnType<typeof editor>, label: string) { return wrapper.findAll('button').find(b => b.text() === label)! }
 afterEach(() => vi.restoreAllMocks())
-beforeEach(() => { vi.spyOn(agentApi,'catalog').mockResolvedValue({items:[],fingerprint:'test',data_origin:'real'}) })
+beforeEach(() => { vi.spyOn(modelApi,'templates').mockResolvedValue({items:[],fingerprint:'test',data_origin:'real'}); vi.spyOn(agentApi,'catalog').mockResolvedValue({items:[],fingerprint:'test',data_origin:'real'}) })
 
 describe('agent revision editing', () => {
+  it('edits task parameter values while preserving its original template version and model',async()=>{
+    const original=task().latest_revision
+    vi.spyOn(templatesApi,'parameters').mockResolvedValue({version:'1',items:pool,editable_by_user:false})
+    const newer=template(2);newer.revisions.push(template().latest_revision)
+    vi.spyOn(templatesApi,'detail').mockResolvedValue(newer)
+    vi.mocked(agentApi.catalog).mockResolvedValue(catalog)
+    const save=vi.spyOn(agentApi,'save').mockResolvedValue(original)
+    const wrapper=editor(original);await flushPromises()
+    expect(wrapper.text()).toContain('v1')
+    expect(wrapper.text()).not.toContain('添加通道')
+    expect(wrapper.find('[aria-label="通道任务模式"]').exists()).toBe(false)
+    wrapper.getComponent(ParameterFields).vm.$emit('update:settings',[{key:'confidence_threshold',value:.9,required:true}]);await flushPromises()
+    await button(wrapper,'保存草稿').trigger('click');await flushPromises()
+    const config=save.mock.calls[0]![1]
+    expect(config.agent_template_ref).toEqual(original.config.agent_template_ref)
+    expect(config.channels![0]!.capability_ref).toEqual(original.config.channels![0]!.capability_ref)
+    expect(config.channels![0]!.parameters![0]!.value).toBe(.9)
+    expect(original.config.channels![0]!.parameters![0]!.value).toBe(.8)
+    wrapper.unmount()
+  })
   it('closes through the mask but preserves dirty input when discard is canceled',async()=>{
     const confirm=vi.spyOn(window,'confirm').mockReturnValue(false)
     const wrapper=editor(),drawer=wrapper.getComponent({name:'TestDrawer'})

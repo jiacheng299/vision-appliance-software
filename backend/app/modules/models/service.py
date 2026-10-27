@@ -108,7 +108,7 @@ def catalog(db, origin):
         t = definition.template
         items.append(CapabilityItem(name=f'{definition.name} + {t.name}', reference=CapabilityRef(model_id=pair.model_id, model_version=pair.version,
             template_id=pair.template_id, template_version=pair.template_version), targets=t.targets, rules=t.rules,
-            requires_region=t.requires_region, requires_duration=t.requires_duration, limitations=t.limitations))
+            requires_region=t.requires_region, requires_duration=t.requires_duration, limitations=t.limitations,parameter_keys=t.parameter_keys))
     return CapabilityCatalog(items=items, fingerprint=digest([[p.model_id, p.version, p.template_version, p.file_id, p.row_version, p.definition] for p in pairs]), data_origin=origin)
 
 
@@ -140,6 +140,10 @@ def deterministic_assessment(config, sources, catalog):
             if errors:
                 continue
             item = next(i for i in catalog.items if i.reference == channel.capability_ref)
+            from ...shared.monitoring_parameters import CORE_KEYS, BY_KEY
+            for parameter in channel.parameters:
+                if parameter.value is not None and parameter.value!='' and parameter.key not in CORE_KEYS and parameter.key not in item.parameter_keys:
+                    unsupported.append(prefix+f'所选模型未声明支持配置项“{BY_KEY[parameter.key].label}”。')
             chosen.append(item.reference)
             needs_region, needs_duration = channel.rule in item.requires_region, channel.rule in item.requires_duration
             if channel.task_mode == 'template' and channel.requirement_text:

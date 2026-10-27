@@ -53,6 +53,33 @@ def test_account_owned_agent_history_survives_upgrade_and_rollback(tmp_path):
             migration.attributes['connection'] = connection
             command.downgrade(migration, '0003_agent_workflow')
     with engine.connect() as connection:
-        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar() == '0006_requirement_plans'
+        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar() == '0007_agent_templates'
         assert connection.execute(text("SELECT owner_id FROM agents WHERE id='agent'")).scalar() == 'workspace'
+    engine.dispose()
+
+
+def test_template_migration_registers_history_without_rewriting_multiple_sources(tmp_path):
+    import json
+    config=Config(var_root=tmp_path);config.prepare();engine=make_engine(config)
+    migration=AlembicConfig()
+    migration.set_main_option('script_location',str(Path(__file__).resolve().parents[2]/'backend/alembic'))
+    with engine.begin() as connection:
+        migration.attributes['connection']=connection;command.upgrade(migration,'0006_requirement_plans')
+        metadata=MetaData();metadata.reflect(connection)
+        connection.execute(metadata.tables['agents'].insert().values(id='legacy',name='原业务',description='两个通道',owner_id='workspace',row_version=4,created_at='before',updated_at='before'))
+        for number in (1,2):
+            config={'schema_version':'1.0','channels':[{'channel_id':'one','target':'fire','rule':'presence','capability_ref':{'model_id':'old-model','model_version':'1','template_id':'technical','template_version':'1'},'sources':[{'source_id':f'video-{number}'},{'source_id':'live'}]}, {'channel_id':'two','source_id':'other','target':'person','rule':'dwell','duration_seconds':30}]}
+            connection.execute(metadata.tables['agent_revisions'].insert().values(id=f'revision-{number}',agent_id='legacy',revision_no=number,state='published',config=config,row_version=3,created_at='before',updated_at='before'))
+        before=connection.execute(text('SELECT * FROM agent_revisions ORDER BY id')).fetchall()
+    migrate(engine);migrate(engine)
+    with engine.connect() as connection:
+        assert connection.execute(text('SELECT * FROM agent_revisions ORDER BY id')).fetchall()==before
+        assert connection.execute(text('SELECT count(*) FROM agent_templates')).scalar()==1
+        template=connection.execute(text('SELECT * FROM agent_templates')).mappings().one()
+        version=connection.execute(text('SELECT * FROM agent_template_revisions')).mappings().one()
+        link=connection.execute(text('SELECT * FROM agent_template_tasks')).mappings().one()
+        assert template['imported_from_agent_id']=='legacy' and link['agent_id']=='legacy'
+        assert link['template_revision_id']==version['id'] and version['state']=='draft'
+        assert json.loads(version['config'])['model_ref']['model_id']=='old-model'
+        assert connection.exec_driver_sql('PRAGMA foreign_key_check').fetchall()==[]
     engine.dispose()

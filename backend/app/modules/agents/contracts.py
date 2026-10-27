@@ -17,6 +17,7 @@ class CapabilityItem(DTO):
     requires_region: list[str] = Field(default_factory=list)
     requires_duration: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    parameter_keys: list[str] = Field(default_factory=list)
 
 
 class CapabilityCatalog(DTO):
@@ -319,6 +320,7 @@ class EnvironmentDTO(DTO):
 
 
 class AgentReference(DTO):
+    reference_kind: Literal['agent','template'] = 'agent'
     agent_id: str
     agent_name: str
     revision_id: str

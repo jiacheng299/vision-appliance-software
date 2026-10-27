@@ -18,9 +18,10 @@ import AgentStatus from './AgentStatus.vue'
 import CreateAgentDrawer from './CreateAgentDrawer.vue'
 import './agents.css'
 const router = useRouter()
+const props=withDefaults(defineProps<{legacyOnly?:boolean}>(),{legacyOnly:false})
 const items = ref<Agent[]>([]), sources = ref<Source[]>([]), query = ref(''), sourceId = ref<string | null>(null)
 const error = ref(''), sourcesError = ref(''), loading = ref(false), cursor = ref<string | null>(null), showCreate = ref(false)
-const canWrite = true
+const canWrite = computed(()=>!props.legacyOnly)
 const stateFilter=ref<string|null>(null),scene=ref(''),archived=ref(false),sort=ref('updated_desc'),seeding=ref(false)
 let generation = 0, timer: ReturnType<typeof setTimeout> | undefined
 async function load(more = false) {
@@ -43,7 +44,8 @@ function thumbnail(agent: Agent) { return safeMediaUrl(sources.value.find(s => s
 async function seed(){if(seeding.value)return;seeding.value=true;error.value='';try{const result=await agentApi.seed();await loadSources();await router.push(`/agents/${result.id}/config`)}catch(e){error.value=agentError(e)}finally{seeding.value=false}}
 </script>
 <template>
-  <div class="page-heading"><div><h1>智能体管理</h1><p>管理监测配置、视频来源与版本记录</p></div><NButton v-if="canWrite" type="primary" @click="openCreate"><template #icon><Icon name="plus"/></template>新建草稿</NButton></div>
+  <div class="page-heading"><div><h1>{{legacyOnly?'历史任务':'智能体管理'}}</h1><p>{{legacyOnly?'保留原监测配置及运行记录；新任务请从智能体模板创建。':'管理监测配置、视频来源与版本记录'}}</p></div><NButton v-if="canWrite" type="primary" @click="openCreate"><template #icon><Icon name="plus"/></template>新建草稿</NButton></div>
+  <RouterLink v-if="legacyOnly" to="/agents">返回智能体模板列表</RouterLink>
   <p class="notice agent-notice">{{environment?.data_origin==='mock'?'独立演示模式：可练习完整流程。模拟运行和事件不代表真实识别效果。':'运行状态和报警来自公共服务。服务未接入时可继续管理草稿和查看已有配置。'}}</p>
   <div class="toolbar"><NInput v-model:value="query" class="search" clearable placeholder="搜索智能体名称或说明" aria-label="搜索智能体"/><NSelect v-model:value="sourceId" :options="sources.map(s => ({label:s.name,value:s.id}))" clearable placeholder="全部视频源" aria-label="筛选视频源" style="width:210px"/><NSelect v-model:value="stateFilter" :options="['draft','ready','queued','running','stopping','stopped','failed','unknown'].map(value=>({label:label(value),value}))" clearable placeholder="全部状态" aria-label="筛选智能体状态"/><NInput v-model:value="scene" placeholder="场景规则名称" aria-label="筛选场景规则" style="width:160px"/><NSelect v-model:value="sort" :options="[{label:'最近更新',value:'updated_desc'},{label:'名称排序',value:'name_asc'}]" aria-label="智能体排序"/><NButton @click="archived=!archived">{{archived?'返回未归档':'查看归档'}}</NButton><NButton :loading="loading" @click="load()">刷新</NButton></div>
   <div v-if="environment?.data_origin==='mock'&&canWrite" class="agent-actions agent-notice"><NButton :loading="seeding" @click="seed">加载双路模拟样例</NButton><span class="muted">样例包含两路配置和监测区域，无需模型或摄像头。</span></div><ErrorBanner :error="error" @retry="load()"/><ErrorBanner :error="sourcesError" @retry="loadSources"/>

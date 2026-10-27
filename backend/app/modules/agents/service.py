@@ -80,9 +80,11 @@ def list_agents(db, q, source_id, cursor, limit, archived=False, provider=None, 
 
 
 def check_config(db, config: RevisionConfig, previous: dict | None = None):
+    from ...shared.monitoring_parameters import validate_settings
     old = RevisionConfig.model_validate(previous).channels if previous else []
     old_sources = {(c.channel_id, b.source_id) for c in old for b in channel_sources(c)}
     for channel in config.channels:
+        validate_settings(channel.parameters,extra_choices={'target':[channel.target],'rule':[channel.rule]})
         for binding in channel_sources(channel):
             source = resolve_agent_source(db, binding.source_id, allow_archived=(channel.channel_id, binding.source_id) in old_sources)
             if binding.start_media_ms is not None:
@@ -98,7 +100,9 @@ def receipt(db, actor_id, key, operation, payload):
     return existing, request_hash
 
 
-def create_agent(db, body, actor_id, key):
+def create_agent(db, body, actor_id, key, allow_template=False):
+    if body.config.agent_template_ref and not allow_template:
+        raise Error(422,'template_reference_invalid','请通过已发布的智能体模板创建任务。')
     lock_write(db)
     existing, request_hash = receipt(db, actor_id, key, 'create', body.model_dump(mode='json', exclude_unset=True))
     if existing:
@@ -171,6 +175,8 @@ def patch_revision(db, revision_id, body):
     check_version(revision, body.row_version)
     if revision.state != 'draft':
         raise Error(409, 'revision_immutable', '已发布版本不能修改，请复制为新草稿。')
+    from ..agent_templates.service import assert_task_binding
+    assert_task_binding(db,revision.agent_id,body.config)
     check_config(db, body.config, revision.config)
     revision.config = body.config.model_dump(mode='json')
     revision.latest_validation_id = None
