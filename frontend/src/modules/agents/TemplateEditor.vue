@@ -17,6 +17,7 @@ const currentRow=ref<AgentTemplate|undefined>(props.row)
 const body=computed(()=>({name:name.value.trim(),description:description.value.trim(),config:config.value}))
 const baseline=ref(JSON.stringify(body.value)),dirty=computed(()=>JSON.stringify(body.value)!==baseline.value)
 const selectedModel=computed(()=>catalog.value?.items.find(i=>modelKey(i.reference)===modelKey(config.value.model_ref)))
+const targetNames=computed(()=>selectedModel.value?.targets.map(value=>definitions.value.find(d=>d.key==='target')?.options?.find(o=>o.value===value)?.label??value).join('、'))
 async function load(){
   const results=await Promise.allSettled([agentApi.catalog(),templatesApi.parameters()]);if(disposed)return
   const [models,parameters]=results
@@ -54,7 +55,7 @@ async function save(publish=false){
       <p v-if="row?.imported_from_agent_id" class="notice">此模板由历史智能体配置登记。请核对模型及条件后发布，原任务与运行记录保持不变。</p>
       <ErrorBanner :error="error" :retryable="false"/>
       <section class="agent-create-section"><h3>业务定义</h3><div class="field"><label>模板名称</label><NInput v-model:value="name" :disabled="saving" :maxlength="160" placeholder="例如：火灾检测" aria-label="模板名称"/></div><div class="field"><label>业务说明</label><NInput v-model:value="description" type="textarea" :disabled="saving" :maxlength="2000" placeholder="说明该模板可完成的具体检测任务" aria-label="模板业务说明"/></div></section>
-      <section class="agent-create-section"><h3>选择模型</h3><ErrorBanner :error="catalogError" @retry="load"/><div class="field"><label>模型</label><NSelect :value="modelKey(config.model_ref)" :options="catalog?.items.map(i=>({label:`${plainModelName(i.name)} · ${i.reference.model_version}`,value:modelKey(i.reference)!}))??[]" :disabled="saving||!!catalogError" clearable filterable placeholder="选择分析模型" aria-label="选择模型" @update:value="selectModel"/></div><p v-if="selectedModel" class="hint">模型支持 {{selectedModel.targets.join('、')}} 等检测对象；具体条件从下方配置项池选择。</p><p v-else-if="config.model_ref" class="hint">原模型版本暂不在可用目录中，历史引用已保留；重新发布前须确认模型可用。</p></section>
+      <section class="agent-create-section"><h3>选择模型</h3><ErrorBanner :error="catalogError" @retry="load"/><div class="field"><label>模型</label><NSelect :value="modelKey(config.model_ref)" :options="catalog?.items.map(i=>({label:`${plainModelName(i.name)} · ${i.reference.model_version}`,value:modelKey(i.reference)!}))??[]" :disabled="saving||!!catalogError" clearable filterable placeholder="选择分析模型" aria-label="选择模型" @update:value="selectModel"/></div><p v-if="selectedModel" class="hint">模型支持 {{targetNames}} 等检测对象；具体条件从下方配置项池选择。</p><p v-else-if="config.model_ref" class="hint">原模型版本暂不在可用目录中，历史引用已保留；重新发布前须确认模型可用。</p></section>
       <section class="agent-create-section"><h3>可选配置项</h3><ParameterFields :settings="config.parameters??[]" @update:settings="config.parameters=$event" :definitions="definitions" :model="selectedModel" selectable :disabled="saving"/></section>
       <template #footer><div class="agent-create-footer"><p>发布模板不会启动任务，也不会更新旧任务。</p><div class="agent-actions"><NButton :disabled="saving" @click="close">取消</NButton><NButton :disabled="saving" :loading="saving" @click="save(false)">保存草稿</NButton><NButton type="primary" :disabled="saving||!config.model_ref" :loading="saving" @click="save(true)">保存并发布</NButton></div></div></template>
     </NDrawerContent>
