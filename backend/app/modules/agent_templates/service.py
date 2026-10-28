@@ -64,6 +64,12 @@ def check_settings(config,item=None,complete=False):
     extra={'target':item.targets,'rule':item.rules} if item else {}
     return validate_settings(config.parameters,complete=complete,extra_choices=extra)
 
+
+def check_default_source(db,config):
+    if config.default_source is not None:
+        tasks.check_config(db,RevisionConfig(channels=[ChannelConfig(
+            channel_id='template-default',name='模板默认视频',sources=[config.default_source])]))
+
 def model_choice(provider,reference):
     if provider is None or reference is None: return None
     try: return next((i for i in provider.catalog(WORKSPACE_ACTOR_ID).items if i.reference==reference),None)
@@ -73,6 +79,7 @@ def model_choice(provider,reference):
 
 def create_template(db,body,actor,key,provider=None):
     check_settings(body.config,model_choice(provider,body.config.model_ref))
+    check_default_source(db,body.config)
     tasks.lock_write(db)
     existing,signature=tasks.receipt(db,actor,key,'agent-template-create',body.model_dump(mode='json'))
     if existing: return TemplateDetail.model_validate(existing.response)
@@ -85,6 +92,7 @@ def create_template(db,body,actor,key,provider=None):
 
 def patch_template(db,identifier,body,provider=None):
     check_settings(body.config,model_choice(provider,body.config.model_ref))
+    check_default_source(db,body.config)
     tasks.lock_write(db);row=get_template(db,identifier);writable(row);tasks.check_version(row,body.row_version)
     latest=revisions(db,identifier)[0]
     if latest.state=='published':
@@ -108,6 +116,7 @@ def publish_template(db,identifier,body,provider,actor,key):
     if not version or version.template_id!=identifier: raise Error(422,'template_revision_mismatch','模板版本不属于当前模板。')
     if version.state!='draft' or version.id!=revisions(db,identifier)[0].id: raise Error(409,'template_immutable','该模板版本不能修改或重复发布。')
     config=TemplateConfig.model_validate(version.config)
+    check_default_source(db,config)
     item=next((v for v in catalog.items if v.reference==config.model_ref),None)
     if not item: raise Error(422,'template_model_unavailable','请选择当前可用且经过校验的模型。')
     values=check_settings(config,item)
@@ -143,6 +152,9 @@ def instantiate(db,identifier,body,actor,key):
     if not version or version.template_id!=identifier or version.state!='published':
         raise Error(422,'template_not_published','请选择该模板的已发布版本。')
     config=TemplateConfig.model_validate(version.config)
+    source=body.source or config.default_source
+    if source is None:
+        raise Error(422,'template_source_required','模板没有默认视频源，请为任务选择接入的视频源。')
     settings=selected_settings(config,body.parameters)
     target,rule,duration=effective_conditions(config,settings)
     from ..models.planning import NAMES
@@ -150,7 +162,7 @@ def instantiate(db,identifier,body,actor,key):
     # Nonstandard rules use the unchanged compatibility assessment path.
     channel=ChannelConfig(channel_id=uid(),name=config.title,task_mode='template' if canonical else None,
         requirement_text=canonical or config.summary or config.title,target=target,rule=rule,duration_seconds=duration,
-        capability_ref=config.model_ref,sources=[body.source],parameters=settings)
+        capability_ref=config.model_ref,sources=[source],parameters=settings)
     reference=AgentTemplateRef(template_id=identifier,revision_id=version.id,revision_no=version.revision_no,name=config.title)
     payload=AgentCreate(name=body.name,description=body.description,config=RevisionConfig(channels=[channel],agent_template_ref=reference))
     # Use a stable channel identity for retries of the same version/source command.

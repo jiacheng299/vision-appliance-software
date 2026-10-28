@@ -165,3 +165,31 @@ def test_model_references_paginate_templates_and_tasks_without_omission(template
         assert len(seen)<10
     assert len(seen)==len(set(seen))==6
     assert {kind for kind,_ in seen}=={'agent','template'}
+
+def test_template_default_video_is_inherited_and_versioned(templates):
+    c,_,ref,source=templates
+    created=post(c,'/agent-templates',{'name':'默认视频模板','config':{'model_ref':ref,'default_source':{'source_id':source}}})
+    assert created.status_code==201,created.text
+    t=publish(c,created.json())
+    response=post(c,f'/agent-templates/{t["id"]}/tasks',{'name':'继承默认视频','template_revision_id':t['published_revision']['id']})
+    assert response.status_code==201,response.text
+    assert response.json()['latest_revision']['config']['channels'][0]['sources'][0]['source_id']==source
+    other=post(c,'/sources',{'kind':'camera','name':'另一视频','address':'rtsp://127.0.0.1/other'}).json()['id']
+    explicit=task(c,t,other)
+    assert explicit.status_code==201,explicit.text
+    assert explicit.json()['latest_revision']['config']['channels'][0]['sources'][0]['source_id']==other
+
+
+def test_template_without_default_video_still_requires_input(templates):
+    c,_,ref,_=templates
+    t=publish(c,make(c,ref))
+    response=post(c,f'/agent-templates/{t["id"]}/tasks',{'name':'缺少视频','template_revision_id':t['published_revision']['id']})
+    assert response.status_code==422
+
+
+def test_template_rejects_missing_or_archived_default_video(templates):
+    c,_,ref,source=templates
+    c.post(API+'/sources/'+source+'/archive')
+    for source_id in [source,'missing']:
+        response=post(c,'/agent-templates',{'name':'无效默认视频','config':{'model_ref':ref,'default_source':{'source_id':source_id}}})
+        assert response.status_code==422,response.text

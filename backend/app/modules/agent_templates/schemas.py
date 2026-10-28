@@ -6,6 +6,7 @@ from ..agents.schemas import CapabilityRef, ChannelSource, AgentDetail, AgentDTO
 
 class TemplateConfig(DTO):
     model_ref:CapabilityRef|None=None
+    default_source:ChannelSource|None=Field(default=None,exclude_if=lambda v:v is None)
     parameters:list[ParameterSetting]=Field(default_factory=list,max_length=32)
     default_target:str=Field(default='',max_length=160)
     default_rule:str=Field(default='',max_length=160)
@@ -82,5 +83,5 @@ class TemplateTaskCreate(DTO):
     name:str=Field(min_length=1,max_length=160)
     description:str=Field(default='',max_length=2000)
     template_revision_id:str=Field(min_length=1,max_length=80)
-    source:ChannelSource
+    source:ChannelSource|None=None
     parameters:list[ParameterSetting]=Field(default_factory=list,max_length=32)
