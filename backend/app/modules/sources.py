@@ -40,6 +40,24 @@ def resolve_agent_source(db, source_id, allow_archived=False):
         raise Error(422, 'source_unavailable', '所选视频源不存在或已归档，请重新选择。')
     return source_dto(source)
 
+
+def resolve_execution_input(db, config, source_id, gateway):
+    """Source-owned local decoder input; credentials and arbitrary paths never cross this port."""
+    source = get_source(db, source_id)
+    if source.kind == 'file':
+        if source.status != 'ready' or not source.media_key:
+            raise Error(422, 'source_not_ready', '录像尚未完成处理，暂不能开始监测。')
+        path = controlled_path(config, 'media', source.media_key)
+        if not path.is_file():
+            raise Error(422, 'source_media_missing', '录像文件不可用，请重新上传。')
+        locator = str(path)
+    else:
+        if source.status != 'online':
+            raise Error(422, 'source_not_ready', '摄像头尚未验证在线，请先测试连接。')
+        path = gateway.ensure_published(source, values_for(db, 'security')['camera_allowed_networks'])
+        locator = f'rtsp://127.0.0.1:{config.media_gateway_rtsp_port}/{path}'
+    return source_dto(source), locator
+
 def get_upload(db,upload_id):
     upload = db.get(Upload,upload_id)
     if not upload:

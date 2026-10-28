@@ -22,6 +22,9 @@ from .modules.models.bridge import RegistryAgentServices, RegistryDemoServices
 from .modules.agents import routes as agents
 from .modules.agents import gateway_routes as agent_workflow
 from .modules.agent_templates import routes as agent_templates
+from .modules.local_execution import routes as local_execution
+from .modules.local_execution.service import LocalAgentServices
+from .modules.models.yolo_services import YoloModelServices
 
 async def sample_runtime(app):
     while True:
@@ -51,22 +54,31 @@ def create_app(var_root=None,testing=False,agent_services=None,model_services=No
         settings.initialize(db)
     @asynccontextmanager
     async def lifespan(app):
+        if isinstance(app.state.agent_services,LocalAgentServices):
+            await asyncio.to_thread(app.state.agent_services.start)
         task = asyncio.create_task(sample_runtime(app))
-        yield
-        task.cancel()
         try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        app.state.media_gateway.close()
-        engine.dispose()
+            yield
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            if isinstance(app.state.agent_services,LocalAgentServices):
+                await asyncio.to_thread(app.state.agent_services.close)
+            app.state.media_gateway.close()
+            engine.dispose()
     app = FastAPI(title='Vision Appliance Foundation API',version=config.version,lifespan=lifespan,docs_url='/api/docs',openapi_url='/api/openapi.json',redoc_url=None)
     app.state.config, app.state.engine, app.state.sessions = config, engine, sessions
     app.state.media_gateway = MediaGateway(config)
-    app.state.model_services = model_services or (DemoModelServices() if config.agent_demo else ModelServices())
+    app.state.model_services = model_services or (DemoModelServices() if config.agent_demo else YoloModelServices(config,sessions))
     if agent_services is None:
-        agent_services = RegistryDemoServices() if config.agent_demo else RegistryAgentServices()
-        agent_services.init_registry(sessions, app.state.model_services)
+        if not config.agent_demo and isinstance(app.state.model_services,YoloModelServices) and app.state.model_services.is_ready():
+            agent_services = LocalAgentServices(config,sessions,app.state.model_services,gateway=app.state.media_gateway)
+        else:
+            agent_services = RegistryDemoServices() if config.agent_demo else RegistryAgentServices()
+            agent_services.init_registry(sessions, app.state.model_services)
     app.state.agent_services = agent_services
     app.state.vault = Vault(config)
     app.state.runtime_history = deque(maxlen=120)
@@ -93,7 +105,7 @@ def create_app(var_root=None,testing=False,agent_services=None,model_services=No
     @app.exception_handler(HTTPException)
     async def http_error(request,exc):
         return error_response(request,exc.status_code,'not_found' if exc.status_code==404 else 'http_error','请求资源不存在。' if exc.status_code==404 else '请求无法完成。')
-    for module in (sources,settings,runtime,realtime,models,agent_workflow,agents,agent_templates):
+    for module in (sources,settings,runtime,realtime,models,agent_workflow,agents,agent_templates,local_execution):
         app.include_router(module.router,prefix='/api/v1',responses={code:{'model':ErrorDTO} for code in (400,401,403,404,409,413,422,429,500,503)})
     @app.get('/{path:path}',include_in_schema=False)
     def frontend(path:str):

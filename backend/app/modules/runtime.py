@@ -24,12 +24,13 @@ def dependency_services(app,db):
     worker = bool(worker_rows(db))
     ffmpeg = executable(app.state.config.ffmpeg) and executable(app.state.config.ffprobe)
     gateway = app.state.media_gateway.health()
+    local_model = bool(getattr(app.state.model_services,'is_ready',lambda:False)())
     return [
         {'key':'api','name':'API','status':'ready','message':'API 与持久层可用。','observed_at':observed},
         {'key':'worker','name':'Worker','status':'ready' if worker else 'unavailable','message':'独立 Worker 心跳正常。' if worker else '未收到独立 Worker 心跳，请启动 Worker。','observed_at':observed},
         {'key':'ffmpeg','name':'FFmpeg / FFprobe','status':'ready' if ffmpeg else 'unavailable','message':'本地媒体工具可用。' if ffmpeg else '请安装 FFmpeg 与 FFprobe，并设置 VISION_FFMPEG / VISION_FFPROBE。','observed_at':observed},
         {'key':'media_gateway','name':'MediaMTX','status':'ready' if gateway else 'unavailable','message':'本机媒体网关已连接。' if gateway else '本机媒体网关未就绪，请启动摄像头媒体服务。','observed_at':observed},
-        {'key':'models','name':'本地模型运行时','status':'unavailable','message':'未注册模型执行器，本轮不执行推理。','observed_at':observed},
+        {'key':'models','name':'本地模型运行时','status':'ready' if local_model else 'unavailable','message':'YOLO11n CPU ONNX 执行器与可信模型已就绪。' if local_model else '可信本地模型尚未安装或依赖不可用，请先准备 YOLO 模型。','observed_at':observed},
         {'key':'gpu','name':'GPU 采集器','status':'unavailable','message':'未接入 GPU 采集器，使用率未知。','observed_at':observed},
     ]
 
