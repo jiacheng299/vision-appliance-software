@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Request
 from ...shared.db import get_db
 from ...shared.models import now
 from ...shared.monitoring_parameters import ParameterCatalog, DEFINITIONS
@@ -7,6 +7,8 @@ from ..agents.workspace import WORKSPACE_ACTOR_ID
 from ..agents import service as tasks
 from . import service
 from .schemas import *
+from .matching import DeepSeekTemplateMatcher, ensure_candidate_current, published_candidates
+from .matching_schemas import TemplateMatchRequest, TemplateMatchResult, TemplateMatcherStatus
 
 router=APIRouter(tags=['agent-templates'])
 
@@ -21,6 +23,20 @@ def templates(q:str=Query('',max_length=160),cursor:str|None=Query(None,max_leng
 @router.post('/agent-templates',response_model=TemplateDetail,status_code=201)
 def create(body:TemplateCreate,idempotency_key:str=Header(min_length=1,max_length=128),db=Depends(get_db),provider=Depends(providers)):
     return service.create_template(db,body,WORKSPACE_ACTOR_ID,idempotency_key,provider)
+
+@router.get('/agent-template-matcher',response_model=TemplateMatcherStatus)
+def matcher_status(request:Request):
+    return DeepSeekTemplateMatcher(request.app.state.config).status()
+
+@router.post('/agent-templates/match',response_model=TemplateMatchResult)
+def match_template(body:TemplateMatchRequest,request:Request,db=Depends(get_db)):
+    matcher=DeepSeekTemplateMatcher(request.app.state.config)
+    # Missing configuration is explicit even when there are no candidates.
+    if not matcher.status().configured:
+        return matcher.match(body.requirement_text,[])
+    result=matcher.match(body.requirement_text,published_candidates(db))
+    ensure_candidate_current(db,result)
+    return result
 
 @router.get('/agent-templates/{template_id}',response_model=TemplateDetail)
 def detail(template_id:str,db=Depends(get_db)):
