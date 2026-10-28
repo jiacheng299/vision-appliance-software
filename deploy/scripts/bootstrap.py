@@ -15,6 +15,17 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def dependency_commands(python: Path, npm: str, root: Path = ROOT):
+    """Locked application dependencies; the heavyweight exporter stays isolated."""
+    return [
+        ([python, '-m', 'pip', 'install', '-r', 'backend/requirements.txt'], root),
+        ([python, '-m', 'pip', 'install', '-r', 'backend/requirements-vision.txt'], root),
+        ([python, '-m', 'pip', 'check'], root),
+        ([npm, 'ci'], root / 'frontend'),
+        ([npm, 'run', 'build'], root / 'frontend'),
+    ]
+
+
 def install_component_archive(archive: Path, destination: Path, expected: str):
     with archive.open('rb') as file:
         if hashlib.file_digest(file, 'sha256').hexdigest() != expected:
@@ -119,12 +130,7 @@ def main():
         for scheme, value in urllib.request.getproxies().items():
             if scheme in ('http', 'https'):
                 environment.setdefault(scheme.upper() + '_PROXY', value)
-        commands = [
-            ([str(python), '-m', 'pip', 'install', '-r', 'backend/requirements.txt'], ROOT),
-            ([str(python), '-m', 'pip', 'check'], ROOT),
-            ([npm, 'ci'], ROOT / 'frontend'),
-            ([npm, 'run', 'build'], ROOT / 'frontend'),
-        ]
+        commands = dependency_commands(python, npm)
         for command, cwd in commands:
             subprocess.run(command, cwd=cwd, env=environment, check=True)
     if not args.skip_components:

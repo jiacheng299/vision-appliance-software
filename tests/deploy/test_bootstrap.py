@@ -3,9 +3,17 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
-from deploy.scripts.bootstrap import install_component_archive
+from deploy.scripts.bootstrap import dependency_commands, install_component_archive
 
 class ComponentArchiveTests(unittest.TestCase):
+    def test_application_setup_installs_locked_vision_runtime(self):
+        commands=dependency_commands(Path('python.exe'),'npm.cmd',Path('.'))
+        requirements=[command for command,_ in commands if '-r' in command]
+        self.assertIn([Path('python.exe'),'-m','pip','install','-r','backend/requirements.txt'],requirements)
+        self.assertIn([Path('python.exe'),'-m','pip','install','-r','backend/requirements-vision.txt'],requirements)
+        self.assertLess(commands.index((requirements[1],Path('.'))),
+                        next(i for i,(command,_) in enumerate(commands) if command[-2:]==['pip','check']))
+
     def test_verified_archive_only_installs_expected_tools(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder); archive=root/'ffmpeg.zip'
