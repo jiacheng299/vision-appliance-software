@@ -520,9 +520,12 @@ class LocalAgentServices(RegistryAgentServices):
         if page_sequence is not None: query = query.where(LocalEvent.sequence<page_sequence)
         if after_sequence is not None: query = query.where(LocalEvent.sequence>after_sequence)
         with self.sessions() as db:
-            query = query.order_by(LocalEvent.sequence.asc() if after_sequence is not None else LocalEvent.sequence.desc()).limit(limit+1)
-            rows = list(db.scalars(query))
+            # Freeze the stream boundary before reading rows. A concurrent event above
+            # this boundary remains eligible for the next request.
             maximum = db.scalar(select(func.max(LocalEvent.sequence)).where(LocalEvent.agent_id==agent_id,LocalEvent.actor_id==actor_id)) or 0
+            query = query.where(LocalEvent.sequence<=maximum).order_by(
+                LocalEvent.sequence.asc() if after_sequence is not None else LocalEvent.sequence.desc()).limit(limit+1)
+            rows = list(db.scalars(query))
             today = db.scalar(select(func.count()).select_from(base.where(LocalEvent.payload['occurred_at'].as_string()>=self._today()).subquery()))
             pending = db.scalar(select(func.count()).select_from(base.where(LocalEvent.payload['review_status'].as_string()=='unreviewed').subquery()))
         items = rows[:limit]

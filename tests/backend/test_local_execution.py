@@ -2,6 +2,8 @@
 import time
 from pathlib import Path
 from threading import Event
+import json
+import sqlite3
 
 import pytest
 from sqlalchemy import select
@@ -208,5 +210,35 @@ def test_shutdown_keeps_process_lock_until_blocked_inference_really_exits(runtim
             time.sleep(.02)
     else: pytest.fail('executor ownership lock was not released after worker exit')
     replacement.close()
+
+
+def test_stream_cursor_never_skips_event_inserted_between_snapshot_queries(runtime):
+    service, sessions, _, config = runtime
+    finish(service,service.submit(command(),'actor','seed-event'))
+    first_event = service.events('agent','actor',{'limit':100}).items[0]
+    engine = sessions.kw['bind']
+    from sqlalchemy import event as sqlalchemy_event
+    selects = 0
+    inserted = False
+    second = dict(service.event('agent',first_event.id,'actor').model_dump(mode='json'))
+    second.update(id='concurrent-event',occurred_at='2099-01-01T00:00:00Z',updated_at='2099-01-01T00:00:00Z')
+    def inject(_connection,_cursor,statement,_parameters,_context,_many):
+        nonlocal selects,inserted
+        if statement.lstrip().upper().startswith('SELECT') and 'local_events' in statement.lower():
+            selects += 1
+            if selects == 2 and not inserted:
+                inserted = True
+                with sqlite3.connect(config.var_root/'vision.db') as external:
+                    external.execute('INSERT INTO local_events (id,agent_id,actor_id,run_id,payload,evidence_key) VALUES (?,?,?,?,?,NULL)',
+                        ('concurrent-event','agent','actor',second['run_id'],json.dumps(second)))
+    sqlalchemy_event.listen(engine,'before_cursor_execute',inject)
+    try:
+        page = service.events('agent','actor',{'limit':100})
+    finally:
+        sqlalchemy_event.remove(engine,'before_cursor_execute',inject)
+    assert inserted
+    assert 'concurrent-event' not in {item.id for item in page.items}
+    later = service.events('agent','actor',{'limit':100},after=page.stream_cursor)
+    assert [item.id for item in later.items] == ['concurrent-event']
 
 
