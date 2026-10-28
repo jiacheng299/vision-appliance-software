@@ -178,3 +178,35 @@ def test_shutdown_and_interrupted_process_recovery_never_report_running(runtime)
     finally: second.close()
 
 
+def test_shutdown_keeps_process_lock_until_blocked_inference_really_exits(runtime):
+    service, sessions, reader, config = runtime
+    entered, release = Event(), Event()
+    class BlockingDetector:
+        def __init__(self,*args,**kwargs): pass
+        def detect(self,frame):
+            entered.set()
+            release.wait(15)
+            return []
+    service.detector_factory = BlockingDetector
+    reader.frames_to_read = [(0., [])]
+    service.submit(command(),'actor','blocked')
+    assert entered.wait(3)
+    service.close()
+    replacement = LocalAgentServices(config,sessions,Adapter(),detector_factory=Detector,reader_factory=Reader)
+    with pytest.raises(Error) as exc:
+        replacement.start()
+    assert exc.value.code == 'executor_already_running'
+    assert service.runs('agent','actor')[0].state == 'stopping'
+    release.set()
+    deadline = time.monotonic()+5
+    while time.monotonic()<deadline:
+        try:
+            replacement.start()
+            break
+        except Error as error:
+            assert error.code == 'executor_already_running'
+            time.sleep(.02)
+    else: pytest.fail('executor ownership lock was not released after worker exit')
+    replacement.close()
+
+

@@ -105,15 +105,37 @@ class LocalAgentServices(RegistryAgentServices):
     def close(self):
         with self.lock:
             if not self.started: return
+            if self.closing: return
             self.closing = True
             self.heartbeat_stop.set()
             for stop in self.stops.values(): stop.set()
             futures = list(self.futures.values())
             for future in futures: future.cancel()
-        wait(futures,timeout=6)
+            with self.writing() as db:
+                for row in db.scalars(select(LocalRun).where(LocalRun.state.in_(ACTIVE_STATES))):
+                    future = self.futures.get(row.id)
+                    invoked = bool(row.payload.get('started_at')) or bool(future and future.running())
+                    self._change(row,state='stopping' if invoked else 'canceled',
+                                 ended_at=None if invoked else now(),
+                                 message='应用正在关闭，本次监测已停止接收新画面。')
+                self._refresh_operations(db)
+        _, unfinished = wait(futures,timeout=6)
         self.heartbeat.join(timeout=2)
         self.pool.shutdown(wait=False,cancel_futures=True)
+        if unfinished:
+            # Threads inside native inference cannot be killed safely. Retain ownership
+            # until they actually return, preventing a replacement executor overlap.
+            Thread(target=self._finish_close,args=(futures,),daemon=True,name='presence-close').start()
+            return
+        self._finalize_close()
+
+    def _finish_close(self, futures):
+        wait(futures)
+        self._finalize_close()
+
+    def _finalize_close(self):
         with self.lock:
+            if not self.started: return
             with self.writing() as db:
                 for row in db.scalars(select(LocalRun).where(LocalRun.state.in_(ACTIVE_STATES))):
                     self._change(row,state='stopped' if row.payload.get('started_at') else 'canceled',ended_at=now(),message='应用已关闭，本次监测已停止。')
