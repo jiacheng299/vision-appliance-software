@@ -2,19 +2,20 @@ import { mount,flushPromises } from '@vue/test-utils'
 import { afterEach,beforeEach,expect,it,vi } from 'vitest'
 import { defineComponent,nextTick } from 'vue'
 import { templatesApi } from '../src/modules/agents/templatesApi'
-import { agentApi } from '../src/modules/agents/api'
-import { pool,catalog,template } from './fixtures/agentTemplates'
+import { agentApi,listAgentSources } from '../src/modules/agents/api'
+import { pool,catalog,template,source } from './fixtures/agentTemplates'
 import ParameterFields from '../src/modules/agents/ParameterFields.vue'
 import TemplateEditor from '../src/modules/agents/TemplateEditor.vue'
 import AgentTemplatesPage from '../src/modules/agents/AgentTemplatesPage.vue'
 vi.mock('vue-router',()=>({useRouter:()=>({push:vi.fn()}),onBeforeRouteLeave:vi.fn()}))
+vi.mock('../src/modules/agents/api',async()=>{const actual=await vi.importActual('../src/modules/agents/api');return{...actual,listAgentSources:vi.fn()}})
 vi.mock('naive-ui',async()=>{
   const {defineComponent}=await import('vue')
   const Box=defineComponent({props:['title'],template:'<div>{{title}}<slot/><slot name="footer"/></div>'})
   return {NDrawer:Box,NDrawerContent:Box,NButton:defineComponent({props:['disabled','loading'],template:'<button :disabled="disabled||loading"><slot/></button>'}),NInput:defineComponent({props:['value'],emits:['update:value'],template:'<input :value="value" @input="$emit(\'update:value\',$event.target.value)"/>'}),NSelect:defineComponent({name:'TestSelect',props:['value','options','multiple','disabled'],emits:['update:value'],template:'<div/>'}),NInputNumber:defineComponent({name:'TestNumber',props:['value','min','max'],emits:['update:value'],template:'<input type="number" :value="value"/>'}),NCheckbox:defineComponent({props:['checked'],template:'<span><slot/></span>'})}
 })
 const wrappers:ReturnType<typeof mount>[]=[]
-beforeEach(()=>{vi.spyOn(templatesApi,'parameters').mockResolvedValue({version:'1',items:pool,editable_by_user:false});vi.spyOn(agentApi,'catalog').mockResolvedValue(catalog)})
+beforeEach(()=>{vi.mocked(listAgentSources).mockResolvedValue([source,{...source,id:'source-2'}]);vi.spyOn(templatesApi,'parameters').mockResolvedValue({version:'1',items:pool,editable_by_user:false});vi.spyOn(agentApi,'catalog').mockResolvedValue(catalog)})
 afterEach(()=>{wrappers.splice(0).forEach(w=>w.unmount());vi.restoreAllMocks()})
 it('selects only developer-defined fields and preserves values when the selection changes',async()=>{
   const w=mount(ParameterFields,{props:{settings:[{key:'confidence_threshold',value:.8,required:true}],definitions:pool,selectable:true}});wrappers.push(w)
@@ -50,4 +51,24 @@ it('shows template cards with task and unique source totals rather than individu
   expect(w.findAll('.template-card')).toHaveLength(1)
   expect(w.findAll('.template-counts strong').map(e=>e.text())).toEqual(['3','2'])
   expect(w.text()).toContain('每张卡片代表一个业务模板')
+})
+it('optionally saves a template default video without requiring a source for all templates',async()=>{
+  const create=vi.spyOn(templatesApi,'create').mockResolvedValue(template())
+  const w=mount(TemplateEditor,{global:{stubs:{RegionEditor:true,MediaPlayer:true}}});wrappers.push(w);await flushPromises()
+  await w.get('[aria-label="模板名称"]').setValue('默认录像模板')
+  const selector=w.findAllComponents({name:'TestSelect'}).find(s=>s.attributes('aria-label')==='模板默认视频源')
+  expect(selector,'optional default source selector').toBeDefined()
+  selector!.vm.$emit('update:value','source-1');await nextTick()
+  await w.findAll('button').find(b=>b.text()==='保存草稿')!.trigger('click');await flushPromises()
+  expect(create.mock.calls[0]![0].config).toEqual(expect.objectContaining({default_source:{source_id:'source-1',regions:[],start_media_ms:null,end_media_ms:null}}))
+})
+it.each(['source-2',null])('clears old regions and range when changing template default video to %s',async(id)=>{
+  const row=template();Object.assign(row.latest_revision.config,{default_source:{source_id:'source-1',regions:[{id:'roi',name:'区域',points:[[0,0],[1,0],[1,1]]}],start_media_ms:1000,end_media_ms:5000}})
+  const save=vi.spyOn(templatesApi,'save').mockResolvedValue(row)
+  const w=mount(TemplateEditor,{props:{row},global:{stubs:{RegionEditor:true,MediaPlayer:true}}});wrappers.push(w);await flushPromises()
+  const selector=w.findAllComponents({name:'TestSelect'}).find(s=>s.attributes('aria-label')==='模板默认视频源')
+  expect(selector,'optional default source selector').toBeDefined()
+  selector!.vm.$emit('update:value',id);await nextTick()
+  await w.findAll('button').find(b=>b.text()==='保存草稿')!.trigger('click');await flushPromises()
+  expect(save.mock.calls[0]![1].config).toEqual(expect.objectContaining({default_source:id?{source_id:id,regions:[],start_media_ms:null,end_media_ms:null}:null}))
 })
