@@ -45,14 +45,17 @@ describe('persisted absence alert presentation', () => {
     await flushPromises()
 
     expect(wrapper.get('.run-player-surface').classes()).toContain('alert-active')
+    expect(wrapper.get('.run-frame').classes()).toContain('alert-active')
     expect(wrapper.get('[role="alert"]').text()).toBe('人员缺岗')
     expect(load).toHaveBeenCalledTimes(1)
 
     await wrapper.setProps({ alertActive: false })
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(wrapper.get('.run-player-surface').classes()).not.toContain('alert-active')
+    expect(wrapper.get('.run-frame').classes()).not.toContain('alert-active')
     expect(load).toHaveBeenCalledTimes(1)
     await wrapper.setProps({ alertActive: true })
+    expect(wrapper.get('.run-frame').classes()).toContain('alert-active')
     expect(wrapper.get('[role="alert"]').text()).toBe('人员缺岗')
     expect(load).toHaveBeenCalledTimes(1)
     wrapper.unmount()

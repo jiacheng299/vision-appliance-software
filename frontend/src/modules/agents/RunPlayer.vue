@@ -87,7 +87,7 @@ onUnmounted(()=>{generation++;clearTimeout(timer);clearInterval(observationTimer
 <template>
   <div class="run-player">
     <div ref="surface" class="run-player-surface" :class="{'alert-active':alertActive}">
-      <div class="run-frame" :style="{aspectRatio:ratio,'--frame-ratio':ratio}">
+      <div class="run-frame" :class="{'alert-active':alertActive}" :style="{aspectRatio:ratio,'--frame-ratio':ratio}">
         <div v-if="alertActive" class="run-alert-banner" role="alert">{{alertLabel}}</div>
         <template v-if="session?.protocol==='mock'"><div class="mock-room"><span class="mock-room-label">模拟场景示意图 · 非真实{{mediaKind==='image'?'截图':'视频'}}</span><div class="mock-floor"/><span class="mock-person"/></div></template>
         <img v-else-if="session&&mediaKind==='image'&&url" :src="url" alt="事件证据截图" @error="error='证据图片暂时无法读取，请重试。'"/>
