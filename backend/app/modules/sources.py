@@ -52,7 +52,11 @@ def resolve_execution_input(db, config, source_id, gateway):
             raise Error(422, 'source_media_missing', '录像文件不可用，请重新上传。')
         locator = str(path)
     else:
-        if source.status != 'online':
+        # A manual health probe is not a transport outage. Keep a previously
+        # decoded camera readable while the gateway still confirms live input.
+        probing_verified = (source.status == 'connecting' and source.observed_at
+                            and source.width and source.height)
+        if source.status != 'online' and not probing_verified:
             raise Error(422, 'source_not_ready', '摄像头尚未验证在线，请先测试连接。')
         path = gateway.ensure_published(source, values_for(db, 'security')['camera_allowed_networks'])
         locator = f'rtsp://127.0.0.1:{config.media_gateway_rtsp_port}/{path}'

@@ -89,6 +89,12 @@ npm run dev
 
 ## 验证命令
 
+实时任务稳定性验证：先在网页启动任务，再运行以下命令（替换任务 ID）。脚本固定跟踪同一运行至少十分钟，检查推理观测是否更新、实际 HLS 分片是否可读，并在运行中触发两次摄像头连接检测；失败即停止，不会重启任务掩盖异常。结果写入本机 `var/`，不提交用户运行数据。
+
+```powershell
+python deploy/scripts/soak_monitoring.py --agent <任务ID> --seconds 600 --output var/monitoring-soak.json
+```
+
 ```powershell
 $env:PYTHONPATH="$PWD\backend;$PWD"
 .\.venv\Scripts\python.exe -m pytest tests/backend -q

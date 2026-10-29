@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -210,7 +211,11 @@ class LocalAgentServices(RegistryAgentServices):
                   'width':source.width,'height':source.height,'duration_ms':source.duration_ms}
         if identity is not None:
             fields['row_version'] = snapshot.row_version
-        if SourceSnapshot(**fields) != snapshot or (identity is not None and self._source_identity(db,snapshot.id)!=identity):
+        changed = [key for key,value in fields.items() if value!=getattr(snapshot,key)]
+        identity_changed = identity is not None and self._source_identity(db,snapshot.id)!=identity
+        if changed or identity_changed:
+            logging.getLogger(__name__).warning('Source check rejected id=%s fields=%s identity_changed=%s identity_pinned=%s',
+                snapshot.id,changed,identity_changed,identity is not None)
             raise Error(409,'source_changed','视频源已变化，请重新验证任务。')
         return source
 
@@ -411,7 +416,7 @@ class LocalAgentServices(RegistryAgentServices):
                                 self._refresh_operations(db)
                             observed, failures, last_timestamp = True, 0, timestamp
                             if (observation.transition or observation.alarm) and not stop.is_set():
-                                self._record_transition_event(run,observation,timestamp,frame,boxes,binding,stop)
+                                self._record_transition_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
                     if stop.is_set(): break
                     if run.source_kind=='file':
                         if not observed or last_timestamp is None or (binding.end_media_ms is not None
@@ -479,7 +484,7 @@ class LocalAgentServices(RegistryAgentServices):
             temporary.unlink(missing_ok=True)
         return key
 
-    def _record_transition_event(self, run, observation, timestamp, frame, boxes, binding, stop):
+    def _record_transition_event(self, run, observation, timestamp, frame, boxes, binding, stop, source_identity=None):
         restored = observation.transition == 'restored'
         duration = observation.present_seconds if restored else observation.absent_seconds
         key = None
@@ -493,7 +498,7 @@ class LocalAgentServices(RegistryAgentServices):
                 if stop.is_set() or row.state!='running':
                     if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
                     return
-                self._checked_source(db,run.source_snapshot)
+                self._checked_source(db,run.source_snapshot,source_identity)
                 stamp, identifier, evidence_id = now(), uid(), uid()
                 if observation.transition == 'absence':
                     self._change(row,alert_state='absence',alert_started_at=stamp)

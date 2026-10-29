@@ -235,6 +235,45 @@ def test_runtime_source_check_ignores_probe_versions_but_checks_real_input(runti
         assert service._checked_source(db,command().source_snapshots[0],identity).id=='video'
 
 
+def test_running_executor_survives_source_probe_version_update(runtime):
+    service,sessions,reader,_=runtime
+    def frames(self):
+        yield 0.,[]
+        with sessions() as db:
+            source=db.get(Source,'video')
+            source.row_version+=1
+            source.observed_at='2026-10-29T00:00:00Z'
+            db.commit()
+        # Exercise the periodic check in _execute, not only the helper directly.
+        time.sleep(2.1)
+        yield 15.,[]
+        yield 30.,[]
+        yield 45.,[]
+    reader.frames=frames
+    run=finish(service,service.submit(command(),'actor','probe-during-execution'))
+    assert run.state=='completed',(run.error_code,run.message)
+    assert run.error_code is None
+    assert len(service.events('agent','actor',{'limit':100}).items)==1
+
+
+def test_verified_camera_remains_readable_during_connection_probe(runtime):
+    from app.modules.sources import resolve_execution_input
+    service,sessions,_,config=runtime
+    class Gateway:
+        def ensure_published(self,source,networks):
+            assert source.id=='video'
+            return 'plaza'
+    with sessions() as db:
+        source=db.get(Source,'video')
+        source.kind='camera';source.status='connecting';source.observed_at='2026-10-29T00:00:00Z'
+        db.commit()
+        _,locator=resolve_execution_input(db,config,'video',Gateway())
+        assert locator.endswith('/plaza')
+        source.observed_at=None
+        db.commit()
+        with pytest.raises(Error):resolve_execution_input(db,config,'video',Gateway())
+
+
 @pytest.mark.parametrize('field,value',[
     ('address','rtsp://127.0.0.1:8554/other'),('credentials','changed-secret'),
     ('width',1280),('media_key','different.mp4'),('archived',True),
