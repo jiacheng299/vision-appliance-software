@@ -31,6 +31,48 @@ const run = (alert_state: Run['alert_state']): Run => ({
 } as Run)
 
 describe('persisted absence alert presentation', () => {
+  it('automatically opens a new live player after a real media failure',async()=>{
+    vi.useFakeTimers()
+    vi.spyOn(HTMLMediaElement.prototype,'canPlayType').mockReturnValue('probably')
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{})
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{})
+    vi.spyOn(agentApi,'releasePlayback').mockResolvedValue({} as never)
+    const load=vi.fn(async()=>({...playback(),protocol:'hls' as const,playback_url:'/api/v1/sources/camera/live/index.m3u8',regions:[],targets:[]}))
+    const wrapper=mount(RunPlayer,{props:{identity:'live',agentId:'agent-1',load,isLive:true}})
+    try{
+      await flushPromises()
+      const old=wrapper.get('video').element
+      Object.defineProperty(old,'error',{configurable:true,value:{code:2}})
+      await wrapper.get('video').trigger('error')
+      expect(wrapper.text()).toContain('正在自动重连')
+      await vi.advanceTimersByTimeAsync(1000);await flushPromises()
+      expect(wrapper.get('video').element).not.toBe(old)
+      await wrapper.get('video').trigger('playing')
+      expect(wrapper.find('.error-banner').exists()).toBe(false)
+    }finally{wrapper.unmount();vi.useRealTimers();vi.restoreAllMocks()}
+  })
+  it('ignores an old media error and clears a real error after playback recovers', async () => {
+    vi.spyOn(HTMLMediaElement.prototype,'canPlayType').mockReturnValue('probably')
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{})
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{})
+    vi.spyOn(agentApi,'releasePlayback').mockResolvedValue({} as never)
+    const load=vi.fn(async()=>({...playback(),protocol:'hls' as const,playback_url:'/api/v1/sources/camera/live/index.m3u8',regions:[],targets:[]}))
+    const wrapper=mount(RunPlayer,{props:{identity:'old',agentId:'agent-1',load}})
+    try{
+      await flushPromises()
+      await wrapper.get('video').trigger('error')
+      expect(wrapper.text()).not.toContain('视频无法播放或已断流')
+      const old=wrapper.get('video').element
+      await wrapper.setProps({identity:'new'})
+      await flushPromises()
+      expect(wrapper.get('video').element).not.toBe(old)
+      Object.defineProperty(wrapper.get('video').element,'error',{configurable:true,value:{code:4}})
+      await wrapper.get('video').trigger('error')
+      expect(wrapper.text()).toContain('视频无法播放或已断流')
+      await wrapper.get('video').trigger('playing')
+      expect(wrapper.text()).not.toContain('视频无法播放或已断流')
+    }finally{wrapper.unmount();vi.restoreAllMocks()}
+  })
   it('updates live targets without replacing the playing surface', async () => {
     vi.useFakeTimers()
     vi.spyOn(agentApi,'releasePlayback').mockResolvedValue({} as never)

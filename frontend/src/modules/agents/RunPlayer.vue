@@ -11,6 +11,25 @@ const emit=defineEmits<{position:[mediaMs:number]}>()
 const session=ref<Playback|null>(null),error=ref(''),loading=ref(false),video=ref<HTMLVideoElement|null>(null),surface=ref<HTMLElement|null>(null),ratio=ref(16/9)
 let generation=0,timer:ReturnType<typeof setTimeout>|undefined,hls:Hls|null=null,peer:RTCPeerConnection|null=null,whepUrl:string|null=null,controller:AbortController|null=null
 let targetTimer:ReturnType<typeof setTimeout>|undefined
+const mediaVersion=ref(0)
+let recoveryTimer:ReturnType<typeof setTimeout>|undefined,recoveryAttempts=0
+function mediaFailure(message:string,current:number){
+  if(current!==generation)return
+  error.value=message
+  if(!props.isLive||recoveryTimer||recoveryAttempts>=3)return
+  recoveryAttempts++
+  error.value=`视频暂时中断，正在自动重连（${recoveryAttempts}/3）…`
+  recoveryTimer=setTimeout(()=>{recoveryTimer=undefined;if(current===generation)void refresh()},1000*recoveryAttempts)
+}
+function mediaError(event:Event){
+  const player=event.target as HTMLVideoElement
+  if(player!==video.value||!player.error||player.error.code===1)return
+  mediaFailure('视频无法播放或已断流，请重试。',generation)
+}
+function playing(event:Event){
+  if(event.target!==video.value)return
+  error.value='';recoveryAttempts=0;clearTimeout(recoveryTimer);recoveryTimer=undefined
+}
 const polygon=(points:number[][])=>points.map(p=>`${p[0]! *1000},${p[1]! *1000}`).join(' ')
 function localUrl(value:string|null|undefined):string|null {
   if(!value)return null
@@ -66,12 +85,13 @@ async function attach(current:number){
     if(current!==generation)return
     if(!Hls.isSupported()){error.value='当前浏览器无法播放此 HLS 流，请使用支持媒体扩展的浏览器。';return}
     hls=new Hls({xhrSetup:(request,target)=>{if(!localUrl(target))throw new Error('UNSAFE_MEDIA_URL');request.withCredentials=true}})
-    hls.on(Hls.Events.ERROR,(_event,data)=>{if(data.fatal&&current===generation)error.value='视频流已中断，请重试播放。报警和配置仍可独立查看。'})
+    hls.on(Hls.Events.ERROR,(_event,data)=>{if(data.fatal)mediaFailure('视频流已中断，请重试播放。报警和配置仍可独立查看。',current)})
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{if(current===generation&&props.isLive)void player.play().catch(()=>{})})
     hls.loadSource(url.value);hls.attachMedia(player)
   }else player.src=url.value
 }
 async function refresh(){
-  const request=++generation;clearTimeout(timer);clearTimeout(targetTimer);disposeMedia();loading.value=true;error.value=''
+  const request=++generation;clearTimeout(timer);clearTimeout(targetTimer);clearTimeout(recoveryTimer);recoveryTimer=undefined;disposeMedia();mediaVersion.value=request;loading.value=true;error.value=''
   const old=session.value;session.value=null;release(old)
   if(!props.identity){loading.value=false;return}
   try{
@@ -96,9 +116,9 @@ function screenshot(){
     canvas.toBlob(blob=>{if(!blob)return;const target=URL.createObjectURL(blob),link=document.createElement('a');link.href=target;link.download=`preview-${Date.now()}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(target),1000)},'image/png')
   }catch{error.value='此画面暂不允许浏览器截图，请通过事件证据服务查看。'}
 }
-watch(()=>props.identity,()=>void refresh(),{immediate:true})
+watch(()=>props.identity,()=>{recoveryAttempts=0;void refresh()},{immediate:true})
 watch(()=>props.isLive,value=>{clearTimeout(targetTimer);if(value&&session.value)targetTimer=setTimeout(()=>void updateTargets(generation),1000)})
-onUnmounted(()=>{generation++;clearTimeout(timer);clearTimeout(targetTimer);clearInterval(observationTimer);disposeMedia();release(session.value)})
+onUnmounted(()=>{generation++;clearTimeout(timer);clearTimeout(targetTimer);clearTimeout(recoveryTimer);clearInterval(observationTimer);disposeMedia();release(session.value)})
 </script>
 <template>
   <div class="run-player">
@@ -107,7 +127,7 @@ onUnmounted(()=>{generation++;clearTimeout(timer);clearTimeout(targetTimer);clea
         <div v-if="alertActive" class="run-alert-banner" role="alert">{{alertLabel}}</div>
         <template v-if="session?.protocol==='mock'"><div class="mock-room"><span class="mock-room-label">模拟场景示意图 · 非真实{{mediaKind==='image'?'截图':'视频'}}</span><div class="mock-floor"/><span class="mock-person"/></div></template>
         <img v-else-if="session&&mediaKind==='image'&&url" :src="url" alt="事件证据截图" @error="error='证据图片暂时无法读取，请重试。'"/>
-        <video v-else-if="session" ref="video" @timeupdate="position" controls playsinline :autoplay="isLive" muted @loadedmetadata="ratio=video?.videoWidth&&video?.videoHeight?video.videoWidth/video.videoHeight:16/9" @error="error='视频无法播放或已断流，请重试。'"/>
+        <video v-else-if="session" :key="mediaVersion" ref="video" @timeupdate="position" controls playsinline :autoplay="isLive" muted @playing="playing" @loadedmetadata="ratio=video?.videoWidth&&video?.videoHeight?video.videoWidth/video.videoHeight:16/9" @error="mediaError"/>
         <div v-else class="run-player-placeholder">{{loading?'正在申请受保护的播放会话…':'暂无可用画面'}}</div>
         <svg v-if="session" class="run-overlays" :class="{'alert-active':alertActive}" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="后端提供的监测区域与目标位置">
           <polygon v-for="region in session.regions" :key="region.id" :points="polygon(region.points)" class="roi-saved"/>
