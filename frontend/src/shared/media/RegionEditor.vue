@@ -7,14 +7,25 @@ type Region = components['schemas']['Region']
 import type { Source } from '../api/types'
 import { safeMediaUrl } from './url'
 import { nearPoint, regionError, type Point } from './regionGeometry'
+import MediaPlayer from './MediaPlayer.vue'
 const props = defineProps<{ regions: Region[]; source?: Source; disabled?: boolean; demo?:boolean }>()
 const emit = defineEmits<{ change: [regions: Region[]]; pending: [pending: boolean] }>()
 const points = ref<Point[]>([]), error = ref(''), closed=ref(false), notice=ref('')
+const player = ref<InstanceType<typeof MediaPlayer> | null>(null), liveFrame = ref('')
 watch(() => points.value.length, count => emit('pending', count > 0), { immediate: true })
 const thumbnail = computed(() => safeMediaUrl(props.source?.thumbnail_url ?? null))
+const background = computed(() => props.source?.kind === 'camera' ? liveFrame.value : thumbnail.value)
 const encoded = (values: number[][]) => values.map(p => `${p[0]! * 1000},${p[1]! * 1000}`).join(' ')
+watch(() => props.source?.id, () => { liveFrame.value='';notice.value='' })
+function selectLiveFrame(){
+  if(props.disabled)return
+  const frame=player.value?.captureFrame()
+  if(!frame){notice.value='直播画面尚未就绪，请等待播放后重试。';return}
+  liveFrame.value=frame;notice.value='已选取当前直播画面，可以在下方绘制区域。'
+}
+function selectInitialLiveFrame(){if(!liveFrame.value)selectLiveFrame()}
 function add(event: MouseEvent) {
-  if (props.disabled || (!thumbnail.value&&!props.demo)) return
+  if (props.disabled || (!background.value&&!props.demo)) return
   if (closed.value) { notice.value='区域已闭合，请保存区域，或撤销闭合后继续调整。'; return }
   const rect = event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : null
   if (!rect) return
@@ -46,8 +57,9 @@ function finish() {
 <template>
   <div class="roi-editor">
     <p class="muted">依次点击至少三个边界点，再点击绿色起点附近闭合，最后保存区域。相邻点约10像素内自动合并，边界不能交叉。</p>
-    <div v-if="thumbnail||demo" class="roi-image" :style="{ aspectRatio: source?.width && source?.height ? `${source.width}/${source.height}` : '16/9' }">
-      <img v-if="thumbnail" :src="thumbnail" alt="视频源缩略图，用于绘制监测区域"/><span v-else class="mock-room-label">模拟画面，仅用于练习划区</span>
+    <div v-if="source?.kind==='camera'" class="roi-live-picker"><MediaPlayer ref="player" :source="source" auto-start @frame-ready="selectInitialLiveFrame"/><NButton size="small" :disabled="disabled" @click="selectLiveFrame">{{liveFrame?'重新选取当前帧':'选取当前帧'}}</NButton></div>
+    <div v-if="background||demo" class="roi-image" :style="{ aspectRatio: source?.width && source?.height ? `${source.width}/${source.height}` : '16/9' }">
+      <img v-if="background" :src="background" :alt="source?.kind==='camera'?'直播当前帧，用于绘制监测区域':'视频源缩略图，用于绘制监测区域'"/><span v-else class="mock-room-label">模拟画面，仅用于练习划区</span>
       <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" role="img" aria-label="点击画面绘制多边形区域" @click="add">
         <polygon v-for="region in regions" :key="region.id" :points="encoded(region.points)" class="roi-saved"/>
         <polygon v-if="closed" :points="encoded(points)" class="roi-pending roi-closed"/>
@@ -56,7 +68,7 @@ function finish() {
         <circle v-if="points.length" :cx="points[0]![0]*1000" :cy="points[0]![1]*1000" r="12" fill="#39cc98" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke"/>
       </svg>
     </div>
-    <p v-else class="notice">该视频源还没有可用缩略图。请先在视频源管理中导入并处理录像，再绘制区域。</p>
+    <p v-else class="notice">{{source?.kind==='camera'?'正在获取直播画面，请等待播放后选取当前帧。':'该视频源还没有可用缩略图。请先在视频源管理中导入并处理录像，再绘制区域。'}}</p>
     <div class="agent-actions"><NButton size="small" :disabled="disabled || !points.length" @click="undo">{{closed?'撤销闭合':'撤销点'}}</NButton><NButton size="small" :disabled="disabled || !points.length || regions.length >= 32" @click="finish">保存区域</NButton><span class="muted">已选 {{points.length}} 个点 · {{closed?'已闭合':'未闭合'}}</span></div>
     <p v-if="notice" class="roi-feedback" role="status">{{notice}}</p>
     <p v-if="error" role="alert">{{error}}</p>
@@ -65,5 +77,5 @@ function finish() {
 </template>
 
 <style scoped>
-.roi-editor{font-size:12px}.roi-image{position:relative;margin-top:10px;background:#14243b}.roi-image img,.roi-image svg{position:absolute;width:100%;height:100%;inset:0}.roi-image img{object-fit:fill}.roi-image svg{cursor:crosshair}.roi-saved{fill:#2367ed44;stroke:#7daeff;stroke-width:4;vector-effect:non-scaling-stroke}.roi-pending{fill:none;stroke:#ffce6b;stroke-width:3;vector-effect:non-scaling-stroke}.roi-closed{fill:#ffce6b22}.roi-feedback{color:#2c8a68}.agent-region-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:8px;background:#f4f7fb}.agent-actions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}.mock-room-label{position:absolute;top:12px;left:12px;color:#ffdf89;font-size:11px}.muted{color:#78859a}.notice{background:#f0f5ff;padding:12px}
+.roi-editor{font-size:12px}.roi-live-picker{display:grid;gap:8px;margin-top:10px}.roi-live-picker button{justify-self:start}.roi-image{position:relative;margin-top:10px;background:#14243b}.roi-image img,.roi-image svg{position:absolute;width:100%;height:100%;inset:0}.roi-image img{object-fit:fill}.roi-image svg{cursor:crosshair}.roi-saved{fill:#2367ed44;stroke:#7daeff;stroke-width:4;vector-effect:non-scaling-stroke}.roi-pending{fill:none;stroke:#ffce6b;stroke-width:3;vector-effect:non-scaling-stroke}.roi-closed{fill:#ffce6b22}.roi-feedback{color:#2c8a68}.agent-region-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:8px;background:#f4f7fb}.agent-actions{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}.mock-room-label{position:absolute;top:12px;left:12px;color:#ffdf89;font-size:11px}.muted{color:#78859a}.notice{background:#f0f5ff;padding:12px}
 </style>

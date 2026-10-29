@@ -8,6 +8,7 @@ import { safeMediaUrl } from './url'
 import type { Source } from '../api/types'
 import Icon from '../ui/Icon.vue'
 const props = defineProps<{ source: Source; autoStart?: boolean; loop?: boolean }>()
+const emit = defineEmits<{ 'frame-ready': [] }>()
 const playback = ref<string | null>(null), error = ref(''), loading = ref(false)
 const video = ref<HTMLVideoElement | null>(null), live = ref(false)
 let generation = 0
@@ -49,6 +50,23 @@ function mediaError(event: Event) {
     fail('浏览器无法播放当前媒体，请检查编码或媒体服务。', generation)
   }
 }
+
+function captureFrame() {
+  const element = video.value
+  if (!element?.videoWidth || !element.videoHeight) return null
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = element.videoWidth
+    canvas.height = element.videoHeight
+    const context = canvas.getContext('2d')
+    if (!context) return null
+    context.drawImage(element, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', .9)
+  } catch {
+    return null
+  }
+}
+defineExpose({ captureFrame })
 
 async function preview() {
   reset()
@@ -104,7 +122,7 @@ async function preview() {
 </script>
 <template>
   <div class="media-player">
-    <video v-if="playback" :key="generation" ref="video" controls preload="metadata" playsinline :muted="live || autoStart" :autoplay="live || autoStart" :loop="loop" @error="mediaError" />
+    <video v-if="playback" :key="generation" ref="video" controls preload="metadata" playsinline :muted="live || autoStart" :autoplay="live || autoStart" :loop="loop" @error="mediaError" @playing="emit('frame-ready')" />
     <template v-else>
       <Icon name="video" />
       <span>{{ error || (source.kind === 'camera' ? '点击预览以打开视频源' : '视频已导入，可打开预览') }}</span>

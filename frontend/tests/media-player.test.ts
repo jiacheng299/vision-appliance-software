@@ -44,6 +44,24 @@ afterEach(() => {
 })
 
 describe('media preview', () => {
+  it('captures the decoded current frame for region drawing', async () => {
+    vi.mocked(HTMLMediaElement.prototype.canPlayType).mockReturnValue('maybe')
+    const drawImage = vi.fn()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D)
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,current-frame')
+    const wrapper = open()
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    const video = wrapper.get('video').element
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 960 })
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 540 })
+
+    const frame = (wrapper.vm as unknown as { captureFrame: () => string | null }).captureFrame()
+
+    expect(frame).toBe('data:image/jpeg;base64,current-frame')
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 960, 540)
+  })
+
   it('does not attach a delayed HLS module to a source that has been replaced', async () => {
     let finishImport!: () => void
     hls.importGate = new Promise(resolve => { finishImport = resolve })
