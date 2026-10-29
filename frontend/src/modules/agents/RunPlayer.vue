@@ -10,6 +10,7 @@ const props=withDefaults(defineProps<{identity:string;agentId:string;load:()=>Pr
 const emit=defineEmits<{position:[mediaMs:number]}>()
 const session=ref<Playback|null>(null),error=ref(''),loading=ref(false),video=ref<HTMLVideoElement|null>(null),surface=ref<HTMLElement|null>(null),ratio=ref(16/9)
 let generation=0,timer:ReturnType<typeof setTimeout>|undefined,hls:Hls|null=null,peer:RTCPeerConnection|null=null,whepUrl:string|null=null,controller:AbortController|null=null
+let targetTimer:ReturnType<typeof setTimeout>|undefined
 const polygon=(points:number[][])=>points.map(p=>`${p[0]! *1000},${p[1]! *1000}`).join(' ')
 function localUrl(value:string|null|undefined):string|null {
   if(!value)return null
@@ -18,7 +19,20 @@ function localUrl(value:string|null|undefined):string|null {
 const url=computed(()=>localUrl(session.value?.playback_url))
 const observedClock=ref(Date.now())
 const observationTimer=setInterval(()=>{observedClock.value=Date.now()},1000)
-const targetsFresh=computed(()=>session.value?.data_origin==='mock'||(session.value?.observed_at&&observedClock.value-Date.parse(session.value.observed_at)<30000))
+const targetsFresh=computed(()=>session.value?.data_origin==='mock'||(session.value?.observed_at&&observedClock.value-Date.parse(session.value.observed_at)<3000))
+async function updateTargets(current:number){
+  if(current!==generation||!props.isLive||!session.value)return
+  try{
+    const value=await props.load()
+    try{
+      if(current!==generation||!props.isLive||!session.value)return
+      if(value.agent_id!==props.agentId||value.run_id!==session.value.run_id)return
+      // Update only overlay metadata; retain the active player and media session.
+      session.value={...session.value,regions:value.regions,targets:value.targets,observed_at:value.observed_at}
+    }finally{if(value.id!==session.value?.id)release(value)}
+  }catch{if(current===generation&&session.value)session.value={...session.value,targets:[]}}
+  finally{if(current===generation&&props.isLive)targetTimer=setTimeout(()=>void updateTargets(current),1000)}
+}
 function position(){if(session.value&&!loading.value&&video.value)emit('position',Math.round(video.value.currentTime*1000)+session.value.media_origin_ms)}
 function disposeMedia(){
   hls?.destroy();hls=null;peer?.close();peer=null;controller?.abort();controller=null
@@ -57,7 +71,7 @@ async function attach(current:number){
   }else player.src=url.value
 }
 async function refresh(){
-  const request=++generation;clearTimeout(timer);disposeMedia();loading.value=true;error.value=''
+  const request=++generation;clearTimeout(timer);clearTimeout(targetTimer);disposeMedia();loading.value=true;error.value=''
   const old=session.value;session.value=null;release(old)
   if(!props.identity){loading.value=false;return}
   try{
@@ -69,6 +83,7 @@ async function refresh(){
     const expires=Date.parse(value.expires_at)
     if(!Number.isFinite(expires)||expires<=Date.now())throw new Error('SESSION_EXPIRED')
     timer=setTimeout(()=>void refresh(),Math.max(1000,expires-Date.now()-30000))
+    if(props.isLive)targetTimer=setTimeout(()=>void updateTargets(request),1000)
   }catch(e){if(request===generation){disposeMedia();error.value=(e as {response?:unknown}).response?agentError(e):'无法建立有效的播放会话，请重试或检查视频网关。'}}
   finally{if(request===generation)loading.value=false}
 }
@@ -82,7 +97,8 @@ function screenshot(){
   }catch{error.value='此画面暂不允许浏览器截图，请通过事件证据服务查看。'}
 }
 watch(()=>props.identity,()=>void refresh(),{immediate:true})
-onUnmounted(()=>{generation++;clearTimeout(timer);clearInterval(observationTimer);disposeMedia();release(session.value)})
+watch(()=>props.isLive,value=>{clearTimeout(targetTimer);if(value&&session.value)targetTimer=setTimeout(()=>void updateTargets(generation),1000)})
+onUnmounted(()=>{generation++;clearTimeout(timer);clearTimeout(targetTimer);clearInterval(observationTimer);disposeMedia();release(session.value)})
 </script>
 <template>
   <div class="run-player">

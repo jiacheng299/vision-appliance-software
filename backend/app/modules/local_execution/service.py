@@ -385,7 +385,7 @@ class LocalAgentServices(RegistryAgentServices):
                             if time.monotonic()-last_source_check>=2:
                                 with self.sessions() as db: self._checked_source(db,run.source_snapshot)
                                 last_source_check = time.monotonic()
-                            boxes = detector.detect(frame)
+                            boxes = rule.targets_in_regions(detector.detect(frame))
                             if stop.is_set(): break
                             observation = rule.observe(timestamp,boxes)
                             stamp = now()

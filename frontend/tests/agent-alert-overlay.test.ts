@@ -31,6 +31,25 @@ const run = (alert_state: Run['alert_state']): Run => ({
 } as Run)
 
 describe('persisted absence alert presentation', () => {
+  it('updates live targets without replacing the playing surface', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(agentApi,'releasePlayback').mockResolvedValue({} as never)
+    let x=.1
+    const load=vi.fn(async()=>({...playback(),observed_at:new Date().toISOString(),regions:[],
+      targets:[{id:'person',label:'person',x,y:.2,width:.1,height:.2}]}))
+    const wrapper=mount(RunPlayer,{props:{identity:'run-live',agentId:'agent-1',load,isLive:true}})
+    try{
+      await flushPromises()
+      const surface=wrapper.get('.run-frame').element
+      expect(wrapper.get('rect').attributes('x')).toBe('100')
+      x=.6
+      await vi.advanceTimersByTimeAsync(1000)
+      await flushPromises()
+      expect(wrapper.get('rect').attributes('x')).toBe('600')
+      expect(wrapper.get('.run-frame').element).toBe(surface)
+      expect(load).toHaveBeenCalledTimes(2)
+    }finally{wrapper.unmount();vi.useRealTimers()}
+  })
   it('offers a failed run retry with its original revision and error reason', async () => {
     const failed = {...run('normal'),state:'failed',message:'视频解码工具不可用',error_code:'dependency_unavailable'} as Run
     const wrapper = mount(MonitorPanel, {props:{

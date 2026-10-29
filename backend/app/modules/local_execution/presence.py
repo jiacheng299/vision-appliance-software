@@ -44,6 +44,12 @@ class PresenceRule:
         self.absent_since = self.present_since = self.last_observed = None
         self.last_alarm = None
 
+    def targets_in_regions(self, boxes):
+        # Use the same foot-point rule for counting, overlays and evidence.
+        return [box for box in boxes if box.get('label')=='person' and any(
+            contains(polygon,(box['x']+box['width']/2,box['y']+box['height']))
+            for polygon in self.regions)]
+
     def observe(self, timestamp, boxes):
         if not math.isfinite(timestamp) or timestamp<0:
             raise ValueError('Invalid observation time')
@@ -51,8 +57,7 @@ class PresenceRule:
             self.mark_unavailable()
         self.last_observed = timestamp
         # Feet are a stable ground-plane reference. Overlapping regions never double-count a person.
-        count = sum(box.get('label')=='person' and any(contains(polygon,
-            (box['x']+box['width']/2,box['y']+box['height'])) for polygon in self.regions) for box in boxes)
+        count = len(self.targets_in_regions(boxes))
         present = count>=self.min_count
         if self.state == 'normal':
             self.present_since = None

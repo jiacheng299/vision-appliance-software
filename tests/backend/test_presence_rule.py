@@ -3,6 +3,16 @@ import pytest
 REGIONS=[[(0,0),(1,0),(1,1),(0,1)]]
 PERSON={'label':'person','x':.2,'y':.2,'width':.2,'height':.5,'confidence':.9}
 
+
+def test_visible_targets_match_people_counted_inside_roi():
+    from app.modules.local_execution.presence import PresenceRule
+    detector=PresenceRule([[(0,0),(.5,0),(.5,1),(0,1)]])
+    outside={**PERSON,'x':.7}
+    nonperson={**PERSON,'label':'car'}
+    boxes=[PERSON,outside,nonperson]
+    assert detector.targets_in_regions(boxes)==[PERSON]
+    assert detector.observe(0,boxes).count==1
+
 def rule(**kwargs):
     from app.modules.local_execution.presence import PresenceRule
     return PresenceRule(REGIONS,**kwargs)
