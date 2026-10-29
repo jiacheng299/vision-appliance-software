@@ -399,8 +399,8 @@ class LocalAgentServices(RegistryAgentServices):
                                     'targets':[{key:box[key] for key in ('label','x','y','width','height')}|{'id':f'person-{i}'} for i,box in enumerate(boxes)]}
                                 self._refresh_operations(db)
                             observed, failures, last_timestamp = True, 0, timestamp
-                            if observation.alarm and not stop.is_set():
-                                self._record_event(run,observation,timestamp,frame,boxes,binding,stop)
+                            if (observation.transition or observation.alarm) and not stop.is_set():
+                                self._record_transition_event(run,observation,timestamp,frame,boxes,binding,stop)
                     if stop.is_set(): break
                     if run.source_kind=='file':
                         if not observed or last_timestamp is None or (binding.end_media_ms is not None
@@ -436,7 +436,7 @@ class LocalAgentServices(RegistryAgentServices):
                     'previous_run_not_stopped','model_unavailable','model_file_changed','model_not_found'}
                 self._finish(identifier,'failed','视频读取或人员检测失败，请检查视频源与模型后重试。',code if code in allowed else 'local_inference_failed')
 
-    def _save_evidence(self, run, frame, boxes, binding, count):
+    def _save_evidence(self, run, frame, boxes, binding, count, restored=False):
         import cv2
         import numpy as np
         image = frame.copy()
@@ -447,7 +447,9 @@ class LocalAgentServices(RegistryAgentServices):
         for box in boxes:
             x,y,w,h = (box[k] for k in ('x','y','width','height'))
             cv2.rectangle(image,(round(x*width),round(y*height)),(round((x+w)*width),round((y+h)*height)),(0,200,0),2)
-        cv2.putText(image,f'PERSON ABSENCE | count={count}',(12,25),cv2.FONT_HERSHEY_SIMPLEX,.55,(0,0,255),2)
+        label = 'PERSON PRESENCE RESTORED' if restored else 'PERSON ABSENCE'
+        color = (0,180,0) if restored else (0,0,255)
+        cv2.putText(image,f'{label} | count={count}',(12,25),cv2.FONT_HERSHEY_SIMPLEX,.55,color,2)
         ok, encoded = cv2.imencode('.jpg',image,[cv2.IMWRITE_JPEG_QUALITY,85])
         if not ok: raise ValueError('Image encoding failed')
         key = f'local-evidence/{run.id}/{uid()}.jpg'
@@ -461,28 +463,42 @@ class LocalAgentServices(RegistryAgentServices):
             temporary.unlink(missing_ok=True)
         return key
 
-    def _record_event(self, run, observation, timestamp, frame, boxes, binding, stop):
+    def _record_transition_event(self, run, observation, timestamp, frame, boxes, binding, stop):
+        restored = observation.transition == 'restored'
+        duration = observation.present_seconds if restored else observation.absent_seconds
         key = None
         try:
-            key = self._save_evidence(run,frame,boxes,binding,observation.count)
+            key = self._save_evidence(run,frame,boxes,binding,observation.count,restored=restored)
         except Exception:
             pass  # A genuine detection remains visible when evidence storage fails.
-        with self.writing() as db:
-            row = db.get(LocalRun,run.id)
-            if stop.is_set() or row.state!='running':
-                if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
-                return
-            self._checked_source(db,run.source_snapshot)
-            stamp, identifier, evidence_id = now(), uid(), uid()
-            event = EventDetail(id=identifier,agent_id=run.agent_id,run_id=run.id,revision_id=run.revision_id,
-                source_id=run.source_id,channel_id=run.channel_id,occurred_at=stamp,updated_at=stamp,row_version=1,
-                event_type='person_absence',severity='warning',reason=f'监测区域内人数为 {observation.count}，已连续缺岗 {observation.absent_seconds:.1f} 秒。',
-                evidence_status='ready' if key else 'failed',review_status='unreviewed',
-                start_media_ms=round(max(binding.start_media_ms or 0,timestamp*1000-observation.absent_seconds*1000)) if run.source_kind=='file' else None,
-                end_media_ms=round(timestamp*1000) if run.source_kind=='file' else None,
-                evidence=[EvidenceDTO(id=evidence_id,kind='image',state='ready' if key else 'failed',message='YOLO 实际分析帧与监测区域。' if key else '报警已保存，截图写入失败。')],feedback_history=[])
-            db.add(LocalEvent(id=identifier,agent_id=run.agent_id,actor_id=row.actor_id,run_id=run.id,
-                              payload=event.model_dump(mode='json'),evidence_key=key))
+        try:
+            with self.writing() as db:
+                row = db.get(LocalRun,run.id)
+                if stop.is_set() or row.state!='running':
+                    if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
+                    return
+                self._checked_source(db,run.source_snapshot)
+                stamp, identifier, evidence_id = now(), uid(), uid()
+                if observation.transition == 'absence':
+                    self._change(row,alert_state='absence',alert_started_at=stamp)
+                elif restored:
+                    self._change(row,alert_state='normal',alert_started_at=None)
+                event_type = 'person_presence_restored' if restored else 'person_absence'
+                severity = 'info' if restored else 'warning'
+                reason = (f'监测区域内人数已恢复至 {observation.count}，已连续在岗 {duration:.1f} 秒。'
+                    if restored else f'监测区域内人数为 {observation.count}，已连续缺岗 {duration:.1f} 秒。')
+                event = EventDetail(id=identifier,agent_id=run.agent_id,run_id=run.id,revision_id=run.revision_id,
+                    source_id=run.source_id,channel_id=run.channel_id,occurred_at=stamp,updated_at=stamp,row_version=1,
+                    event_type=event_type,severity=severity,reason=reason,
+                    evidence_status='ready' if key else 'failed',review_status='unreviewed',
+                    start_media_ms=round(max(binding.start_media_ms or 0,timestamp*1000-duration*1000)) if run.source_kind=='file' else None,
+                    end_media_ms=round(timestamp*1000) if run.source_kind=='file' else None,
+                    evidence=[EvidenceDTO(id=evidence_id,kind='image',state='ready' if key else 'failed',message='YOLO 实际分析帧与监测区域。' if key else '事件已保存，截图写入失败。')],feedback_history=[])
+                db.add(LocalEvent(id=identifier,agent_id=run.agent_id,actor_id=row.actor_id,run_id=run.id,
+                                  payload=event.model_dump(mode='json'),evidence_key=key))
+        except Exception:
+            if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
+            raise
 
     @staticmethod
     def _cursor(agent_id, actor_id, kind, filters=None, sequence=None):

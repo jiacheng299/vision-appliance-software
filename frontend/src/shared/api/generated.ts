@@ -2796,6 +2796,14 @@ export interface components {
             /** Baseline Run Id */
             baseline_run_id?: string | null;
             /**
+             * Alert State
+             * @default normal
+             * @enum {string}
+             */
+            alert_state: "normal" | "absence";
+            /** Alert Started At */
+            alert_started_at?: string | null;
+            /**
              * Data Origin
              * @default real
              * @enum {string}

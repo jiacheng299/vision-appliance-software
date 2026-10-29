@@ -17330,6 +17330,26 @@
             ],
             "title": "Baseline Run Id"
           },
+          "alert_state": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "absence"
+            ],
+            "title": "Alert State",
+            "default": "normal"
+          },
+          "alert_started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Started At"
+          },
           "data_origin": {
             "type": "string",
             "enum": [

@@ -63,12 +63,16 @@ def runtime(tmp_path):
     engine.dispose()
 
 
-def command():
+PERSON = {'label':'person','x':.2,'y':.2,'width':.2,'height':.5,'confidence':.9}
+
+
+def command(duration_seconds=30, alarm_interval_seconds=60):
     config = RevisionConfig(channels=[dict(channel_id='channel', name='岗位', target='person', rule='absence',
-        duration_seconds=30, sources=[dict(source_id='video', start_media_ms=0, end_media_ms=60000,
+        duration_seconds=duration_seconds, sources=[dict(source_id='video', start_media_ms=0, end_media_ms=60000,
         regions=[dict(id='roi', points=[(0,0),(1,0),(1,1),(0,1)])])],
         capability_ref=dict(model_id='model',model_version='1',template_id='template',template_version='1'),
-        parameters=[dict(key='sample_interval_seconds',value=15),dict(key='confidence_threshold',value=.5)])])
+        parameters=[dict(key='sample_interval_seconds',value=15),dict(key='confidence_threshold',value=.5),
+                    dict(key='alarm_interval_seconds',value=alarm_interval_seconds)])])
     return RuntimeCommand(kind='start',agent_id='agent',revision_id='revision',revision_no=1,config=config,
         channel_ids=['channel'],source_kinds={'video':'file'},
         source_snapshots=[SourceSnapshot(id='video',row_version=1,kind='file',sha256='abc',width=640,height=480,duration_ms=60000)])
@@ -105,6 +109,94 @@ def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):
         assert second.events('agent','actor',{'limit':100}).items[0].id == event.id
         assert second.summary('actor').today_events == 1
     finally: second.close()
+
+
+def test_absence_and_recovery_are_persisted_once(runtime):
+    service, _, reader, _ = runtime
+    reader.frames_to_read = [
+        (0., []), (1., []), (2., []),
+        (3., [PERSON]), (4., [PERSON]), (5., [PERSON]),
+        (6., [PERSON]),
+    ]
+    run = finish(service, service.submit(command(duration_seconds=2), 'actor', 'cycle'))
+    events = list(reversed(service.events('agent', 'actor', {'limit':100}).items))
+    assert [event.event_type for event in events] == [
+        'person_absence', 'person_presence_restored'
+    ]
+    assert [event.severity for event in events] == ['warning', 'info']
+    assert run.alert_state == 'normal'
+    assert run.alert_started_at is None
+
+
+def test_sustained_absence_repeats_at_the_configured_interval(runtime):
+    service, _, reader, _ = runtime
+    reader.frames_to_read = [
+        (0., []), (1., []), (2., []),
+        (3., []), (4., []), (5., []), (6., []),
+    ]
+    finish(service, service.submit(
+        command(duration_seconds=2, alarm_interval_seconds=2),
+        'actor', 'repeated-absence',
+    ))
+    events = list(reversed(service.events('agent', 'actor', {'limit':100}).items))
+    assert [event.event_type for event in events] == [
+        'person_absence', 'person_absence', 'person_absence'
+    ]
+
+
+def test_live_run_persists_absence_state_independently_of_event_page(runtime):
+    service, _, reader, _ = runtime
+    entered = Event()
+    def live_frames(self):
+        yield 0., []
+        yield 1., []
+        yield 2., []
+        entered.set()
+        while not self.stop.wait(.02):
+            pass
+    reader.frames = live_frames
+    service.submit(command(duration_seconds=2), 'actor', 'live-absence')
+    deadline = time.monotonic()+3
+    run = None
+    while time.monotonic() < deadline:
+        runs = service.runs('agent', 'actor')
+        if runs and runs[0].alert_state == 'absence':
+            run = runs[0]
+            break
+        time.sleep(.01)
+    assert entered.wait(1)
+    assert run is not None and run.alert_started_at is not None
+    assert service.events('agent', 'actor', {'limit':1}).items[0].event_type == 'person_absence'
+    stop = RuntimeCommand(kind='stop', agent_id='agent', stop_run_id=run.id)
+    assert finish(service, service.submit(stop, 'actor', 'live-stop')).alert_state == 'absence'
+
+
+def test_failed_event_transaction_rolls_back_alert_and_removes_evidence(runtime, monkeypatch):
+    service, sessions, reader, config = runtime
+    from sqlalchemy import event as sqlalchemy_event
+    from app.shared.storage import controlled_path
+    key = 'local-evidence/failed-write/evidence.jpg'
+    evidence_path = controlled_path(config, 'media', key)
+    def save_evidence(*args, **kwargs):
+        evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        evidence_path.write_bytes(b'evidence')
+        return key
+    monkeypatch.setattr(service, '_save_evidence', save_evidence)
+    def fail_event_insert(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith('INSERT') and 'LOCAL_EVENTS' in statement.upper():
+            raise sqlite3.OperationalError('injected event transaction failure')
+    engine = sessions.kw['bind']
+    sqlalchemy_event.listen(engine, 'before_cursor_execute', fail_event_insert)
+    reader.frames_to_read = [(0., []), (1., []), (2., [])]
+    try:
+        run = finish(service, service.submit(command(duration_seconds=2), 'actor', 'failed-event-write'))
+    finally:
+        sqlalchemy_event.remove(engine, 'before_cursor_execute', fail_event_insert)
+    assert run.state == 'failed'
+    assert run.alert_state == 'normal'
+    assert run.alert_started_at is None
+    assert service.events('agent', 'actor', {'limit':100}).items == []
+    assert not evidence_path.exists()
 
 
 def test_bad_decoder_is_failure_never_absence(runtime):

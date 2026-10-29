@@ -88,6 +88,8 @@ class RunDTO(DTO):
     error_code: str | None = None
     message: str = ''
     baseline_run_id: str | None = None
+    alert_state: Literal['normal', 'absence'] = 'normal'
+    alert_started_at: str | None = None
     data_origin: Origin = 'real'
 
 
