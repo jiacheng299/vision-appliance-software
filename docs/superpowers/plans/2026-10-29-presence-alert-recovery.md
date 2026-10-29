@@ -158,7 +158,7 @@ class PresenceRule:
         return PresenceObservation(count, 0, present_seconds, self.state, None, False)
 ```
 
-Keep the existing polygon/count calculation directly in `observe`. `mark_unavailable()` clears continuous evidence clocks but preserves both confirmed `state` and `last_alarm`; unavailable frames themselves never repeat alarms.
+Keep the existing polygon/count calculation directly in `observe`. `mark_unavailable()` clears continuous evidence clocks and `last_alarm` but preserves confirmed `state`; unavailable frames themselves never repeat alarms, while the first later successful absent observation may emit a fresh reminder even after timestamp rollback.
 
 - [ ] **Step 4: Run focused tests and confirm GREEN**
 
