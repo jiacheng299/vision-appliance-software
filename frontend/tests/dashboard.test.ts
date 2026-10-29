@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, it, expect, vi } from 'vitest'
 import DashboardPage from '../src/modules/dashboard/DashboardPage.vue'
+import EventsPage from '../src/modules/dashboard/EventsPage.vue'
 import MediaPlayer from '../src/shared/media/MediaPlayer.vue'
 import { api } from '../src/shared/api'
 vi.mock('../src/shared/realtime/useRealtime', () => ({useRealtime: () => ({connected:true})}))
@@ -96,5 +97,15 @@ describe('integrated execution overview',()=>{
     vi.spyOn(api,'runtime').mockResolvedValue({disk:{used_bytes:1,total_bytes:10}} as any)
     const wrapper=mount(DashboardPage,{global:{stubs:{RouterLink:{props:['to'],template:'<a :href="to"><slot /></a>'},MediaPlayer:true}}})
     try{await flushPromises();expect(wrapper.get('a[href="/agents/fire-agent/live"]').text()).toBe('火源出现（模拟）');expect(wrapper.findAll('.task-counts strong').map(e=>e.text())).toEqual(['2','0','0'])}finally{wrapper.unmount();vi.restoreAllMocks()}
+  })
+  it('shows mapped Chinese event names on dashboard and event history pages',async()=>{
+    vi.spyOn(api,'dashboard').mockResolvedValue({sources:[],counts:{sources_total:0,sources_online:0,active_runs:0,today_events:1},recent_events:[{id:'event',agent_id:'fire-agent',event_type:'person_absence',source_name:'相机',reason:'离岗',occurred_at:'2026-10-29T00:00:00Z'}],task_summary:{running:0,completed:0,waiting:0},data_origin:'real',runtime_available:true,events_available:true} as any)
+    vi.spyOn(api,'runtime').mockResolvedValue({disk:{used_bytes:1,total_bytes:10}} as any)
+    const dashboard=mount(DashboardPage,{global:{stubs:{RouterLink:{template:'<a><slot /></a>'},MediaPlayer:true}}})
+    try { await flushPromises(); expect(dashboard.text()).toContain('人员缺岗'); expect(dashboard.text()).not.toContain('person_absence') } finally { dashboard.unmount() }
+
+    vi.spyOn(api,'events').mockResolvedValue({items:[{id:'event',event_type:'person_presence_restored',source_name:'相机',reason:'在岗',occurred_at:'2026-10-29T00:00:00Z',evidence_status:'ready'}],available:true} as any)
+    const history=mount(EventsPage,{global:{stubs:{RouterLink:{template:'<a><slot /></a>'},ErrorBanner:true,EmptyState:true}}})
+    try { await flushPromises(); expect(history.text()).toContain('恢复在岗'); expect(history.text()).not.toContain('person_presence_restored') } finally { history.unmount(); vi.restoreAllMocks() }
   })
 })

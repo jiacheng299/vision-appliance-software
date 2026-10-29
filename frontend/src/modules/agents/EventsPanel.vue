@@ -5,7 +5,7 @@ import { computed, ref, toRef, watch } from 'vue'
 import { NButton, NInput, NSelect } from 'naive-ui'
 import { agentApi, type EventFilters, type MonitorEvent, type Missed, type Run } from './api'
 import { useEvents } from './useEvents'
-import { agentError, label } from './state'
+import { agentError, label, normalizeEventType } from './state'
 import { formatDate } from '../../shared/ui/resource'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import EmptyState from '../../shared/ui/EmptyState.vue'
@@ -21,7 +21,7 @@ function applyFilters(){
   const date=(value:string)=>value?new Date(value).toISOString():undefined
   try{
     if(from.value&&to.value&&Date.parse(from.value)>Date.parse(to.value)){filterError.value='开始时间应早于结束时间。';return}
-    filters.value={run_id:runId.value??undefined,review_status:review.value??undefined,event_type:type.value.trim()||undefined,from_time:date(from.value),to_time:date(to.value)}
+    filters.value={run_id:runId.value??undefined,review_status:review.value??undefined,event_type:normalizeEventType(type.value)||undefined,from_time:date(from.value),to_time:date(to.value)}
   }catch{filterError.value='筛选时间无效。'}
 }
 async function loadMissed(){try{missedRows.value=(await agentApi.missed(props.agentId)).items;missedError.value=''}catch(e){missedError.value=agentError(e)}}

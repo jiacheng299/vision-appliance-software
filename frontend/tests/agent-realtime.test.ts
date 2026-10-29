@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { agentApi, type EventFilters, type MonitorEvent, type MonitorEventPage, type Operation, type Workspace } from '../src/modules/agents/api'
-import { mergedEvents, configChanges } from '../src/modules/agents/state'
+import { mergedEvents, configChanges, normalizeEventType } from '../src/modules/agents/state'
 import { useEvents } from '../src/modules/agents/useEvents'
 import { useWorkspace } from '../src/modules/agents/useWorkspace'
 import { emptyConfig, newChannel } from '../src/modules/agents/draft'
@@ -29,6 +29,12 @@ beforeEach(()=>{vi.useFakeTimers();sessionStorage.clear();EventStream.instances=
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();vi.unstubAllGlobals()})
 
 describe('event stream correctness',()=>{
+  it('normalizes Chinese alarm filters but preserves machine and unrelated values',()=>{
+    expect(normalizeEventType('人员缺岗')).toBe('person_absence')
+    expect(normalizeEventType('恢复在岗')).toBe('person_presence_restored')
+    expect(normalizeEventType('person_absence')).toBe('person_absence')
+    expect(normalizeEventType('区域滞留')).toBe('区域滞留')
+  })
   it('deduplicates event ids and does not roll back a newer review',async()=>{
     vi.spyOn(agentApi,'events').mockResolvedValue(page([event()]))
     const subject=mountEvents();await flushPromises()

@@ -33,7 +33,7 @@ async function submit(){
   <NDrawer :show="true" :width="680" :mask-closable="!saving" :close-on-esc="!saving" @update:show="close"><NDrawerContent title="事件详情" closable>
     <ErrorBanner :error="error" :retryable="false"/><NButton :loading="loading" :disabled="saving" size="small" @click="load(false)">刷新事件</NButton>
     <template v-if="detail">
-      <div class="agent-summary agent-section-title"><h2>{{detail.event_type}}</h2><AgentStatus v-if="MANUAL_REVIEW_AVAILABLE" :value="detail.review_status"/><span v-if="detail.data_origin==='mock'" class="demo-chip">模拟事件</span></div>
+      <div class="agent-summary agent-section-title"><h2>{{label(detail.event_type)}}</h2><AgentStatus v-if="MANUAL_REVIEW_AVAILABLE" :value="detail.review_status"/><span v-if="detail.data_origin==='mock'" class="demo-chip">模拟事件</span></div>
       <p>{{formatDate(detail.occurred_at)}} · {{detail.severity}}</p><h3 class="agent-section-title">系统提供的判断依据</h3><p class="event-reason">{{detail.reason || '服务未提供判断依据。'}}</p>
       <dl class="detail-meta"><div class="wide"><dt>来源视频源</dt><dd>{{detail.source_id}}</dd></div><div class="wide"><dt>智能体 / 通道</dt><dd>{{detail.agent_id}} / {{detail.channel_id}}</dd></div><div class="wide"><dt>实际运行 / 配置版本</dt><dd>{{detail.run_id}} / {{detail.revision_id}}</dd></div><div v-if="detail.start_media_ms!=null" class="wide"><dt>录像位置</dt><dd>{{detail.start_media_ms/1000}} 秒 – {{(detail.end_media_ms??detail.start_media_ms)/1000}} 秒</dd></div></dl>
       <h3>事件证据 · {{label(detail.evidence_status==='ready'?'ready_evidence':detail.evidence_status)}}</h3><p v-if="detail.evidence_status!=='ready'" class="notice">证据尚未齐全或不可用。事件仍保留，不补造截图、片段或判断解释。</p>
