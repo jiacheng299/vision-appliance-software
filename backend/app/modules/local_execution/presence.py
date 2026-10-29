@@ -1,13 +1,16 @@
 """Continuous absence is evidence only between successfully decoded observations."""
 from dataclasses import dataclass
 import math
+from typing import Literal
 
 
 @dataclass(frozen=True)
 class PresenceObservation:
     count: int
     absent_seconds: float
-    alarm: bool
+    present_seconds: float
+    state: Literal['normal', 'absence']
+    transition: Literal['absence', 'restored'] | None
 
 
 def contains(polygon, point):
@@ -32,10 +35,11 @@ class PresenceRule:
             raise ValueError('Invalid presence monitoring conditions')
         self.regions,self.min_count = regions,min_count
         self.duration,self.interval,self.max_gap = duration_seconds,alarm_interval_seconds,max_gap_seconds
+        self.state: Literal['normal', 'absence'] = 'normal'
         self.mark_unavailable()
 
     def mark_unavailable(self):
-        self.absent_since = self.last_observed = self.last_alarm = None
+        self.absent_since = self.present_since = self.last_observed = None
 
     def observe(self, timestamp, boxes):
         if not math.isfinite(timestamp) or timestamp<0:
@@ -46,13 +50,29 @@ class PresenceRule:
         # Feet are a stable ground-plane reference. Overlapping regions never double-count a person.
         count = sum(box.get('label')=='person' and any(contains(polygon,
             (box['x']+box['width']/2,box['y']+box['height'])) for polygon in self.regions) for box in boxes)
-        if count>=self.min_count:
-            self.absent_since=self.last_alarm=None
-            return PresenceObservation(count,0,False)
-        if self.absent_since is None:
-            self.absent_since=timestamp
-        absent=timestamp-self.absent_since
-        alarm=absent>=self.duration and (self.last_alarm is None or timestamp-self.last_alarm>=self.interval)
-        if alarm:
-            self.last_alarm=timestamp
-        return PresenceObservation(count,absent,alarm)
+        present = count>=self.min_count
+        if self.state == 'normal':
+            self.present_since = None
+            if present:
+                self.absent_since = None
+                return PresenceObservation(count,0,0,self.state,None)
+            if self.absent_since is None:
+                self.absent_since = timestamp
+            absent = timestamp-self.absent_since
+            if absent >= self.duration:
+                self.state = 'absence'
+                self.absent_since = None
+                return PresenceObservation(count,absent,0,self.state,'absence')
+            return PresenceObservation(count,absent,0,self.state,None)
+        self.absent_since = None
+        if not present:
+            self.present_since = None
+            return PresenceObservation(count,0,0,self.state,None)
+        if self.present_since is None:
+            self.present_since = timestamp
+        present_seconds = timestamp-self.present_since
+        if present_seconds >= self.duration:
+            self.state = 'normal'
+            self.present_since = None
+            return PresenceObservation(count,0,present_seconds,self.state,'restored')
+        return PresenceObservation(count,0,present_seconds,self.state,None)
