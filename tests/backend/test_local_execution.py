@@ -222,6 +222,33 @@ def test_source_snapshot_and_unsupported_parameters_fail_before_start(runtime):
     assert service.runs('agent','actor') == []
 
 
+def test_runtime_source_check_ignores_probe_versions_but_checks_real_input(runtime):
+    service,sessions,_,_=runtime
+    with sessions() as db:
+        identity=service._source_identity(db,'video')
+        source=db.get(Source,'video')
+        source.row_version+=10
+        source.name='Renamed without changing decoder input'
+        source.status='connecting'
+        db.commit()
+    with sessions() as db:
+        assert service._checked_source(db,command().source_snapshots[0],identity).id=='video'
+
+
+@pytest.mark.parametrize('field,value',[
+    ('address','rtsp://127.0.0.1:8554/other'),('credentials','changed-secret'),
+    ('width',1280),('media_key','different.mp4'),('archived',True),
+])
+def test_runtime_source_check_rejects_real_input_changes(runtime,field,value):
+    service,sessions,_,_=runtime
+    with sessions() as db:
+        identity=service._source_identity(db,'video')
+        setattr(db.get(Source,'video'),field,value)
+        db.commit()
+    with sessions() as db,pytest.raises(Error):
+        service._checked_source(db,command().source_snapshots[0],identity)
+
+
 def test_stop_is_durable_and_channel_conflicts_are_atomic(runtime):
     service, _, reader, _ = runtime
     def waiting(self):

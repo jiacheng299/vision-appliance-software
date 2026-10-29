@@ -197,11 +197,20 @@ class LocalAgentServices(RegistryAgentServices):
             else: op.state = 'running'
             row.payload = op.model_dump(mode='json')
 
-    def _checked_source(self, db, snapshot):
+    @staticmethod
+    def _source_identity(db, source_id):
+        source = sources.get_source(db,source_id)
+        fields = ('id','kind','address','credentials','media_key','sha256','width','height','duration_ms')
+        # Private digest only; never expose addresses or credentials in RunDTO.
+        return hashlib.sha256(json.dumps({k:getattr(source,k) for k in fields},sort_keys=True).encode()).hexdigest()
+
+    def _checked_source(self, db, snapshot, identity=None):
         source = sources.resolve_agent_source(db,snapshot.id)
         fields = {'id':source.id,'row_version':source.row_version,'kind':source.kind,'sha256':source.sha256,
                   'width':source.width,'height':source.height,'duration_ms':source.duration_ms}
-        if SourceSnapshot(**fields) != snapshot:
+        if identity is not None:
+            fields['row_version'] = snapshot.row_version
+        if SourceSnapshot(**fields) != snapshot or (identity is not None and self._source_identity(db,snapshot.id)!=identity):
             raise Error(409,'source_changed','视频源已变化，请重新验证任务。')
         return source
 
@@ -248,10 +257,11 @@ class LocalAgentServices(RegistryAgentServices):
                         with self.sessions() as db:
                             source = self._checked_source(db,snapshot)
                             sources.resolve_execution_input(db,self.config,source.id,self.gateway)
+                            identity = self._source_identity(db,source.id)
                         if not binding.regions: raise Error(422,'region_required','人员在岗监测需要划定区域。')
                         if source.kind=='file' and (binding.start_media_ms is None or binding.end_media_ms>source.duration_ms):
                             raise Error(422,'media_range_required','录像监测需要有效的起止时间。')
-                        prepared.append((channel,binding,snapshot))
+                        prepared.append((channel,binding,snapshot,identity))
                 if not prepared or len(prepared)>64:
                     raise Error(422,'execution_scope_invalid','运行视频数量超出本地执行范围。')
             new_ids, stop_ids = [], []
@@ -285,7 +295,7 @@ class LocalAgentServices(RegistryAgentServices):
                     stop_ids.append(row.id)
                     if row.state in ACTIVE_STATES: self._change(row,state='stopping',message='正在停止本次监测。')
                 items = [ChannelOperation(channel_id=r.channel_id,source_id=r.source_id,state='stopping_old',old_run_id=r.id) for r in scoped] if command.kind=='stop' else []
-                for channel,binding,snapshot in prepared:
+                for channel,binding,snapshot,identity in prepared:
                     identifier = uid()
                     dto = RunDTO(id=identifier,agent_id=command.agent_id,revision_id=command.revision_id,
                         revision_no=command.revision_no,channel_id=channel.channel_id,channel_name=channel.name,
@@ -296,7 +306,7 @@ class LocalAgentServices(RegistryAgentServices):
                         baseline_run_id=command.baseline_run_id,message='等待本地检测资源。')
                     predecessors = [r.id for r in scoped if r.channel_id==channel.channel_id] if command.kind=='apply' else []
                     db.add(LocalRun(id=identifier,agent_id=command.agent_id,actor_id=actor_id,channel_id=channel.channel_id,
-                        source_id=binding.source_id,state='queued',payload=dto.model_dump(mode='json'),observation={},predecessors=predecessors))
+                        source_id=binding.source_id,state='queued',payload=dto.model_dump(mode='json'),observation={'source_identity':identity},predecessors=predecessors))
                     items.append(ChannelOperation(channel_id=channel.channel_id,source_id=binding.source_id,state='pending',
                         old_run_id=next(iter(predecessors),None),new_run_id=identifier))
                     new_ids.append(identifier)
@@ -337,6 +347,7 @@ class LocalAgentServices(RegistryAgentServices):
                 row = db.get(LocalRun,identifier)
                 run = RunDTO.model_validate(row.payload)
                 predecessors = list(row.predecessors)
+                source_identity = row.observation.get('source_identity')
             deadline = time.monotonic()+20
             while predecessors and not stop.is_set():
                 with self.sessions() as db:
@@ -373,7 +384,7 @@ class LocalAgentServices(RegistryAgentServices):
             while not stop.is_set():
                 try:
                     with self.sessions() as db:
-                        self._checked_source(db,run.source_snapshot)
+                        self._checked_source(db,run.source_snapshot,source_identity)
                         source, locator = sources.resolve_execution_input(db,self.config,run.source_id,self.gateway)
                     with reader_factory(self.config,locator=locator,kind=run.source_kind,width=source.width,
                         height=source.height,interval=interval,start_ms=binding.start_media_ms or 0,
@@ -383,7 +394,7 @@ class LocalAgentServices(RegistryAgentServices):
                         for timestamp,frame in reader.frames():
                             if stop.is_set(): break
                             if time.monotonic()-last_source_check>=2:
-                                with self.sessions() as db: self._checked_source(db,run.source_snapshot)
+                                with self.sessions() as db: self._checked_source(db,run.source_snapshot,source_identity)
                                 last_source_check = time.monotonic()
                             boxes = rule.targets_in_regions(detector.detect(frame))
                             if stop.is_set(): break
@@ -414,7 +425,7 @@ class LocalAgentServices(RegistryAgentServices):
                     if stop.is_set(): break
                     # Only live transport failures reconnect. Changed source/model configuration must be revalidated.
                     code = getattr(exc,'code','video_decode_failed')
-                    retryable = code in {'camera_frame_timeout','dependency_unavailable','media_source_not_published','camera_probe_failed'}
+                    retryable = code in {'camera_frame_timeout','dependency_unavailable','media_source_not_published','camera_probe_failed','source_not_ready'}
                     if run.source_kind=='camera' and retryable and failures<resources['reconnect_attempts']:
                         failures += 1
                         with self.writing() as db:
@@ -434,7 +445,12 @@ class LocalAgentServices(RegistryAgentServices):
                 allowed = {'video_decode_failed','camera_frame_timeout','source_changed','source_not_found','source_unavailable',
                     'source_not_ready','source_media_missing','dependency_unavailable','media_source_not_published',
                     'previous_run_not_stopped','model_unavailable','model_file_changed','model_not_found'}
-                self._finish(identifier,'failed','视频读取或人员检测失败，请检查视频源与模型后重试。',code if code in allowed else 'local_inference_failed')
+                message = {'source_changed':'视频源地址、凭据或媒体信息已改变，请核对后重新监测。',
+                    'camera_frame_timeout':'摄像头持续断流，多次重连后仍无法读取画面，请检查推流服务。',
+                    'source_not_ready':'摄像头未恢复在线，请测试连接后重新监测。',
+                    'dependency_unavailable':'本地视频解码工具不可用，请检查 FFmpeg 配置。'}.get(code,
+                    '视频读取或人员检测失败，请检查视频源与模型后重试。')
+                self._finish(identifier,'failed',message,code if code in allowed else 'local_inference_failed')
 
     def _save_evidence(self, run, frame, boxes, binding, count, restored=False):
         import cv2
