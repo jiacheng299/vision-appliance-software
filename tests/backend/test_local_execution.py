@@ -308,6 +308,37 @@ def test_stop_is_durable_and_channel_conflicts_are_atomic(runtime):
     assert service.events('agent','actor',{'limit':100}).items == []
 
 
+def test_concurrency_changes_dispatch_existing_queue_without_restart(runtime):
+    from app.shared.models import Setting
+    service,sessions,reader,_=runtime
+    service.close()
+    with sessions() as db:
+        row=db.get(Setting,'resources');row.values={**row.values,'max_concurrent_jobs':1};db.commit()
+    service.start()
+    def frames(self):
+        yield 0.,[]
+        while not self.stop.wait(.02):pass
+    reader.frames=frames
+    def start(agent):
+        request=command();request.agent_id=agent
+        service.submit(request,'actor',agent)
+    def state(agent):return service.runs(agent,'actor')[0].state
+    start('first');start('second')
+    deadline=time.monotonic()+3
+    while state('first')!='running' and time.monotonic()<deadline:time.sleep(.02)
+    assert state('second')=='queued'
+    with sessions() as db:
+        row=db.get(Setting,'resources');row.values={**row.values,'max_concurrent_jobs':2};db.commit()
+    deadline=time.monotonic()+5
+    while state('second')!='running' and time.monotonic()<deadline:time.sleep(.02)
+    assert state('first')==state('second')=='running'
+    with sessions() as db:
+        row=db.get(Setting,'resources');row.values={**row.values,'max_concurrent_jobs':1};db.commit()
+    start('third');time.sleep(.1)
+    assert state('third')=='queued'
+    assert state('first')==state('second')=='running'
+
+
 def test_archiving_blocks_future_execution_and_actor_scope(runtime):
     service, _, _, _ = runtime
     service.set_archived('agent',True,'actor')

@@ -42,6 +42,7 @@ class LocalAgentServices(RegistryAgentServices):
         self.owns_gateway = gateway is None
         self.lock = RLock()
         self.stops, self.futures = {}, {}
+        self.pending = []
         self.started = self.closing = False
         self.process_lock = None
 
@@ -81,8 +82,9 @@ class LocalAgentServices(RegistryAgentServices):
                         self._change(row,state='failed',ended_at=now(),error_code='executor_interrupted',
                                      message='上次检测进程已中断，请重新启动任务。')
                     self._refresh_operations(db)
-                    workers = settings.values_for(db,'resources')['max_concurrent_jobs']
-                self.pool = ThreadPoolExecutor(max_workers=workers,thread_name_prefix='presence')
+                # Admission follows the saved setting; the pool is only a hard ceiling.
+                self.pending = []
+                self.pool = ThreadPoolExecutor(max_workers=64,thread_name_prefix='presence')
                 self.started, self.closing = True, False
                 self.heartbeat_stop = Event()
                 self.heartbeat = Thread(target=self._heartbeat,daemon=True,name='presence-heartbeat')
@@ -151,9 +153,23 @@ class LocalAgentServices(RegistryAgentServices):
                 with self.writing() as db:
                     for row in db.scalars(select(LocalRun).where(LocalRun.state.in_({'starting','running','reconnecting','stopping'}))):
                         self._change(row,last_heartbeat_at=now())
+                self._dispatch_pending()
             except Exception:
                 # No fabricated heartbeat if storage is unavailable; workspace will mark it stale.
                 continue
+
+    def _dispatch_pending(self):
+        with self.lock:
+            if not self.started or self.closing:return
+            with self.sessions() as db:
+                limit = settings.values_for(db,'resources')['max_concurrent_jobs']
+            active = sum(not future.done() for future in self.futures.values())
+            while self.pending and active < limit:
+                identifier = self.pending.pop(0)
+                stop = self.stops[identifier]
+                if stop.is_set():continue
+                self.futures[identifier] = self.pool.submit(self._execute,identifier,stop)
+                active += 1
 
     def available(self, service):
         return service in {'capability','runtime','events','media'} and self.started and not self.closing
@@ -325,9 +341,11 @@ class LocalAgentServices(RegistryAgentServices):
                 if stop: stop.set()
                 future = self.futures.get(identifier)
                 if future and future.cancel(): self._finish(identifier,'canceled','尚未开始的监测已取消。')
+                elif future is None:self._finish(identifier,'canceled','尚未开始的监测已取消。')
             for identifier in new_ids:
                 self.stops[identifier] = Event()
-                self.futures[identifier] = self.pool.submit(self._execute,identifier,self.stops[identifier])
+                self.pending.append(identifier)
+            self._dispatch_pending()
             return self.operation(command.agent_id,operation.id,actor_id)
 
     def set_archived(self, agent_id, archived, actor_id):
