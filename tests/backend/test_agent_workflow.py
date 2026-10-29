@@ -190,6 +190,39 @@ def test_start_has_async_result_and_retries_are_idempotent(demo):
     assert len(workspace(c,a))==2
 
 
+def test_published_task_can_restart_after_validation_expiry(demo):
+    c,p,a,app=demo
+    rev,value=publish(c,a)
+    p.scenario='start_failed'
+    first=submit(c,a,rev)
+    assert first.status_code==202,first.text
+    finish(c,p,a,first.json())
+    stop_all(c,p,a,[r for r in workspace(c,a) if r['state']=='running'])
+    with app.state.sessions() as db:
+        db.get(AgentValidation,value['id']).expires_at='2000-01-01T00:00:00Z'
+        db.commit()
+    p.scenario='normal'
+    restarted=submit(c,a,rev)
+    assert restarted.status_code==202,restarted.text
+    assert finish(c,p,a,restarted.json())['state']=='succeeded'
+    assert any(r['state']=='running' for r in workspace(c,a))
+
+
+@pytest.mark.parametrize('change',['model','source'])
+def test_published_restart_rejects_changed_dependencies(demo,change):
+    c,p,a,app=demo
+    rev,_=publish(c,a)
+    if change=='model':
+        p.fingerprint='changed'
+    else:
+        with app.state.sessions() as db:
+            db.get(Source,rev['config']['channels'][0]['source_id']).row_version+=1
+            db.commit()
+    result=submit(c,a,rev)
+    assert result.status_code==409,result.text
+    assert result.json()['error']['code']=='validation_stale'
+
+
 def test_edit_while_running_only_changes_draft_and_old_events_keep_version(demo):
     c,p,a,_=demo;old,runs=start_demo(c,p,a)
     draft=clone(c,a,old);config=draft['config'];config['channels'][0]['duration_seconds']=60

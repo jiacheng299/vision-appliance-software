@@ -14,7 +14,7 @@ import EventsPanel from './EventsPanel.vue'
 import VideoWall from './VideoWall.vue'
 import { channelSources, sourceCount, wallGroups } from './channelSources'
 const props=defineProps<{agentId:string;workspace:Workspace|null;revision:Revision;sources:Source[];canWrite:boolean;focusRunId?:string}>()
-const emit=defineEmits<{operation:[value:Operation]}>()
+const emit=defineEmits<{operation:[value:Operation];retry:[value:Run]}>()
 const selectedRunId=ref<string|null>(null),stopping=ref(''),error=ref('')
 const runs=computed(()=>props.workspace?.runs??[]),currentRuns=computed(()=>actualRuns(runs.value))
 const selected=computed(()=>runs.value.find(r=>r.id===selectedRunId.value)??currentRuns.value[0])
@@ -41,6 +41,10 @@ async function stop(run:Run){
   <p v-if="workspace&&!workspace.runtime_available" class="error-banner" role="alert">{{workspace.runtime_error}} 保留已读取的历史状态，但当前状态待确认，控制操作暂不可用。</p>
   <div class="agent-actions wall-view-toggle"><NButton :type="view==='wall'?'primary':'default'" @click="view='wall'">监控墙</NButton><NButton :type="view==='single'?'primary':'default'" @click="view='single'">单画面与报警</NButton></div>
   <div v-if="groups.length" class="run-channel-grid"><article v-for="group in groups" :key="group.id" class="panel run-channel-card"><strong>{{group.name}}</strong><p>{{group.tiles.length}} 路视频 · {{groupRuns(group.id).filter(r=>activeStates.has(r.state)).length}} 路活动 · {{groupRuns(group.id).filter(r=>r.state==='failed').length}} 路异常</p><small>共享规则，按整个通道启停；请核对每个画面的实际版本与状态。</small><div class="agent-actions"><NButton v-if="canWrite&&groupRuns(group.id).some(r=>activeStates.has(r.state))" size="small" :disabled="!workspace?.runtime_available||!!stopping" :loading="groupRuns(group.id).some(r=>r.id===stopping)" @click="stop(groupRuns(group.id).find(r=>activeStates.has(r.state))!)">停止整个通道</NButton></div></article></div>
+  <section v-for="run in currentRuns.filter(r=>r.state==='failed')" :key="run.id" class="error-banner" role="alert">
+    <div><strong>{{run.channel_name}}：监测异常</strong><p>{{run.message||'本次监测已中断。请确认视频源和模型可用后重新启动。'}}</p><small v-if="run.error_code">错误代码：{{run.error_code}}</small></div>
+    <NButton v-if="canWrite" :disabled="!workspace?.runtime_available||!!stopping" @click="emit('retry',run)">重新监测</NButton>
+  </section>
   <VideoWall v-if="view==='wall'" :agent-id="agentId" :revision="revision" :runs="runs" :sources="sources" :runtime-available="workspace?.runtime_available??false"/>
 
   <div v-if="view==='single'" class="agent-live-grid"><section class="panel"><div class="panel-title"><h2>{{selected?.channel_name || '视频源预览'}}</h2><AgentStatus v-if="selected" :value="state(selected)"/><span v-else class="status">未启动监测</span></div>

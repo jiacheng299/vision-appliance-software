@@ -175,7 +175,9 @@ def start(db, provider, agent_id, body, actor_id, key, kind='start'):
     config = RevisionDTO.model_validate(revision).config
     check_group_support(provider, config)
     sources = source_snapshots(db, config)
-    if validation.expires_at <= now() or validation.config_hash != digest(revision.config) or validation.source_hash != digest(sources):
+    # Expiry limits draft confirmation, not the lifetime of a published task.
+    # Immutable config and dependency fingerprints are still checked on every start.
+    if validation.config_hash != digest(revision.config) or validation.source_hash != digest(sources):
         raise Error(409, 'validation_stale', '执行依据已经改变，请复制为草稿后重新验证确认。')
     if not set(body.channel_ids) <= {c.channel_id for c in config.channels}:
         raise Error(422, 'invalid_channel_scope', '启动范围包含此版本中不存在的通道。')

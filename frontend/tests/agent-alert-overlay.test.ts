@@ -31,6 +31,17 @@ const run = (alert_state: Run['alert_state']): Run => ({
 } as Run)
 
 describe('persisted absence alert presentation', () => {
+  it('offers a failed run retry with its original revision and error reason', async () => {
+    const failed = {...run('normal'),state:'failed',message:'视频解码工具不可用',error_code:'dependency_unavailable'} as Run
+    const wrapper = mount(MonitorPanel, {props:{
+      agentId:'agent-1',revision:{id:'revision-1',config:{schema_version:'1.0',channels:[]}} as unknown as Revision,
+      workspace:{runs:[failed],runtime_available:true} as Workspace,sources:[],canWrite:true,
+    },global:{stubs:{RunPlayer:true,EventsPanel:true,VideoWall:true,AgentStatus:true}}})
+    expect(wrapper.text()).toContain('视频解码工具不可用')
+    await wrapper.findAll('button').find(b=>b.text()==='重新监测')!.trigger('click')
+    expect(wrapper.emitted('retry')?.[0]?.[0]).toEqual(failed)
+    wrapper.unmount()
+  })
   it('translates absence event machine values for the event feed', () => {
     expect(label('person_absence')).toBe('人员缺岗')
     expect(label('person_presence_restored')).toBe('恢复在岗')
