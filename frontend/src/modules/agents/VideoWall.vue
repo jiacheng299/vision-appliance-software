@@ -29,7 +29,7 @@ async function fullscreen(){try{await surface.value?.requestFullscreen()}catch{e
     <div class="panel-title"><div><h2>视频监控墙 <small>{{all.length}} 路画面 · 按通道分组</small></h2><p class="muted">同一通道共用监测规则；预览视频不会启动分析。未运行画面只显示源预览。</p></div><div class="agent-actions"><NSelect v-model:value="capacity" :options="[{label:'每页1画面',value:1},{label:'每页4画面',value:4},{label:'每页9画面',value:9}]" aria-label="监控墙画面数量" style="width:140px"/><NButton size="small" @click="opened=visible.map(t=>t.key)">打开本页画面</NButton><NButton size="small" @click="opened=[]">关闭本页画面</NButton><NButton size="small" @click="fullscreen">全屏监控墙</NButton></div></div>
     <p v-if="error" class="error-banner">{{error}}</p>
     <section v-for="group in pageGroups" :key="group.id" class="wall-group"><h3>{{group.name}} <small>同一套规则 · 各视频独立分析与报警</small></h3>
-      <div class="wall-grid" :class="{'wall-nine':capacity===9,'wall-single':capacity===1}"><article v-for="tile in group.tiles" :key="tile.key" class="wall-tile">
+      <div class="wall-grid" :class="{'wall-nine':capacity===9,'wall-single':capacity===1}"><article v-for="tile in group.tiles" :key="tile.key" class="wall-tile" :class="{'alert-active':tile.run?.alert_state==='absence'}">
         <div class="wall-tile-heading"><strong>{{source(tile.binding.source_id)?.name??tile.binding.source_id}}</strong><AgentStatus v-if="tile.run" :value="state(tile.run)"/><span v-else class="status">未启动监测</span></div>
         <small v-if="tile.run">实际配置 v{{tile.run.revision_no}} · 运行编号 {{tile.run.id}}</small><small v-else>所选配置中的视频源 · 仅预览</small>
         <template v-if="opened.includes(tile.key)">
@@ -39,7 +39,7 @@ async function fullscreen(){try{await surface.value?.requestFullscreen()}catch{e
           <p v-if="tile.run&&!activeStates.has(tile.run.state)" class="muted">已结束运行的回放入口，非实时分析。</p>
           <NButton size="tiny" @click="opened=opened.filter(key=>key!==tile.key)">关闭画面</NButton>
         </template>
-        <button v-else class="wall-poster" :aria-label="`打开画面：${source(tile.binding.source_id)?.name??tile.binding.source_id}`" @click="opened.push(tile.key)"><img v-if="safeMediaUrl(source(tile.binding.source_id)?.thumbnail_url??null)" :src="safeMediaUrl(source(tile.binding.source_id)?.thumbnail_url??null)!" alt="视频源缩略图"/><span>打开画面</span></button>
+        <button v-else class="wall-poster" :aria-label="`打开画面：${source(tile.binding.source_id)?.name??tile.binding.source_id}`" @click="opened.push(tile.key)"><img v-if="safeMediaUrl(source(tile.binding.source_id)?.thumbnail_url??null)" :src="safeMediaUrl(source(tile.binding.source_id)?.thumbnail_url??null)!" alt="视频源缩略图"/><strong v-if="tile.run?.alert_state==='absence'" class="wall-alert-banner" role="alert">人员缺岗</strong><span>打开画面</span></button>
       </article></div>
     </section>
     <p v-if="!all.length" class="muted">请先在通道中添加视频源。</p>

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
+import { readFileSync } from 'node:fs'
 import RunPlayer from '../src/modules/agents/RunPlayer.vue'
 import MonitorPanel from '../src/modules/agents/MonitorPanel.vue'
 import { agentApi, type Revision, type Run, type Workspace } from '../src/modules/agents/api'
@@ -51,7 +52,17 @@ describe('persisted absence alert presentation', () => {
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(wrapper.get('.run-player-surface').classes()).not.toContain('alert-active')
     expect(load).toHaveBeenCalledTimes(1)
+    await wrapper.setProps({ alertActive: true })
+    expect(wrapper.get('[role="alert"]').text()).toBe('人员缺岗')
+    expect(load).toHaveBeenCalledTimes(1)
     wrapper.unmount()
+  })
+
+  it('draws the red frame above frame contents and keeps the banner on top', () => {
+    const styles = readFileSync('src/modules/agents/agents.css', 'utf8')
+    expect(styles).toMatch(/\.run-frame\.alert-active::after\{[^}]*z-index:\s*\d+/)
+    expect(styles).toMatch(/\.run-alert-banner\{[^}]*z-index:\s*\d+/)
+    expect(styles).not.toContain('.run-player-surface.alert-active{box-shadow:')
   })
 
   it('passes selected single-run alert state to its player', () => {

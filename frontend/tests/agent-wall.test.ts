@@ -49,3 +49,17 @@ it('passes persisted absence state to the wall player without adding it to playe
   expect(player.attributes('data-identity')).toBe('run-1:running:true')
   wrapper.unmount()
 })
+it('shows a persistent alert on a closed absence tile and clears it when the run is normal',async()=>{
+  const c=newChannel();c.channel_id='group';c.name='主通道';setChannelSources(c,['A'])
+  const run={id:'run-1',agent_id:'a',revision_id:'r',revision_no:1,channel_id:'group',channel_name:'主通道',source_id:'A',source_kind:'camera',state:'running',recording_available:false,config_snapshot:{schema_version:'1.0',channels:[]},message:'',alert_state:'absence',data_origin:'real'} as Run
+  const wrapper=mount(VideoWall,{props:{agentId:'a',revision:{id:'r',config:{schema_version:'1.0',channels:[c]}} as Revision,runs:[run],sources:[{id:'A',name:'A',kind:'camera'} as Source],runtimeAvailable:true},global:{stubs:{MediaPlayer:true,RunPlayer:true,AgentStatus:true}}})
+
+  expect(wrapper.find('.run-player').exists()).toBe(false)
+  expect(wrapper.get('.wall-tile').classes()).toContain('alert-active')
+  expect(wrapper.get('.wall-poster [role="alert"]').text()).toBe('人员缺岗')
+
+  await wrapper.setProps({runs:[{...run,alert_state:'normal'}]})
+  expect(wrapper.get('.wall-tile').classes()).not.toContain('alert-active')
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  wrapper.unmount()
+})
