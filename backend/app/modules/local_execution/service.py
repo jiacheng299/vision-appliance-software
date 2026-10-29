@@ -12,7 +12,7 @@ from threading import Event, RLock, Thread
 import time
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, delete
 
 from ...shared.errors import Error
 from ...shared.models import now, uid
@@ -355,6 +355,43 @@ class LocalAgentServices(RegistryAgentServices):
             row = db.scalar(select(LocalAgentState).where(LocalAgentState.agent_id==agent_id,LocalAgentState.actor_id==actor_id))
             if row: row.archived = int(archived)
             else: db.add(LocalAgentState(id=uid(),agent_id=agent_id,actor_id=actor_id,archived=int(archived)))
+
+    @contextmanager
+    def deleting_task(self, agent_id, actor_id):
+        keys, identifiers = [], []
+        with self.lock:
+            if not self.started or self.closing:self.unavailable('runtime')
+            with self.writing() as db:
+                state=db.scalar(select(LocalAgentState).where(LocalAgentState.agent_id==agent_id,LocalAgentState.actor_id==actor_id))
+                was_archived=bool(state and state.archived)
+                if state:state.archived=1
+                else:db.add(LocalAgentState(id=uid(),agent_id=agent_id,actor_id=actor_id,archived=1))
+                identifiers=list(db.scalars(select(LocalRun.id).where(LocalRun.agent_id==agent_id,LocalRun.actor_id==actor_id)))
+            try:
+                futures=[]
+                for identifier in identifiers:
+                    stop=self.stops.get(identifier)
+                    if stop:stop.set()
+                    future=self.futures.get(identifier)
+                    if future:future.cancel();futures.append(future)
+                self.pending[:]=[i for i in self.pending if i not in identifiers]
+                if wait(futures,timeout=10)[1]:
+                    raise Error(409,'task_stop_timeout','监测尚未完全停止，任务未删除，请稍后重试。')
+                def purge(db):
+                    keys.extend(db.scalars(select(LocalEvent.evidence_key).where(LocalEvent.agent_id==agent_id,LocalEvent.actor_id==actor_id,LocalEvent.evidence_key.is_not(None))))
+                    for model in (LocalEvent,LocalOperation,LocalRun,LocalAgentState):
+                        db.execute(delete(model).where(model.agent_id==agent_id,model.actor_id==actor_id))
+                yield purge
+            except Exception:
+                with self.writing() as db:
+                    state=db.scalar(select(LocalAgentState).where(LocalAgentState.agent_id==agent_id,LocalAgentState.actor_id==actor_id))
+                    if state:state.archived=int(was_archived)
+                raise
+            for identifier in identifiers:
+                self.stops.pop(identifier,None);self.futures.pop(identifier,None)
+        for key in keys:
+            try:controlled_path(self.config,'media',key).unlink(missing_ok=True)
+            except OSError:logging.getLogger(__name__).warning('Deleted task evidence cleanup failed')
 
     def _finish(self, identifier, state, message, code=None):
         with self.writing() as db:

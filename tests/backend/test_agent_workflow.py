@@ -110,6 +110,34 @@ def test_default_mode_never_exposes_demo_or_fake_runs(client):
     assert w['runtime_available'] is False and w['runs']==[]
 
 
+def test_delete_task_removes_definitions_runs_and_events_but_keeps_sources(demo):
+    c,p,a,app=demo
+    rev,runs=start_demo(c,p,a)
+    source_ids=[r['source_id'] for r in runs]
+    clone(c,a,rev)
+    current=detail(c,a)
+    bad=c.delete(API+f"/agents/{a['id']}",params={'row_version':current['row_version']+1})
+    assert bad.status_code==409,bad.text
+    assert len(workspace(c,a))==2
+    result=c.delete(API+f"/agents/{a['id']}",params={'row_version':current['row_version']})
+    assert result.status_code==204,result.text
+    assert c.get(API+f"/agents/{a['id']}").status_code==404
+    assert c.get(API+f"/revisions/{rev['id']}").status_code==404
+    assert p.runs(a['id'],'workspace')==[]
+    assert not any(r.agent_id==a['id'] for r in p.run_rows.values())
+    assert not any(e.agent_id==a['id'] for e in p.event_rows.values())
+    with app.state.sessions() as db:
+        assert all(db.get(Source,sid) is not None for sid in source_ids)
+        assert not db.query(AgentValidation).filter(AgentValidation.revision_id==rev['id']).count()
+
+
+def test_delete_unpublished_task_without_runtime(client):
+    task=post(client,'/agents',{'name':'disposable draft'}).json()
+    result=client.delete(API+f"/agents/{task['id']}",params={'row_version':task['row_version']})
+    assert result.status_code==204,result.text
+    assert client.get(API+f"/agents/{task['id']}").status_code==404
+
+
 def test_demo_database_isolation_and_repeat_prepare(tmp_path,monkeypatch):
     from app.shared.config import Config
     config=Config(var_root=tmp_path,agent_demo=True);config.prepare();first=config.var_root;config.prepare()

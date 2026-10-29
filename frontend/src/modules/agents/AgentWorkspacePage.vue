@@ -65,10 +65,11 @@ async function rename(){
   if(!name.value.trim()){renameError.value='名称不能为空。';return}
   busy.value=true;try{await agentApi.rename(agentId.value,{name:name.value.trim(),description:description.value.trim(),row_version:agent.value.row_version});renameOpen.value=false;await load()}catch(e){renameError.value=agentError(e)}finally{busy.value=false}
 }
-async function archive(){
-  if(!agent.value||busy.value||!window.confirm(agent.value.archived_at?'确认恢复这个智能体？':'确认归档？历史配置和事件将保留，正在运行时会拒绝归档。'))return
+async function remove(){
+  if(!agent.value||busy.value||!window.confirm(`确认永久删除任务“${agent.value.name}”？将先停止监测，再删除配置、运行历史、告警及证据截图，无法恢复。所属模板、模型、视频源和原始录像不会删除。`))return
   busy.value=true;error.value=''
-  try{await agentApi.archive(agent.value,!!agent.value.archived_at);await load();notice.value=agent.value.archived_at?'已归档，历史记录仍可查看。':'已恢复。'}catch(e){error.value=agentError(e)}finally{busy.value=false}
+  const template=selected.value?.config.agent_template_ref?.template_id
+  try{await agentApi.remove(agent.value);busy.value=false;await router.push(template?`/agent-templates/${template}`:'/agents')}catch(e){error.value=agentError(e)}finally{busy.value=false}
 }
 async function viewRun(run:Run){focusRunId.value=run.id;await router.push(`/agents/${agentId.value}/live`)}
 async function retry(run:Run){selectedId.value=run.revision_id;await nextTick();workflowPanel.value?.openStart(run.channel_id)}
@@ -77,7 +78,7 @@ async function setScenario(){busy.value=true;error.value='';try{await agentApi.s
 const scenarios=[{label:'恢复正常',value:'normal'},{label:'模型服务不可用',value:'model_unavailable'},{label:'视频网关断流',value:'video_disconnected'},{label:'报警订阅中断',value:'events_disconnected'},{label:'新运行启动失败',value:'start_failed'},{label:'资源不足，进入排队',value:'resource_queued'},{label:'旧运行停止失败',value:'stop_failed'},{label:'重复投递同一事件',value:'duplicate_events'},{label:'证据条件不足',value:'insufficient_evidence'},{label:'选定一路运行异常',value:'run_failed'},{label:'导出失败，可重试',value:'export_failed'}]
 </script>
 <template>
-  <AgentWorkspaceHeader v-if="agent&&selected" :agent="agent" :revision="selected" :status="status" :loading="loading" :disabled="!!editing||busy||saving||workflowBusy" :can-write="canWrite" @select="selectedId=$event" @refresh="load();refreshWorkspace()" @rename="openRename" @archive="archive"/>
+  <AgentWorkspaceHeader v-if="agent&&selected" :agent="agent" :revision="selected" :status="status" :loading="loading" :disabled="!!editing||busy||saving||workflowBusy" :can-write="canWrite" @select="selectedId=$event" @refresh="load();refreshWorkspace()" @rename="openRename" @remove="remove"/>
   <div v-else class="page-heading"><h1>智能体详情</h1></div>
   <ErrorBanner :error="error" @retry="load"/><ErrorBanner :error="sourceError" @retry="loadSources"/><ErrorBanner :error="workspaceError" @retry="refreshWorkspace"/><ErrorBanner :error="operationError" @retry="refreshWorkspace"/><p v-if="notice" class="notice agent-notice" role="status">{{notice}}</p><div v-if="loading" class="loading-line"/>
   <template v-if="agent&&selected">

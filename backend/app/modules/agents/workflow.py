@@ -1,8 +1,9 @@
 """B's immutable configuration workflow. External control stays behind ports."""
 from datetime import datetime, timedelta, timezone
+from contextlib import nullcontext
 import hashlib
 import json
-from sqlalchemy import select
+from sqlalchemy import select, delete, update, or_
 from ...shared.errors import Error
 from ...shared.models import Log, now
 from ..sources import resolve_agent_source
@@ -330,6 +331,40 @@ def archive(db, provider, agent_id, expected_version, actor_id, restore=False):
     agent.archived_at = None if restore else now(); agent.updated_at = now(); agent.row_version += 1
     db.flush()
     return service.agent_dto(db, agent, detail=True)
+
+
+def delete_task(db, provider, agent_id, expected_version, actor_id):
+    agent = service.get_agent(db,agent_id)
+    service.check_version(agent,expected_version)
+    published = any(r.state=='published' for r in service.revisions_for(db,agent_id))
+    db.rollback()  # Do not hold a read transaction while stopping native inference.
+    context = provider.deleting_task(agent_id,actor_id) if published else nullcontext(lambda session: None)
+    with context as purge:
+        try:
+            _delete_task_rows(db,agent_id,expected_version,purge)
+        except Exception:
+            db.rollback()
+            raise
+
+
+def _delete_task_rows(db,agent_id,expected_version,purge):
+    from .models import Agent, AgentRevision
+    from ..agent_templates.models import TemplateTaskLink
+    service.lock_write(db);db.expire_all()
+    service.check_version(service.get_agent(db,agent_id),expected_version)
+    revisions = [r.id for r in service.revisions_for(db,agent_id)]
+    purge(db)
+    db.execute(delete(TemplateTaskLink).where(TemplateTaskLink.agent_id==agent_id))
+    db.execute(delete(AgentConfirmation).where(AgentConfirmation.revision_id.in_(revisions)))
+    db.execute(delete(AgentValidation).where(AgentValidation.revision_id.in_(revisions)))
+    db.execute(update(AgentRevision).where(AgentRevision.agent_id==agent_id).values(base_revision_id=None))
+    db.execute(delete(AgentRevision).where(AgentRevision.agent_id==agent_id))
+    db.execute(delete(AgentCommand).where(or_(AgentCommand.response['agent_id'].as_string()==agent_id,
+        AgentCommand.response['id'].as_string().in_([agent_id,*revisions]),
+        AgentCommand.response['revision_id'].as_string().in_(revisions))))
+    db.execute(delete(Agent).where(Agent.id==agent_id))
+    db.add(Log(level='INFO',module='agents',message='已删除任务及其配置、运行记录和报警证据。'))
+    db.commit()  # Evidence is removed only after the database transaction commits.
 
 
 def retest(db, provider, agent_id, body, actor_id, key):

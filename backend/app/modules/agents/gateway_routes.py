@@ -140,6 +140,12 @@ def archive(agent_id: str, body: VersionCommand, db=Depends(get_db), provider=De
     return workflow.archive(db, provider, agent_id, body.row_version, WORKSPACE_ACTOR_ID)
 
 
+@router.delete('/agents/{agent_id}', status_code=204)
+def delete_task(agent_id: str, row_version: int = Query(ge=1), db=Depends(get_db), provider=Depends(providers)):
+    workflow.delete_task(db,provider,agent_id,row_version,WORKSPACE_ACTOR_ID)
+    return Response(status_code=204)
+
+
 @router.post('/agents/{agent_id}/restore', response_model=AgentDetail)
 def restore(agent_id: str, body: VersionCommand, db=Depends(get_db), provider=Depends(providers)):
     return workflow.archive(db, provider, agent_id, body.row_version, WORKSPACE_ACTOR_ID, restore=True)

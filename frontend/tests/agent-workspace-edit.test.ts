@@ -82,6 +82,18 @@ function configButton(wrapper: Awaited<ReturnType<typeof page>>) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('task configuration editing', () => {
+  it('requires confirmation before permanently deleting a task',async()=>{
+    const remove=vi.spyOn(agentApi,'remove').mockResolvedValue(undefined)
+    const confirm=vi.spyOn(window,'confirm').mockReturnValue(false)
+    const value=detail('published'),wrapper=await page(value)
+    wrapper.getComponent({name:'AgentWorkspaceHeader'}).vm.$emit('remove');await flushPromises()
+    expect(remove).not.toHaveBeenCalled()
+    expect(confirm.mock.calls[0]?.[0]).toContain('原始录像不会删除')
+    confirm.mockReturnValue(true)
+    wrapper.getComponent({name:'AgentWorkspaceHeader'}).vm.$emit('remove');await flushPromises()
+    expect(remove).toHaveBeenCalledWith(value)
+    wrapper.unmount()
+  })
   it('opens the newly cloned draft when modifying a published task', async () => {
     const value = detail('published')
     const draft: Revision = { ...value.latest_revision, id: 'task-revision-2', revision_no: 2, state: 'draft', published_at: null }

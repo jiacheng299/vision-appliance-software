@@ -18,6 +18,9 @@ class AgentServices:
     supports_task_plans = False
     supports_configurable_parameters = False
 
+    def deleting_task(self, agent_id, actor_id):
+        self.unavailable('runtime')
+
     def available(self, service: str) -> bool:
         return False
 

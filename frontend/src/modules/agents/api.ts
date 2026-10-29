@@ -60,6 +60,7 @@ export const agentApi = {
   stopChannel: (id:string, channelId:string, key:string) => client.post<Operation>(`${base(id)}/channels/${encodeURIComponent(channelId)}/stop`,{},keyOptions(key)).then(r=>r.data),
   operation: (id: string, operationId: string) => client.get<Operation>(`${base(id)}/operations/${encodeURIComponent(operationId)}`).then(r => r.data),
   archive: (agent: Agent, restore: boolean) => client.post<AgentDetail>(`${base(agent.id)}/${restore ? 'restore' : 'archive'}`, {row_version:agent.row_version}, jsonOptions).then(r => r.data),
+  remove: (agent: Agent) => client.delete(`${base(agent.id)}`,{params:{row_version:agent.row_version}}).then(()=>undefined),
   events: (id: string, filters: EventFilters = {}, cursor?: string) => client.get<MonitorEventPage>(`${base(id)}/events`, {params:{...filters,cursor,limit:30}}).then(r => r.data),
   event: (id: string, eventId: string) => client.get<EventDetail>(`${base(id)}/events/${encodeURIComponent(eventId)}`).then(r => r.data),
   feedback: (id: string, event: EventDetail, label: 'correct'|'false_positive', reason: string, key: string) => client.post<EventDetail>(`${base(id)}/events/${encodeURIComponent(event.id)}/feedback`, {label,reason,row_version:event.row_version}, keyOptions(key)).then(r => r.data),

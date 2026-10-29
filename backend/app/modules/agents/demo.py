@@ -4,6 +4,7 @@ This file owns only synthetic data. Production uses AgentServices and never inst
 State transitions are timer-driven on reads so no inference worker is impersonated.
 """
 from datetime import datetime, timedelta, timezone
+from contextlib import contextmanager
 import json
 import base64
 from threading import RLock
@@ -36,6 +37,19 @@ class DemoServices(AgentServices):
 
     def clock(self):
         return time.monotonic()+self.offset
+
+    @contextmanager
+    def deleting_task(self,agent_id,actor_id):
+        with self.lock:
+            yield lambda db:None
+            run_ids={key for key,value in self.run_rows.items() if value.agent_id==agent_id}
+            for rows in (self.run_rows,self.operations,self.event_rows,self.annotations,self.jobs,self.sessions):
+                for key,value in list(rows.items()):
+                    if getattr(value,'agent_id',None)==agent_id or getattr(value,'run_id',None) in run_ids:
+                        rows.pop(key,None)
+            for key,(_,value) in list(self.receipts.items()):
+                if getattr(value,'agent_id',None)==agent_id:self.receipts.pop(key,None)
+            self.archived.add(agent_id)
 
     def advance(self, seconds=5):
         with self.lock:

@@ -6,7 +6,7 @@ import AgentStatus from './AgentStatus.vue'
 import type { AgentDetail, Revision } from './api'
 import { sourceCount } from './channelSources'
 defineProps<{agent:AgentDetail;revision:Revision;status:string;disabled:boolean;loading:boolean;canWrite:boolean}>()
-const emit=defineEmits<{select:[id:string];refresh:[];rename:[];archive:[]}>()
+const emit=defineEmits<{select:[id:string];refresh:[];rename:[];remove:[]}>()
 const sections=[
   {key:'live',label:'画面与报警',description:'查看各路实况与系统事件',icon:'monitor'},
   {key:'config',label:'监测配置',description:'视频来源、规则与监测区域',icon:'sliders'},
@@ -19,7 +19,7 @@ const sections=[
   <header class="agent-workspace-header">
     <div class="agent-heading-card">
       <div class="agent-heading-main"><RouterLink class="agent-back-link" to="/agents">‹ 返回智能体模板列表</RouterLink><div class="agent-heading-title"><span class="agent-heading-icon"><Icon name="bot" :size="26"/></span><div><span class="agent-eyebrow">{{revision.config.agent_template_ref?'任务工作空间':'历史任务工作空间'}}</span><h1>{{agent.name}}</h1></div></div><p>{{agent.description||'管理监测需求，查看画面、报警与实际运行版本。'}}</p></div>
-      <div class="agent-header-actions"><NButton :loading="loading" :disabled="disabled" @click="emit('refresh')">刷新</NButton><template v-if="canWrite"><NButton v-if="!agent.archived_at" :disabled="disabled" @click="emit('rename')">修改名称</NButton><NButton :disabled="disabled" @click="emit('archive')">{{agent.archived_at?'恢复智能体':'归档'}}</NButton></template></div>
+      <div class="agent-header-actions"><NButton :loading="loading" :disabled="disabled" @click="emit('refresh')">刷新</NButton><template v-if="canWrite"><NButton v-if="!agent.archived_at" :disabled="disabled" @click="emit('rename')">修改名称</NButton><NButton type="error" secondary :disabled="disabled" @click="emit('remove')">删除任务</NButton></template></div>
     </div>
     <p v-if="revision.config.agent_template_ref" class="notice">所属模板：<RouterLink :to="`/agent-templates/${revision.config.agent_template_ref.template_id}`">{{revision.config.agent_template_ref.name}}</RouterLink> · 固定模板版本 v{{revision.config.agent_template_ref.revision_no}}</p>
     <div class="agent-overview-grid">

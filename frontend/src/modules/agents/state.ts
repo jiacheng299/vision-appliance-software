@@ -57,6 +57,6 @@ export function received(scope: string) { sessionStorage.removeItem(`vision.agen
 const businessCodes = new Set(['execution_plan_stale','execution_plan_blocked','task_planning_unavailable','multimodal_execution_unavailable','multimodal_service_unavailable','grouped_sources_unavailable','validation_stale','validation_blocked','confirmation_required','published_revision_required','invalid_channel_scope','run_scope_changed','channel_busy','agent_archived','agent_in_use','baseline_running','feedback_conflict','invalid_media_range','invalid_time','evidence_unavailable','playback_unavailable','invalid_baseline','invalid_export_scope','export_state_conflict','export_not_ready','runtime_service_unavailable','events_service_unavailable','media_service_unavailable','exports_service_unavailable','provider_contract_invalid'])
 export function agentError(error: unknown): string {
   const detail = (error as {response?:{data?:{error?:{code?:string;message?:string}}}})?.response?.data?.error
-  if (detail?.code && businessCodes.has(detail.code) && detail.message) return detail.message.slice(0,1000)
+  if (detail?.code && (businessCodes.has(detail.code)||detail.code==='task_stop_timeout') && detail.message) return detail.message.slice(0,1000)
   return humanError(error)
 }

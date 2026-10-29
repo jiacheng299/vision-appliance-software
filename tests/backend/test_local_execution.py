@@ -339,6 +339,45 @@ def test_concurrency_changes_dispatch_existing_queue_without_restart(runtime):
     assert state('first')==state('second')=='running'
 
 
+def test_delete_running_task_stops_inference_and_cleans_only_owned_records(runtime):
+    from app.modules.agents import workflow
+    from app.modules.agents.models import Agent,AgentRevision
+    from app.modules.agent_templates.models import AgentTemplate,AgentTemplateRevision,TemplateTaskLink
+    from app.modules.local_execution.models import LocalRun,LocalEvent,LocalOperation
+    service,sessions,reader,config=runtime
+    def frames(self):
+        yield 0.,[]
+        while not self.stop.wait(.02):pass
+    reader.frames=frames
+    service.submit(command(),'actor','deletable')
+    deadline=time.monotonic()+3
+    while service.runs('agent','actor')[0].state!='running' and time.monotonic()<deadline:time.sleep(.02)
+    rid=service.runs('agent','actor')[0].id
+    evidence=config.var_root/'media/local-evidence/delete-test.jpg'
+    evidence.parent.mkdir(parents=True,exist_ok=True);evidence.write_bytes(b'test evidence')
+    with sessions() as db:
+        db.add(Agent(id='agent',name='delete me',description='',owner_id='actor'));db.flush()
+        db.add(AgentRevision(id='revision',agent_id='agent',revision_no=1,state='published',config=command().config.model_dump(mode='json')))
+        db.add(AgentTemplate(id='template',name='keep template',description=''));db.flush()
+        db.add(AgentTemplateRevision(id='template-revision',template_id='template',revision_no=1,state='published',config={}));db.flush()
+        db.add(TemplateTaskLink(agent_id='agent',template_id='template',template_revision_id='template-revision'))
+        db.add(LocalEvent(id='delete-event',agent_id='agent',actor_id='actor',run_id=rid,payload={},evidence_key='local-evidence/delete-test.jpg'))
+        db.commit()
+    with sessions() as db:workflow.delete_task(db,service,'agent',1,'actor')
+    assert service.futures.get(rid) is None
+    assert not evidence.exists()
+    with sessions() as db:
+        assert db.get(Agent,'agent') is None
+        assert db.get(AgentRevision,'revision') is None
+        assert db.get(TemplateTaskLink,'agent') is None
+        assert db.get(AgentTemplate,'template') is not None
+        assert db.get(Source,'video') is not None
+        assert db.get(LocalRun,rid) is None
+        assert db.get(LocalEvent,1) is None
+        assert not db.query(LocalOperation).filter(LocalOperation.agent_id=='agent').count()
+    assert (config.var_root/'media/sample.mp4').exists()
+
+
 def test_archiving_blocks_future_execution_and_actor_scope(runtime):
     service, _, _, _ = runtime
     service.set_archived('agent',True,'actor')
