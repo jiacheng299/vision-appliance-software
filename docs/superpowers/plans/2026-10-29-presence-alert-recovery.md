@@ -4,7 +4,7 @@
 
 **Goal:** Persist confirmed personnel-absence state, emit a confirmed recovery event after equal continuous presence time, and keep live video red until that recovery is confirmed.
 
-**Architecture:** `PresenceRule` owns the two-state transition logic. `LocalAgentServices` persists transition state on `RunDTO` and writes one durable event per transition. The workspace polling already used by the frontend carries the current alert state to both single-view and video-wall players, so UI state survives refresh without deriving truth from paginated events.
+**Architecture:** `PresenceRule` owns the two-state transition logic and the configured repeat-alarm clock. `LocalAgentServices` persists transition state on `RunDTO`, writes durable transition events, and writes repeated absence events without changing state. The workspace polling already used by the frontend carries the current alert state to both single-view and video-wall players, so UI state survives refresh without deriving truth from paginated events.
 
 **Tech Stack:** Python 3.12, FastAPI/Pydantic, SQLAlchemy, pytest, Vue 3, TypeScript, Vitest, Vue Test Utils, SVG overlays.
 
@@ -14,7 +14,7 @@
 
 - Recovery confirmation reuses the task's exact `duration_seconds`; no new user setting is added.
 - A confirmed absence stays active through unavailable frames, time reversal, large observation gaps, browser refresh, and video disconnection.
-- One absence episode emits exactly one `person_absence` event and one `person_presence_restored` event; `alarm_interval_seconds` remains accepted for configuration compatibility but does not repeat events.
+- One absence episode emits an initial `person_absence`, repeats `person_absence` while successful observations still show nobody at the configured `alarm_interval_seconds`, and emits one `person_presence_restored` after confirmed recovery.
 - Only the local YOLO person-absence executor uses this state machine. Other templates, demo providers, and multimodal tasks default to a normal alert state.
 - Single view and video wall must render the same persisted run state.
 - Each independently reviewable change uses a Chinese Conventional Commit and includes its regression tests.
@@ -29,7 +29,7 @@
 
 **Interfaces:**
 - Consumes: normalized person boxes and monotonic media timestamp from the existing executor.
-- Produces: `PresenceObservation(count, absent_seconds, present_seconds, state, transition)` where `state` is `Literal['normal','absence']` and `transition` is `Literal['absence','restored'] | None`.
+- Produces: `PresenceObservation(count, absent_seconds, present_seconds, state, transition, alarm)` where `state` is `Literal['normal','absence']`, `transition` is `Literal['absence','restored'] | None`, and `alarm` is true for the initial or configured repeated absence event.
 - Produces: `PresenceRule.mark_unavailable()` that clears only unconfirmed continuous timers and the last observation timestamp, while preserving confirmed `state`.
 
 - [ ] **Step 1: Write failing transition tests**
@@ -68,7 +68,7 @@ def test_unavailable_observation_preserves_alarm_but_resets_recovery_evidence():
     assert resumed.present_seconds == 0
 ```
 
-Update existing repeated-alarm assertions so sustained absence has no second transition.
+Update repeated-alarm assertions so sustained absence has no second transition but does set `alarm=True` again after `alarm_interval_seconds`. Assert a person entering during recovery confirmation produces `alarm=False`; leaving again resumes repeats. With interval `0`, every successfully observed absent frame after the initial transition may set `alarm=True`.
 
 - [ ] **Step 2: Run the state-machine tests and confirm RED**
 
@@ -78,7 +78,7 @@ Run:
 .venv\Scripts\python.exe -m pytest tests/backend/test_presence_rule.py -q
 ```
 
-Expected: failures because `present_seconds`, `state`, and `transition` do not exist and the old rule repeats alarms.
+Expected: failures because `present_seconds`, `state`, `transition`, and the separated repeat-alarm semantics do not all exist.
 
 - [ ] **Step 3: Implement the minimal two-state rule**
 
@@ -94,6 +94,7 @@ class PresenceObservation:
     present_seconds: float
     state: Literal['normal', 'absence']
     transition: Literal['absence', 'restored'] | None
+    alarm: bool
 
 class PresenceRule:
     def __init__(self, regions, min_count=1, duration_seconds=30,
@@ -101,6 +102,7 @@ class PresenceRule:
         # Keep validating alarm_interval_seconds for saved-config compatibility.
         self.state: Literal['normal', 'absence'] = 'normal'
         self.absent_since = self.present_since = self.last_observed = None
+        self.last_alarm = None
 
     def mark_unavailable(self):
         self.absent_since = self.present_since = self.last_observed = None
@@ -125,30 +127,38 @@ class PresenceRule:
             self.present_since = None
             if present:
                 self.absent_since = None
-                return PresenceObservation(count, 0, 0, self.state, None)
+                return PresenceObservation(count, 0, 0, self.state, None, False)
             if self.absent_since is None:
                 self.absent_since = timestamp
             absent = timestamp - self.absent_since
             if absent >= self.duration:
                 self.state = 'absence'
-                self.absent_since = None
-                return PresenceObservation(count, absent, 0, self.state, 'absence')
-            return PresenceObservation(count, absent, 0, self.state, None)
-        self.absent_since = None
+                self.last_alarm = timestamp
+                return PresenceObservation(count, absent, 0, self.state, 'absence', True)
+            return PresenceObservation(count, absent, 0, self.state, None, False)
         if not present:
             self.present_since = None
-            return PresenceObservation(count, 0, 0, self.state, None)
+            if self.absent_since is None:
+                self.absent_since = timestamp
+            absent = timestamp - self.absent_since
+            repeat = self.last_alarm is None or timestamp - self.last_alarm >= self.interval
+            if repeat:
+                self.last_alarm = timestamp
+            return PresenceObservation(count, absent, 0, self.state, None, repeat)
+        self.absent_since = None
         if self.present_since is None:
             self.present_since = timestamp
         present_seconds = timestamp - self.present_since
         if present_seconds >= self.duration:
             self.state = 'normal'
+            self.absent_since = None
             self.present_since = None
-            return PresenceObservation(count, 0, present_seconds, self.state, 'restored')
-        return PresenceObservation(count, 0, present_seconds, self.state, None)
+            self.last_alarm = None
+            return PresenceObservation(count, 0, present_seconds, self.state, 'restored', False)
+        return PresenceObservation(count, 0, present_seconds, self.state, None, False)
 ```
 
-Keep the existing polygon/count calculation directly in `observe`. Do not keep `last_alarm`; a confirmed state prevents duplicate transitions naturally.
+Keep the existing polygon/count calculation directly in `observe`. `mark_unavailable()` clears continuous evidence clocks but preserves both confirmed `state` and `last_alarm`; unavailable frames themselves never repeat alarms.
 
 - [ ] **Step 4: Run focused tests and confirm GREEN**
 
@@ -183,7 +193,7 @@ git commit -m "feat(检测): 增加缺岗复岗状态机"
 **Interfaces:**
 - Consumes: Task 1 `PresenceObservation.state` and `.transition`.
 - Produces: `RunDTO.alert_state: Literal['normal','absence'] = 'normal'` and `RunDTO.alert_started_at: str | None = None`.
-- Produces: durable `person_absence` warning events and `person_presence_restored` info events.
+- Produces: durable initial/repeated `person_absence` warning events and one `person_presence_restored` info event per confirmed recovery.
 - Produces: generated frontend `Run` type fields through the existing OpenAPI pipeline.
 
 - [ ] **Step 1: Write failing executor tests for one absence/recovery episode**
@@ -193,7 +203,7 @@ Add a deterministic frame sequence with absence long enough to alarm, continuous
 ```python
 PERSON = {'label':'person','x':.2,'y':.2,'width':.2,'height':.5,'confidence':.9}
 
-def command(duration_seconds=30):
+def command(duration_seconds=30, alarm_interval_seconds=60):
     config = RevisionConfig(channels=[dict(
         channel_id='channel', name='岗位', target='person', rule='absence',
         duration_seconds=duration_seconds,
@@ -202,7 +212,8 @@ def command(duration_seconds=30):
         capability_ref=dict(model_id='model', model_version='1',
                             template_id='template', template_version='1'),
         parameters=[dict(key='sample_interval_seconds', value=15),
-                    dict(key='confidence_threshold', value=.5)],
+                    dict(key='confidence_threshold', value=.5),
+                    dict(key='alarm_interval_seconds', value=alarm_interval_seconds)],
     )])
     return RuntimeCommand(
         kind='start', agent_id='agent', revision_id='revision', revision_no=1,
@@ -229,6 +240,21 @@ def test_absence_and_recovery_are_persisted_once(runtime):
     assert events[1].severity == 'info'
     assert run.alert_state == 'normal'
     assert run.alert_started_at is None
+
+def test_sustained_absence_repeats_at_the_configured_interval(runtime):
+    service, _, reader, _ = runtime
+    reader.frames_to_read = [
+        (0., []), (1., []), (2., []),
+        (3., []), (4., []), (5., []), (6., []),
+    ]
+    finish(service, service.submit(
+        command(duration_seconds=2, alarm_interval_seconds=2),
+        'actor', 'repeated-absence',
+    ))
+    events = list(reversed(service.events('agent', 'actor', {'limit':100}).items))
+    assert [event.event_type for event in events] == [
+        'person_absence', 'person_absence', 'person_absence'
+    ]
 ```
 
 Add a live-style test that stops while still absent and asserts `run.alert_state == 'absence'`, proving state is readable independently of event pagination.
@@ -258,10 +284,10 @@ Do not add schema columns: `LocalRun.payload` already persists the DTO JSON and 
 
 - [ ] **Step 4: Record transitions and persist state in one execution path**
 
-Replace the boolean-alarm branch with transition handling:
+Handle state transitions and repeat alarms separately:
 
 ```python
-if observation.transition and not stop.is_set():
+if (observation.transition or observation.alarm) and not stop.is_set():
     self._record_transition_event(
         run, observation, timestamp, frame, boxes, binding, stop
     )
@@ -286,16 +312,13 @@ with self.writing() as db:
     ))
 ```
 
-Generalize evidence/event creation with exact mappings:
+Generalize evidence/event creation. A restoration transition produces `person_presence_restored`; an initial or repeated alarm produces `person_absence` even when `transition is None`:
 
 ```python
-event_type = {
-    'absence': 'person_absence',
-    'restored': 'person_presence_restored',
-}[observation.transition]
-severity = 'warning' if observation.transition == 'absence' else 'info'
-duration = (observation.absent_seconds if observation.transition == 'absence'
-            else observation.present_seconds)
+restored = observation.transition == 'restored'
+event_type = 'person_presence_restored' if restored else 'person_absence'
+severity = 'info' if restored else 'warning'
+duration = observation.present_seconds if restored else observation.absent_seconds
 ```
 
 Absence evidence uses red text; recovery evidence uses green text. For file runs, event range starts at `timestamp - duration` and ends at `timestamp`. Stop/source ownership checks remain before durable write.
