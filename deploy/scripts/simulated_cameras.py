@@ -16,7 +16,8 @@ import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
-LAB = ROOT / 'var/camera-lab'
+VAR = Path(os.environ.get('VISION_VAR_ROOT', ROOT / 'var'))
+LAB = VAR / 'camera-lab'
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -60,7 +61,7 @@ def prepare(spec):
     for camera in spec['cameras']:
         if 'file' in camera:
             verified_download(camera, LAB / 'downloads' / camera['file'])
-    ffmpeg = ROOT / 'var/tools/ffmpeg/bin/ffmpeg.exe'
+    ffmpeg = Path(os.environ.get('VISION_FFMPEG', VAR / 'tools/ffmpeg/bin/ffmpeg.exe'))
     if not ffmpeg.is_file():
         raise RuntimeError('FFmpeg is missing; run setup.cmd first.')
     return destination / 'mediamtx.exe', ffmpeg
