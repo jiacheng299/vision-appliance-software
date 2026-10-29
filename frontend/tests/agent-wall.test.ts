@@ -37,3 +37,15 @@ it('opens only visible wall tiles and releases all players when changing page',a
   await button('下一页').trigger('click');expect(wrapper.findAll('.wall-tile')).toHaveLength(1);expect(released).toHaveBeenCalledTimes(4)
   expect(wrapper.findAll('.test-player')).toHaveLength(0);wrapper.unmount()
 })
+it('passes persisted absence state to the wall player without adding it to player identity',async()=>{
+  const c=newChannel();c.channel_id='group';c.name='主通道';setChannelSources(c,['A'])
+  const run={id:'run-1',agent_id:'a',revision_id:'r',revision_no:1,channel_id:'group',channel_name:'主通道',source_id:'A',source_kind:'camera',state:'running',recording_available:false,config_snapshot:{schema_version:'1.0',channels:[]},message:'',alert_state:'absence',data_origin:'real'} as Run
+  const Player=defineComponent({props:['identity','alertActive','alertLabel'],template:'<div class="run-player-stub" :data-identity="identity" :data-alert-active="alertActive" :data-alert-label="alertLabel"/>'})
+  const wrapper=mount(VideoWall,{props:{agentId:'a',revision:{id:'r',config:{schema_version:'1.0',channels:[c]}} as Revision,runs:[run],sources:[{id:'A',name:'A',kind:'camera'} as Source],runtimeAvailable:true},global:{stubs:{MediaPlayer:true,RunPlayer:Player,AgentStatus:true}}})
+  await wrapper.get('[aria-label="打开画面：A"]').trigger('click')
+  const player=wrapper.get('.run-player-stub')
+  expect(player.attributes('data-alert-active')).toBe('true')
+  expect(player.attributes('data-alert-label')).toBe('人员缺岗')
+  expect(player.attributes('data-identity')).toBe('run-1:running:true')
+  wrapper.unmount()
+})

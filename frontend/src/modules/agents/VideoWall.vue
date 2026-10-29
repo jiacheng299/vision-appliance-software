@@ -33,7 +33,7 @@ async function fullscreen(){try{await surface.value?.requestFullscreen()}catch{e
         <div class="wall-tile-heading"><strong>{{source(tile.binding.source_id)?.name??tile.binding.source_id}}</strong><AgentStatus v-if="tile.run" :value="state(tile.run)"/><span v-else class="status">未启动监测</span></div>
         <small v-if="tile.run">实际配置 v{{tile.run.revision_no}} · 运行编号 {{tile.run.id}}</small><small v-else>所选配置中的视频源 · 仅预览</small>
         <template v-if="opened.includes(tile.key)">
-          <RunPlayer v-if="tile.run" :key="tile.run.id" :identity="`${tile.run.id}:${tile.run.state}:${runtimeAvailable}`" :agent-id="agentId" :load="()=>agentApi.playback(agentId,tile.run!.id)" :is-live="tile.run.source_kind==='camera'&&state(tile.run)==='running'"/>
+          <RunPlayer v-if="tile.run" :key="tile.run.id" :identity="`${tile.run.id}:${tile.run.state}:${runtimeAvailable}`" :agent-id="agentId" :load="()=>agentApi.playback(agentId,tile.run!.id)" :is-live="tile.run.source_kind==='camera'&&state(tile.run)==='running'" :alert-active="tile.run.alert_state==='absence'" alert-label="人员缺岗"/>
           <MediaPlayer v-else-if="source(tile.binding.source_id)" :source="source(tile.binding.source_id)!" auto-start/>
           <p v-else class="wall-unavailable">视频源已归档或当前不可用，历史引用保留。</p>
           <p v-if="tile.run&&!activeStates.has(tile.run.state)" class="muted">已结束运行的回放入口，非实时分析。</p>

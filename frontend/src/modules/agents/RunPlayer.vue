@@ -6,7 +6,7 @@ import { safeMediaUrl } from '../../shared/media/url'
 import { formatDate } from '../../shared/ui/resource'
 import { agentApi, type Playback } from './api'
 import { agentError } from './state'
-const props=withDefaults(defineProps<{identity:string;agentId:string;load:()=>Promise<Playback>;mediaKind?:'image'|'video';isLive?:boolean}>(),{mediaKind:'video',isLive:false})
+const props=withDefaults(defineProps<{identity:string;agentId:string;load:()=>Promise<Playback>;mediaKind?:'image'|'video';isLive?:boolean;alertActive?:boolean;alertLabel?:string}>(),{mediaKind:'video',isLive:false,alertActive:false,alertLabel:'人员缺岗'})
 const emit=defineEmits<{position:[mediaMs:number]}>()
 const session=ref<Playback|null>(null),error=ref(''),loading=ref(false),video=ref<HTMLVideoElement|null>(null),surface=ref<HTMLElement|null>(null),ratio=ref(16/9)
 let generation=0,timer:ReturnType<typeof setTimeout>|undefined,hls:Hls|null=null,peer:RTCPeerConnection|null=null,whepUrl:string|null=null,controller:AbortController|null=null
@@ -86,13 +86,14 @@ onUnmounted(()=>{generation++;clearTimeout(timer);clearInterval(observationTimer
 </script>
 <template>
   <div class="run-player">
-    <div ref="surface" class="run-player-surface">
+    <div ref="surface" class="run-player-surface" :class="{'alert-active':alertActive}">
       <div class="run-frame" :style="{aspectRatio:ratio,'--frame-ratio':ratio}">
+        <div v-if="alertActive" class="run-alert-banner" role="alert">{{alertLabel}}</div>
         <template v-if="session?.protocol==='mock'"><div class="mock-room"><span class="mock-room-label">模拟场景示意图 · 非真实{{mediaKind==='image'?'截图':'视频'}}</span><div class="mock-floor"/><span class="mock-person"/></div></template>
         <img v-else-if="session&&mediaKind==='image'&&url" :src="url" alt="事件证据截图" @error="error='证据图片暂时无法读取，请重试。'"/>
         <video v-else-if="session" ref="video" @timeupdate="position" controls playsinline :autoplay="isLive" muted @loadedmetadata="ratio=video?.videoWidth&&video?.videoHeight?video.videoWidth/video.videoHeight:16/9" @error="error='视频无法播放或已断流，请重试。'"/>
         <div v-else class="run-player-placeholder">{{loading?'正在申请受保护的播放会话…':'暂无可用画面'}}</div>
-        <svg v-if="session" class="run-overlays" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="后端提供的监测区域与目标位置">
+        <svg v-if="session" class="run-overlays" :class="{'alert-active':alertActive}" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="后端提供的监测区域与目标位置">
           <polygon v-for="region in session.regions" :key="region.id" :points="polygon(region.points)" class="roi-saved"/>
           <template v-if="targetsFresh"><rect v-for="box in session.targets" :key="box.id" :x="box.x*1000" :y="box.y*1000" :width="box.width*1000" :height="box.height*1000" fill="none" stroke="#72ef9d" stroke-width="3" vector-effect="non-scaling-stroke"/></template>
         </svg>

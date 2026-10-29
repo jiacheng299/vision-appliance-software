@@ -3,7 +3,7 @@ import type { MonitorEvent, Run, RevisionConfig } from './api'
 import { humanError } from '../../shared/api/client'
 import { runSourceKey } from './channelSources'
 export const activeStates = new Set<Run['state']>(['queued','starting','running','reconnecting','stopping'])
-export const labels: Record<string,string> = {draft:'草稿',ready:'待启动',queued:'排队中',starting:'启动中',running:'运行中',reconnecting:'断流重连中',stopping:'停止中',stopped:'已停止',completed:'已完成',failed:'异常',canceled:'已取消',unknown:'状态待确认',archived:'已归档',pending:'待处理',succeeded:'成功',partial_failed:'部分失败',unreviewed:'待核查',correct:'正确',false_positive:'误报',collecting:'收集中',rendering:'生成中',packaging:'打包中',clarification_required:'需要补充条件',unsupported:'暂不支持',insufficient_evidence:'证据条件不足',executable:'可执行',ready_evidence:'证据就绪',missing:'证据不足',partial:'证据不完整',expired:'证据已过期',published:'已发布'}
+export const labels: Record<string,string> = {draft:'草稿',ready:'待启动',queued:'排队中',starting:'启动中',running:'运行中',reconnecting:'断流重连中',stopping:'停止中',stopped:'已停止',completed:'已完成',failed:'异常',canceled:'已取消',unknown:'状态待确认',archived:'已归档',pending:'待处理',succeeded:'成功',partial_failed:'部分失败',unreviewed:'待核查',correct:'正确',false_positive:'误报',collecting:'收集中',rendering:'生成中',packaging:'打包中',clarification_required:'需要补充条件',unsupported:'暂不支持',insufficient_evidence:'证据条件不足',executable:'可执行',ready_evidence:'证据就绪',missing:'证据不足',partial:'证据不完整',expired:'证据已过期',published:'已发布',person_absence:'人员缺岗',person_presence_restored:'恢复在岗'}
 export const label = (value: string) => labels[value] ?? value
 export function mergedEvents(previous: MonitorEvent[], incoming: MonitorEvent[]): MonitorEvent[] {
   const events = new Map(previous.map(e => [e.id,e]))
