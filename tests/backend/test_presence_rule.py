@@ -56,7 +56,7 @@ def test_unavailable_observation_preserves_alarm_but_resets_recovery_evidence():
     assert resumed.state=='absence'
     assert resumed.present_seconds==0
     assert resumed.alarm is False
-    assert detector.observe(21,[]).alarm is False
+    assert detector.observe(21,[]).alarm is True
 
 def test_absence_requires_continuous_thirty_seconds_and_person_resets_timer():
     detector=rule()
@@ -126,6 +126,19 @@ def test_zero_alarm_interval_repeats_for_each_observed_absent_frame():
     assert detector.observe(3,[]).alarm is True
     present=detector.observe(4,[PERSON])
     assert present.alarm is False and present.transition is None
+
+@pytest.mark.parametrize('alarm_interval',[30,0])
+def test_backwards_time_keeps_absence_and_restarts_repeat_alarm_clock(alarm_interval):
+    detector=rule(duration_seconds=1,alarm_interval_seconds=alarm_interval)
+    detector.observe(0,[])
+    initial=detector.observe(1,[])
+    assert initial.state=='absence' and initial.alarm is True
+
+    resumed=detector.observe(0,[])
+
+    assert resumed.state=='absence'
+    assert resumed.transition is None
+    assert resumed.alarm is True
 
 @pytest.mark.parametrize('settings',[{'min_count':0},{'duration_seconds':0},{'alarm_interval_seconds':-1}])
 def test_invalid_presence_settings_are_rejected(settings):

@@ -42,6 +42,7 @@ class PresenceRule:
 
     def mark_unavailable(self):
         self.absent_since = self.present_since = self.last_observed = None
+        self.last_alarm = None
 
     def observe(self, timestamp, boxes):
         if not math.isfinite(timestamp) or timestamp<0:
