@@ -11,11 +11,29 @@ def test_absence_and_recovery_each_require_the_full_duration():
     detector=rule(duration_seconds=3)
     assert detector.observe(0,[]).transition is None
     assert detector.observe(3,[]).transition=='absence'
+    assert detector.observe(3,[]).alarm is False
     assert detector.observe(4,[PERSON]).present_seconds==0
     assert detector.observe(6,[PERSON]).transition is None
     restored=detector.observe(7,[PERSON])
     assert restored.transition=='restored'
     assert restored.state=='normal'
+    assert restored.alarm is False
+
+def test_second_complete_absence_and_recovery_cycle_transitions_once_each():
+    detector=rule(duration_seconds=2)
+    assert detector.observe(0,[]).transition is None
+    assert detector.observe(2,[]).transition=='absence'
+    assert detector.observe(3,[PERSON]).transition is None
+    assert detector.observe(5,[PERSON]).transition=='restored'
+    assert detector.observe(6,[]).transition is None
+    second_absence=detector.observe(8,[])
+    assert second_absence.state=='absence'
+    assert second_absence.transition=='absence'
+    assert second_absence.alarm is True
+    assert detector.observe(9,[PERSON]).transition is None
+    second_restoration=detector.observe(11,[PERSON])
+    assert second_restoration.state=='normal'
+    assert second_restoration.transition=='restored'
 
 def test_brief_presence_does_not_clear_confirmed_absence():
     detector=rule(duration_seconds=2)
@@ -28,23 +46,28 @@ def test_brief_presence_does_not_clear_confirmed_absence():
     assert interrupted.transition is None
 
 def test_unavailable_observation_preserves_alarm_but_resets_recovery_evidence():
-    detector=rule(duration_seconds=2)
+    detector=rule(duration_seconds=2,alarm_interval_seconds=30)
     detector.observe(0,[])
-    detector.observe(2,[])
+    confirmed=detector.observe(2,[])
+    assert confirmed.alarm is True
     detector.observe(3,[PERSON])
     detector.mark_unavailable()
     resumed=detector.observe(20,[PERSON])
     assert resumed.state=='absence'
     assert resumed.present_seconds==0
+    assert resumed.alarm is False
+    assert detector.observe(21,[]).alarm is False
 
 def test_absence_requires_continuous_thirty_seconds_and_person_resets_timer():
     detector=rule()
     for second in range(30):assert detector.observe(second,[]).transition is None
-    assert detector.observe(30,[]).transition=='absence'
+    first=detector.observe(30,[])
+    assert first.transition=='absence' and first.alarm is True
     assert detector.observe(31,[]).transition is None
     assert detector.observe(32,[PERSON]).count==1
     for second in range(33,63):assert detector.observe(second,[]).transition is None
     assert detector.observe(63,[]).transition is None
+    assert detector.observe(90,[]).alarm is True
 
 def test_unavailable_frames_and_large_observation_gaps_are_not_absence_evidence():
     detector=rule()
@@ -69,11 +92,40 @@ def test_roi_counts_person_once_and_ignores_outside_people():
 def test_confirmed_absence_has_one_transition_and_backwards_time_resets_evidence():
     detector=rule(duration_seconds=1,alarm_interval_seconds=3)
     assert detector.observe(0,[]).transition is None
-    assert detector.observe(1,[]).transition=='absence'
+    initial=detector.observe(1,[])
+    assert initial.transition=='absence' and initial.alarm is True
     assert detector.observe(2,[]).transition is None
     assert detector.observe(3,[]).transition is None
-    assert detector.observe(4,[]).transition is None
-    assert detector.observe(0,[]).transition is None
+    repeated=detector.observe(4,[])
+    assert repeated.transition is None and repeated.alarm is True
+    recovering=detector.observe(5,[PERSON])
+    assert recovering.state=='absence' and recovering.alarm is False
+    assert detector.observe(6,[]).alarm is False
+    repeated_again=detector.observe(7,[])
+    assert repeated_again.transition is None and repeated_again.alarm is True
+    backwards=detector.observe(0,[PERSON])
+    assert backwards.state=='absence' and backwards.present_seconds==0
+    assert backwards.alarm is False
+
+def test_large_gap_preserves_confirmed_absence_and_resets_recovery_evidence():
+    detector=rule(duration_seconds=2,alarm_interval_seconds=60)
+    detector.observe(0,[])
+    detector.observe(2,[])
+    detector.observe(3,[PERSON])
+    after_gap=detector.observe(10,[PERSON])
+    assert after_gap.state=='absence'
+    assert after_gap.present_seconds==0
+    assert after_gap.transition is None
+    assert after_gap.alarm is False
+
+def test_zero_alarm_interval_repeats_for_each_observed_absent_frame():
+    detector=rule(duration_seconds=1,alarm_interval_seconds=0)
+    assert detector.observe(0,[]).alarm is False
+    assert detector.observe(1,[]).alarm is True
+    assert detector.observe(2,[]).alarm is True
+    assert detector.observe(3,[]).alarm is True
+    present=detector.observe(4,[PERSON])
+    assert present.alarm is False and present.transition is None
 
 @pytest.mark.parametrize('settings',[{'min_count':0},{'duration_seconds':0},{'alarm_interval_seconds':-1}])
 def test_invalid_presence_settings_are_rejected(settings):
