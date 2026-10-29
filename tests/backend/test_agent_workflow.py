@@ -208,7 +208,7 @@ def test_published_task_can_restart_after_validation_expiry(demo):
     assert any(r['state']=='running' for r in workspace(c,a))
 
 
-@pytest.mark.parametrize('change',['model','source'])
+@pytest.mark.parametrize('change',['model'])
 def test_published_restart_rejects_changed_dependencies(demo,change):
     c,p,a,app=demo
     rev,_=publish(c,a)
@@ -221,6 +221,32 @@ def test_published_restart_rejects_changed_dependencies(demo,change):
     result=submit(c,a,rev)
     assert result.status_code==409,result.text
     assert result.json()['error']['code']=='validation_stale'
+
+
+def test_published_restart_reassesses_updated_source_without_cloning(demo):
+    c,p,a,app=demo
+    rev,_=publish(c,a)
+    before=detail(c,a)['revisions']
+    with app.state.sessions() as db:
+        db.get(Source,rev['config']['channels'][0]['source_id']).row_version+=1
+        db.commit()
+    result=submit(c,a,rev)
+    assert result.status_code==202,result.text
+    assert finish(c,p,a,result.json())['state']=='succeeded'
+    assert detail(c,a)['revisions']==before
+
+
+def test_restart_with_updated_source_still_rejects_failed_assessment(demo):
+    c,p,a,app=demo
+    rev,_=publish(c,a)
+    with app.state.sessions() as db:
+        db.get(Source,rev['config']['channels'][0]['source_id']).row_version+=1
+        db.commit()
+    p.scenario='insufficient_evidence'
+    result=submit(c,a,rev)
+    assert result.status_code==422,result.text
+    assert result.json()['error']['code']=='validation_blocked'
+    assert workspace(c,a)==[]
 
 
 def test_edit_while_running_only_changes_draft_and_old_events_keep_version(demo):

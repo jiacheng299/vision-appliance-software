@@ -177,13 +177,25 @@ def start(db, provider, agent_id, body, actor_id, key, kind='start'):
     sources = source_snapshots(db, config)
     # Expiry limits draft confirmation, not the lifetime of a published task.
     # Immutable config and dependency fingerprints are still checked on every start.
-    if validation.config_hash != digest(revision.config) or validation.source_hash != digest(sources):
-        raise Error(409, 'validation_stale', '执行依据已经改变，请复制为草稿后重新验证确认。')
+    if validation.config_hash != digest(revision.config):
+        raise Error(409, 'validation_stale', '任务配置已改变，请重新验证确认。')
     if not set(body.channel_ids) <= {c.channel_id for c in config.channels}:
         raise Error(422, 'invalid_channel_scope', '启动范围包含此版本中不存在的通道。')
     catalog = provider.catalog(actor_id)
     if catalog.fingerprint != validation.capability_fingerprint or provider.data_origin != validation.data_origin:
         raise Error(409, 'validation_stale', '能力版本发生变化，请重新验证确认。')
+    if validation.source_hash != digest(sources):
+        # Connection probes update source versions too. Reassess the unchanged,
+        # already confirmed task against current sources instead of forcing a clone.
+        assessment = Assessment.model_validate(provider.assess(config, sources, actor_id))
+        if (assessment.data_origin != validation.data_origin
+                or assessment.capability_fingerprint != validation.capability_fingerprint):
+            raise Error(409, 'validation_stale', '能力版本发生变化，请重新验证确认。')
+        if (assessment.verdict != 'executable' or assessment.missing_conditions
+                or assessment.unsupported_conditions):
+            raise Error(422, 'validation_blocked', '当前视频源不满足原任务条件，请检查视频源后重试。', assessment.model_dump(mode='json'))
+        if any(c.capability_ref and c.capability_ref not in assessment.chosen_capabilities for c in config.channels):
+            raise Error(502, 'provider_contract_invalid', '重新校验未确认原任务的模型与模板。')
     provider.verify_execution_plans(config, actor_id)
     command = RuntimeCommand(kind=kind, agent_id=agent_id, revision_id=revision.id, revision_no=revision.revision_no,
                              config=config, channel_ids=body.channel_ids, expected_active_run_ids=body.expected_active_run_ids,
