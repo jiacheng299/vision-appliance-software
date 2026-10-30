@@ -42,13 +42,16 @@ def implementation():
         pytest.fail('Trusted YOLO model service is not implemented')
 
 
-def definition(version):
+def definition(version, rule='absence'):
+    parameter_keys = (['target', 'rule', 'duration_seconds', 'confidence_threshold', 'min_count',
+                       'alarm_interval_seconds', 'sample_interval_seconds'] if rule == 'absence' else
+                      ['target', 'rule', 'duration_seconds', 'confidence_threshold', 'tracking_timeout_seconds',
+                       'exit_confirmation_seconds', 'sample_interval_seconds'])
     return ModelInput(name='YOLO11n COCO 人员检测', version=version,
         runtime_type='yolo11n-onnx-person', file_id='uploaded', template={
-            'name': '人员缺岗规则', 'version': version, 'targets': ['person'], 'rules': ['absence'],
-            'requires_region': ['absence'], 'requires_duration': ['absence'],
-            'defaults': {'duration_seconds': 30}, 'parameter_keys': ['target', 'rule', 'duration_seconds',
-                'confidence_threshold', 'min_count', 'alarm_interval_seconds', 'sample_interval_seconds']})
+            'name': '人员监测规则', 'version': version, 'targets': ['person'], 'rules': [rule],
+            'requires_region': [rule], 'requires_duration': [rule],
+            'defaults': {'duration_seconds': 30 if rule == 'absence' else 8}, 'parameter_keys': parameter_keys})
 
 
 def adapter(prepared, monkeypatch, *, self_test_error=False):
@@ -111,13 +114,20 @@ def test_verified_copy_runs_self_test_before_passing(prepared, monkeypatch):
         definition(manifest['model_version']), model, manifest['sha256'])[0] == 'failed'
 
 
+def test_verified_copy_accepts_the_fixed_person_intrusion_capability(prepared, monkeypatch):
+    _, _, model, manifest = prepared
+    body = definition(manifest['model_version'],'intrusion')
+    state, message = adapter(prepared, monkeypatch).verify(body,model,manifest['sha256'])
+    assert state == 'passed' and '人员监测能力' in message
+
+
 @pytest.mark.parametrize('change', ['runtime', 'target', 'rule', 'region', 'duration', 'parameter', 'defaults', 'version'])
 def test_unsupported_capability_claims_are_not_verified(prepared, monkeypatch, change):
     _, _, model, manifest = prepared
     body = definition(manifest['model_version'])
     if change == 'runtime': body.runtime_type = 'arbitrary-python'
     elif change == 'target': body.template.targets = ['person', 'fire']
-    elif change == 'rule': body.template.rules = ['intrusion']
+    elif change == 'rule': body.template.rules = ['dwell']
     elif change == 'region': body.template.requires_region = []
     elif change == 'duration': body.template.requires_duration = []
     elif change == 'parameter': body.template.parameter_keys.append('color')
