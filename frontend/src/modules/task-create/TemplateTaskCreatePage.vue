@@ -3,12 +3,13 @@ import { computed,onBeforeUnmount,onMounted,ref,watch } from 'vue'
 import { onBeforeRouteLeave,useRoute,useRouter } from 'vue-router'
 import { NButton,NCheckbox,NInput,NInputNumber,NSelect } from 'naive-ui'
 import { agentApi,listAgentSources,type AgentDetail,type CapabilityCatalog,type ChannelSource,type Operation,type Revision,type Validation } from '../agents/api'
-import { templatesApi,allPublishedTemplates,modelKey,plainModelName,templateError,type AgentTemplate,type TemplateRevision,type TemplateConfig,type TemplateMatcherStatus,type TemplateMatchResult,type ParameterSetting,type ParameterDefinition } from '../agents/templatesApi'
+import { templatesApi,allPublishedTemplates,modelKey,templateError,type AgentTemplate,type TemplateRevision,type TemplateConfig,type ParameterSetting,type ParameterDefinition } from '../agents/templatesApi'
 import { retryKey } from './state'
 import type { Source } from '../../shared/api/types'
 import { channelSources } from '../agents/channelSources'
 import { label } from '../agents/state'
 import ParameterFields from '../agents/ParameterFields.vue'
+import TemplateSelection from './TemplateSelection.vue'
 import RegionEditor from '../../shared/media/RegionEditor.vue'
 import MediaPlayer from '../../shared/media/MediaPlayer.vue'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
@@ -18,17 +19,17 @@ import '../agents/agents.css'
 const route=useRoute(),router=useRouter()
 const templates=ref<AgentTemplate[]>([]),sources=ref<Source[]>([]),definitions=ref<ParameterDefinition[]>([]),catalog=ref<CapabilityCatalog|null>(null)
 const templateId=ref<string|null>(null),version=ref<TemplateRevision|null>(null),name=ref(''),description=ref('')
-const selectionMode=ref<'manual'|'natural'>('manual'),requirementText=ref(''),matcher=ref<TemplateMatcherStatus|null>(null),matchResult=ref<TemplateMatchResult|null>(null),matching=ref(false),matcherError=ref(''),matcherStatusError=ref('')
+const step=ref(0)
 const bindings=ref<ChannelSource[]>([{source_id:'',regions:[],start_media_ms:null,end_media_ms:null}]),parameters=ref<ParameterSetting[]>([])
 const agent=ref<AgentDetail|null>(null),revision=ref<Revision|null>(null),validation=ref<Validation|null>(null),operation=ref<Operation|null>(null)
 const busy=ref(false),loading=ref(true),error=ref(''),loadError=ref(''),notice=ref(''),pendingRegions=ref<Record<string,boolean>>({}),ack=ref(false),legacyDraft=ref('')
 const pendingRegion=computed(()=>Object.values(pendingRegions.value).some(Boolean))
 const saved=ref(''),validated=ref(''),validationClock=ref(Date.now())
-let allowLeave=false,stopped=false,matchSequence=0,pollTimer:ReturnType<typeof setTimeout>|undefined,validationTimer:ReturnType<typeof setTimeout>|undefined
+let allowLeave=false,stopped=false,pollTimer:ReturnType<typeof setTimeout>|undefined,validationTimer:ReturnType<typeof setTimeout>|undefined
 const sourceFor=(b:ChannelSource)=>sources.value.find(s=>s.id===b.source_id)
 const selectedTemplate=computed(()=>templates.value.find(t=>t.id===templateId.value))
 const model=computed(()=>catalog.value?.items.find(i=>modelKey(i.reference)===modelKey(version.value?.config.model_ref)))
-const signature=computed(()=>JSON.stringify({template:version.value?.id,name:name.value,description:description.value,sources:bindings.value,parameters:parameters.value,selectionMode:selectionMode.value,requirementText:requirementText.value}))
+const signature=computed(()=>JSON.stringify({template:version.value?.id,name:name.value,description:description.value,sources:bindings.value,parameters:parameters.value}))
 const dirty=computed(()=>signature.value!==saved.value||pendingRegion.value),frozen=computed(()=>busy.value||!!operation.value||revision.value?.state==='published'||!!legacyDraft.value||!version.value)
 const executable=computed(()=>!pendingRegion.value&&validation.value?.verdict==='executable'&&validated.value===signature.value&&Date.parse(validation.value.expires_at)>validationClock.value)
 watch(signature,()=>{validation.value=null;validated.value='';ack.value=false})
@@ -48,34 +49,15 @@ function selectVersion(row?:AgentTemplate){
   if(!name.value&&selectedTemplate.value)name.value=`${selectedTemplate.value.name}任务`
 }
 function chooseTemplate(id:string|null){
-  if(agent.value||busy.value)return
+  if(agent.value||busy.value||id===templateId.value)return
   selectVersion(templates.value.find(t=>t.id===id&&!t.archived_at&&t.published_revision?.state==='published'))
 }
-function resetMatch(){matchSequence++;matching.value=false;matchResult.value=null;matcherError.value='';selectVersion()}
-function changeMode(mode:'manual'|'natural'){
-  if(agent.value||busy.value||selectionMode.value===mode)return
-  selectionMode.value=mode;resetMatch()
-}
-function changeRequirement(text:string){
-  if(agent.value||busy.value)return
-  requirementText.value=text;resetMatch()
-}
-async function matchTemplate(){
-  if(matching.value||busy.value||agent.value||selectionMode.value!=='natural'||!matcher.value?.configured||!requirementText.value.trim())return
-  const sequence=++matchSequence,text=requirementText.value.trim()
-  const current=()=>!stopped&&sequence===matchSequence&&selectionMode.value==='natural'&&requirementText.value.trim()===text
-  matching.value=true;matcherError.value='';matchResult.value=null;selectVersion()
-  try{
-    const result=await templatesApi.match({requirement_text:text})
-    if(!current())return
-    if(result.status==='no_match'){matchResult.value=result;return}
-    if(!result.template_id||!result.template_revision_id||result.confidence<(matcher.value?.threshold??.8)||result.uncovered_requirements.length)throw Error('匹配结果无效，请重新匹配或手动选择模板。')
-    const detail=await templatesApi.detail(result.template_id)
-    if(!current())return
-    if(detail.archived_at||detail.id!==result.template_id||detail.published_revision?.id!==result.template_revision_id||detail.published_revision.state!=='published')throw Error('匹配的模板版本已不可用，请重新匹配。')
-    templates.value=[...templates.value.filter(t=>t.id!==detail.id),detail]
-    selectVersion(detail);matchResult.value=result
-  }catch(e){if(current())matcherError.value=displayError(e)}finally{if(current())matching.value=false}
+function goStep(target:number){
+  if(busy.value||operation.value)return
+  if(pendingRegion.value){error.value='请先闭合并保存正在绘制的区域。';return}
+  if(target>0&&!version.value)return
+  if(target===2&&!validation.value&&revision.value?.state!=='published')return
+  step.value=target;error.value=''
 }
 function changeSource(index:number,id:string|null){
   if(frozen.value)return
@@ -130,7 +112,7 @@ async function persist(){
   return revision.value!
 }
 async function save(){if(busy.value)return;busy.value=true;error.value='';try{await persist();notice.value='任务草稿已保存，尚未启动分析。'}catch(e){error.value=displayError(e)}finally{busy.value=false}}
-async function evaluate(){if(busy.value)return;busy.value=true;error.value='';try{const r=await persist();validation.value=await agentApi.validate(r);agent.value=await agentApi.detail(agent.value!.id);revision.value=agent.value.latest_revision;validated.value=signature.value;ack.value=false;notice.value='任务验证已完成，请核对结果。'}catch(e){error.value=displayError(e)}finally{busy.value=false}}
+async function evaluate(){if(busy.value)return;busy.value=true;error.value='';try{const r=await persist();validation.value=await agentApi.validate(r);agent.value=await agentApi.detail(agent.value!.id);revision.value=agent.value.latest_revision;validated.value=signature.value;ack.value=false;step.value=2;notice.value='任务验证已完成，请核对结果。'}catch(e){error.value=displayError(e)}finally{busy.value=false}}
 async function poll(){
   if(stopped||!agent.value||!operation.value)return
   try{operation.value=await agentApi.operation(agent.value.id,operation.value.id);if(['pending','running'].includes(operation.value.state))pollTimer=setTimeout(()=>void poll(),1000);else if(operation.value.state==='succeeded'){allowLeave=true;await router.push(`/agents/${agent.value.id}/live`)}}catch(e){error.value=displayError(e)}
@@ -144,13 +126,12 @@ async function start(){
 async function initialize(){
   loading.value=true;loadError.value=''
   try{
-    const results=await Promise.allSettled([allPublishedTemplates(),listAgentSources(),templatesApi.parameters(),agentApi.catalog(),templatesApi.matcherStatus()])
+    const results=await Promise.allSettled([allPublishedTemplates(),listAgentSources(),templatesApi.parameters(),agentApi.catalog()])
     if(stopped)return
     if(results[0].status==='fulfilled')templates.value=results[0].value;else throw results[0].reason
     if(results[1].status==='fulfilled')sources.value=results[1].value;else loadError.value=templateError(results[1].reason)
     if(results[2].status==='fulfilled')definitions.value=results[2].value.items;else throw results[2].reason
     if(results[3].status==='fulfilled')catalog.value=results[3].value
-    if(results[4].status==='fulfilled'){matcher.value=results[4].value;matcherStatusError.value=''}else matcherStatusError.value=displayError(results[4].reason)
     if(route.query.draft){
       const task=await agentApi.detail(String(route.query.draft)),ref=task.latest_revision.config.agent_template_ref
       if(!ref){legacyDraft.value=task.id;allowLeave=true;return}
@@ -162,6 +143,7 @@ async function initialize(){
       const channel=task.latest_revision.config.channels![0]!
       bindings.value=JSON.parse(JSON.stringify(channelSources(channel).length?channelSources(channel):[{source_id:'',regions:[],start_media_ms:null,end_media_ms:null}])) as ChannelSource[]
       parameters.value=JSON.parse(JSON.stringify(channel.parameters??[])) as ParameterSetting[]
+      step.value=revision.value.state==='published'?2:1
     }else if(route.query.template)chooseTemplate(String(route.query.template))
     saved.value=signature.value
   }catch(e){loadError.value=displayError(e)}finally{loading.value=false}
@@ -170,30 +152,17 @@ onMounted(()=>void initialize())
 onBeforeRouteLeave(()=>allowLeave||!dirty.value||window.confirm('任务包含未保存的配置，确定离开？'))
 function beforeUnload(event:BeforeUnloadEvent){if(dirty.value||busy.value){event.preventDefault();event.returnValue=''}}
 window.addEventListener('beforeunload',beforeUnload)
-onBeforeUnmount(()=>{stopped=true;matchSequence++;clearTimeout(pollTimer);clearTimeout(validationTimer);window.removeEventListener('beforeunload',beforeUnload)})
+onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validationTimer);window.removeEventListener('beforeunload',beforeUnload)})
 </script>
 <template>
-  <div class="page-heading"><div><h1>任务创建</h1><p>选择智能体模板，配置一路或多路视频，共用检测条件，各路独立监测与报警</p></div><RouterLink to="/agents">管理智能体模板</RouterLink></div>
+  <div class="page-heading"><div><h1>创建监测任务 <small class="tc-draft">草稿</small></h1><p>先确定监测模板，再配置视频与检测区域</p></div><RouterLink to="/agents">返回任务列表</RouterLink></div>
   <ErrorBanner :error="loadError" @retry="initialize"/><ErrorBanner :error="error" :retryable="false"/><p v-if="notice" class="notice">{{notice}}</p><div v-if="loading" class="loading-line"/>
   <section v-if="legacyDraft" class="panel"><h2>历史任务配置</h2><p>此任务创建于模板关联功能启用前，原配置与自然语言执行方案完整保留。</p><RouterLink :to="{path:'/create/legacy',query:{draft:legacyDraft}}">继续编辑历史任务</RouterLink></section>
-  <div v-else class="create-layout"><section class="panel create-main">
-    <h2>1. 选择智能体模板</h2>
-    <div class="field"><label>选择方式</label><NSelect :value="selectionMode" :options="[{label:'手动选择已有模板',value:'manual'},{label:'自然语言匹配（DeepSeek）',value:'natural'}]" :disabled="busy||!!agent||loading" aria-label="模板选择方式" @update:value="changeMode"/></div>
-    <div v-if="selectionMode==='manual'" class="field"><label>智能体模板</label><NSelect :value="templateId" :options="templates.filter(t=>!t.archived_at&&t.published_revision).map(t=>({label:t.name,value:t.id}))" :disabled="busy||!!agent" filterable placeholder="选择已发布模板，例如：人员在岗监测" aria-label="选择智能体模板" @update:value="chooseTemplate"/></div>
-    <section v-else aria-label="自然语言模板匹配">
-      <p class="hint">DeepSeek 仅匹配智能体管理中已发布的模板。请说明检测对象、规则与条件。</p>
-      <div class="field"><label>任务需求</label><NInput :value="requirementText" type="textarea" :disabled="busy||!!agent" :maxlength="2000" aria-label="自然语言任务需求" placeholder="例如：监测值班区域是否有人，连续无人30秒报警" @update:value="changeRequirement"/></div>
-      <p v-if="matcher&&!matcher.configured" class="notice">本机尚未配置 DeepSeek API Key，请在本机配置后重试，或切换手动选择。</p>
-      <ErrorBanner :error="matcherStatusError||matcherError" :retryable="false"/>
-      <NButton :disabled="busy||matching||!!agent||!matcher?.configured||!requirementText.trim()" :loading="matching" @click="matchTemplate">匹配已有模板</NButton>
-      <p v-if="matching" role="status" class="notice">正在匹配已有模板，请稍候。</p>
-      <section v-if="matchResult" class="notice" role="status">
-        <template v-if="matchResult.status==='no_match'"><strong>无足够匹配的模板，需要自定义创建</strong><p>{{matchResult.reason}}</p><ul v-if="matchResult.uncovered_requirements.length"><li v-for="item in matchResult.uncovered_requirements" :key="item">未覆盖：{{item}}</li></ul><RouterLink to="/agents">前往智能体管理创建模板</RouterLink></template>
-        <template v-else><strong>已匹配：{{selectedTemplate?.name}}</strong><p>{{matchResult.reason}}</p><p>匹配置信度 {{Math.round(matchResult.confidence*100)}}% · {{matchResult.model}}</p></template>
-      </section>
-    </section>
-    <p v-if="!templates.length&&!loading" class="notice">暂无已发布模板，请先在智能体管理中新建并发布模板。</p>
-    <p v-if="version" class="hint">模板版本 v{{version.revision_no}} · {{model?plainModelName(model.name):version.config.model_ref?.model_id}} {{version.config.model_ref?.model_version}}。任务保存后固定使用此版本。</p>
+  <template v-else>
+  <nav class="tc-steps" aria-label="任务创建步骤"><button v-for="(title,index) in ['选择模板','配置视频与区域','验证并启动']" :key="title" :class="{active:step===index,complete:step>index}" :aria-current="step===index?'step':undefined" :disabled="busy||!!operation||loading||(index>0&&!version)||(index===2&&!validation&&revision?.state!=='published')" @click="goStep(index)"><span>{{index+1}}</span>{{title}}</button></nav>
+  <TemplateSelection v-show="step===0" :templates="templates" :selected-id="templateId" :version="version" :disabled="busy||!!agent||loading" @select="chooseTemplate"/>
+  <div class="tc-basic-layout"><section v-show="step===1" class="panel create-main">
+    <p class="hint">{{selectedTemplate?.name}} · 模板版本 v{{version?.revision_no}} · 共用规则，各路独立监测与报警</p>
     <fieldset :disabled="frozen" class="create-fields"><h2 class="agent-section-title">2. 配置检测视频</h2>
       <div class="field"><label>任务名称</label><NInput v-model:value="name" :disabled="frozen" :maxlength="160" aria-label="任务名称" placeholder="例如：一号仓库火灾检测"/></div><div class="field"><label>任务说明</label><NInput v-model:value="description" :disabled="frozen" type="textarea" :maxlength="2000" aria-label="任务说明"/></div>
       <p class="hint">最多16路视频，共用下方检测条件；各路区域、录像范围、报警计时相互独立。每路占用一个并发执行名额，超过系统并发上限的画面会排队。</p>
@@ -209,10 +178,18 @@ onBeforeUnmount(()=>{stopped=true;matchSequence++;clearTimeout(pollTimer);clearT
       <NButton :disabled="frozen||bindings.length>=16" @click="addSource">添加视频源</NButton>
       <h2 class="agent-section-title">3. 设置模板条件</h2><ParameterFields :settings="parameters" @update:settings="parameters=$event" :definitions="definitions" :model="model" :disabled="frozen||!version"/>
     </fieldset>
-    <div class="agent-actions"><NButton :disabled="frozen||!version||loading" :loading="busy" @click="save">保存任务草稿</NButton><NButton type="primary" :disabled="frozen||!version||loading" :loading="busy" @click="evaluate">验证任务</NButton></div>
-  </section><aside class="panel create-summary"><h2>任务执行依据</h2><p>模板：{{selectedTemplate?.name??'尚未选择'}}</p><p>版本：{{version?`v${version.revision_no}`:'尚未选择'}}</p><p>视频：{{bindings.filter(b=>b.source_id).length}} 路</p><p v-for="(b,index) in bindings" :key="index">{{index+1}}. {{sourceFor(b)?.name??'尚未选择'}} · {{b.regions?.length??0}} 个区域</p><p class="notice">修改模板不会改变本任务。所有视频共用检测条件，报警独立记录。只有验证通过并确认后才会启动分析。</p>
+  </section><aside v-show="step===2" class="panel create-summary"><h2>核对配置与验证结果</h2><p>模板：{{selectedTemplate?.name??'尚未选择'}}</p><p>模板版本 {{version?`v${version.revision_no}`:'尚未选择'}}</p><p>视频：{{bindings.filter(b=>b.source_id).length}} 路</p><p v-for="(b,index) in bindings" :key="index">{{index+1}}. {{sourceFor(b)?.name??'尚未选择'}} · {{b.regions?.length??0}} 个区域</p><p class="notice">所有视频共用检测条件，报警独立记录。只有验证通过并确认后才会启动分析。</p>
     <section v-if="validation" class="create-assessment"><h3>{{label(validation.verdict)}}</h3><ul><li v-for="message in [...(validation.missing_conditions??[]),...(validation.unsupported_conditions??[]),...(validation.evidence_limitations??[])]" :key="message">{{message}}</li></ul></section>
-    <NCheckbox v-model:checked="ack" :disabled="!executable||busy||!!operation">已核对模板版本、视频范围和检测条件</NCheckbox><NButton block type="primary" :disabled="!executable||!ack||busy||!!operation" :loading="busy" @click="start">确认启动</NButton>
+    <NCheckbox v-model:checked="ack" :disabled="!executable||busy||!!operation">已核对模板版本、视频范围和检测条件</NCheckbox>
     <p v-if="operation" class="notice">{{label(operation.state)}} · {{operation.message}}</p><NButton v-if="operation" :disabled="busy" @click="poll">刷新启动状态</NButton><RouterLink v-if="agent" :to="`/agents/${agent.id}/live`">查看任务详情</RouterLink>
   </aside></div>
+  <footer class="tc-footer"><div><strong v-if="version">已选择：{{selectedTemplate?.name}} · v{{version.revision_no}}</strong><strong v-else>请选择一个已发布模板</strong><p>{{step===0?'确认后进入视频与区域配置':step===1?`${bindings.filter(b=>b.source_id).length} 路视频 · 共用规则，各路独立报警`:'验证通过后，核对并确认启动'}}</p></div><div class="agent-actions">
+    <NButton v-if="step===0" type="primary" aria-label="确认模板，下一步" :disabled="!version||busy||loading||!!loadError" @click="goStep(1)">确认模板，下一步</NButton>
+    <template v-if="step===1"><NButton :disabled="busy||!!operation" @click="goStep(0)">上一步</NButton><NButton :disabled="frozen||loading" :loading="busy" @click="save">保存草稿</NButton><NButton type="primary" :disabled="frozen||loading" :loading="busy" @click="evaluate">验证任务</NButton></template>
+    <template v-if="step===2"><NButton :disabled="busy||!!operation" @click="goStep(1)">返回修改配置</NButton><NButton type="primary" aria-label="确认启动" :disabled="!executable||!ack||busy||!!operation" :loading="busy" @click="start">确认启动</NButton></template>
+  </div></footer>
+  </template>
 </template>
+<style scoped>
+.tc-draft{display:inline-block;font-size:11px;padding:4px 9px;background:#e2edff;color:#2367ed;border-radius:5px;vertical-align:middle;margin-left:10px}.tc-steps{display:flex;gap:20px;margin:24px 0}.tc-steps button{flex:1;display:flex;align-items:center;gap:12px;padding:12px;border:0;background:transparent;font:inherit;color:#8491a6;text-align:left}.tc-steps button.active{color:#2367ed;font-weight:650}.tc-steps button.complete{color:#2d936a}.tc-steps button span{display:grid;place-items:center;width:30px;height:30px;border:1px solid #d5deed;border-radius:50%}.tc-steps button.active span{background:#2367ed;color:white;border-color:#2367ed}.tc-basic-layout .create-summary{position:static}.tc-footer{position:sticky;bottom:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:20px;padding:18px 20px;background:#fff;border:1px solid #e4eaf3;border-radius:8px;box-shadow:0 -4px 16px #16305b06}.tc-footer strong{font-size:13px;color:#263951}.tc-footer p{font-size:11px;color:#8390a5;margin-top:7px}.tc-footer .agent-actions{margin:0}
+</style>
