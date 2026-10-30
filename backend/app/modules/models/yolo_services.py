@@ -14,8 +14,11 @@ from .service import file_hash
 from .yolo import YoloPersonDetector
 
 SOURCE_SHA256 = '0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1'
-SUPPORTED_PARAMETERS = frozenset({'target', 'rule', 'duration_seconds', 'confidence_threshold',
-    'min_count', 'alarm_interval_seconds', 'sample_interval_seconds'})
+COMMON_PARAMETERS = frozenset({'target', 'rule', 'duration_seconds', 'confidence_threshold', 'sample_interval_seconds'})
+RULE_PARAMETERS = {
+    'absence': COMMON_PARAMETERS | {'min_count', 'alarm_interval_seconds'},
+    'intrusion': COMMON_PARAMETERS | {'tracking_timeout_seconds', 'exit_confirmation_seconds'},
+}
 RUNTIME_TYPE = 'yolo11n-onnx-person'
 
 
@@ -76,15 +79,16 @@ class YoloModelServices(ModelServices):
     def _definition_supported(self, definition, manifest):
         body = ModelInput.model_validate(definition)
         template = body.template
+        rule = template.rules[0] if len(template.rules) == 1 else None
         if (body.runtime_type != RUNTIME_TYPE or body.version != manifest['model_version']
                 or template.version != manifest['model_version']
-                or template.targets != ['person'] or template.rules != ['absence']
-                or template.requires_region != ['absence'] or template.requires_duration != ['absence']
-                or not set(template.parameter_keys) <= SUPPORTED_PARAMETERS
+                or template.targets != ['person'] or rule not in RULE_PARAMETERS
+                or template.requires_region != [rule] or template.requires_duration != [rule]
+                or not set(template.parameter_keys) <= RULE_PARAMETERS[rule]
                 or not set(template.defaults) <= set(template.parameter_keys)):
             return False
         validate_settings([ParameterSetting(key=key, value=value) for key, value in template.defaults.items()],
-                          extra_choices={'target': ['person'], 'rule': ['absence']})
+                          extra_choices={'target': ['person'], 'rule': [rule]})
         return True
 
     def verify(self, definition, path, checksum):
@@ -95,7 +99,7 @@ class YoloModelServices(ModelServices):
         try:
             if (not self._definition_supported(definition, manifest) or checksum != manifest['sha256']
                     or not Path(path).is_file() or file_hash(Path(path)) != checksum):
-                return 'failed', '模型文件或能力声明与可信 YOLO11n 在岗执行清单不一致。'
+                return 'failed', '模型文件或能力声明与可信 YOLO11n 人员监测执行清单不一致。'
         except (OSError, ValueError, TypeError, Error):
             return 'failed', '模型文件或能力声明不受当前 YOLO11n 执行器支持。'
         if not dependencies_ready():
@@ -107,7 +111,7 @@ class YoloModelServices(ModelServices):
                 raise ValueError('Invalid detector output')
         except Exception:
             return 'failed', '真实 YOLO11n ONNX 初始化或黑图推理自检失败。'
-        return 'passed', '可信 YOLO11n 摘要、人员缺岗能力声明与真实 ONNX 黑图推理自检通过。'
+        return 'passed', '可信 YOLO11n 摘要、人员监测能力声明与真实 ONNX 黑图推理自检通过。'
 
     def resolve_model(self, reference: CapabilityRef) -> Path:
         try:

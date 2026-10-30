@@ -59,6 +59,7 @@ DEFINITIONS = [
     number('consecutive_frames','连续满足帧数','检测条件',1,100000,'帧',True),
     number('sample_interval_seconds','分析采样间隔','采样与跟踪',.01,3600,'秒'),
     number('tracking_timeout_seconds','目标跟踪超时','采样与跟踪',1,3600,'秒',True),
+    number('exit_confirmation_seconds','离开确认时间','采样与跟踪',1,3600,'秒',True),
     choice('severity','报警等级','报警策略',[('info','提示'),('warning','警告'),('critical','严重')]),
     choice('sensitivity','检测灵敏度','检测条件',[('low','低'),('medium','中'),('high','高')]),
     ParameterDefinition(key='require_tracking',label='启用目标跟踪',category='采样与跟踪',type='boolean',description='需要执行器支持目标跟踪。'),

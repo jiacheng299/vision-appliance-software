@@ -78,10 +78,22 @@ def command(duration_seconds=30, alarm_interval_seconds=60):
         source_snapshots=[SourceSnapshot(id='video',row_version=1,kind='file',sha256='abc',width=640,height=480,duration_ms=60000)])
 
 
+def intrusion_command():
+    config = RevisionConfig(channels=[dict(channel_id='intrusion-channel', name='禁区', target='person', rule='intrusion',
+        duration_seconds=8, sources=[dict(source_id='video', start_media_ms=0, end_media_ms=20000,
+        regions=[dict(id='roi', points=[(0,0),(1,0),(1,1),(0,1)])])],
+        capability_ref=dict(model_id='intrusion-model',model_version='1',template_id='intrusion-template',template_version='1'),
+        parameters=[dict(key='sample_interval_seconds',value=1),dict(key='confidence_threshold',value=.5),
+                    dict(key='tracking_timeout_seconds',value=5),dict(key='exit_confirmation_seconds',value=10)])])
+    return RuntimeCommand(kind='start',agent_id='intrusion-agent',revision_id='intrusion-revision',revision_no=1,
+        config=config,channel_ids=['intrusion-channel'],source_kinds={'video':'file'},
+        source_snapshots=[SourceSnapshot(id='video',row_version=1,kind='file',sha256='abc',width=640,height=480,duration_ms=60000)])
+
+
 def finish(service, operation):
     deadline = time.monotonic()+5
     while time.monotonic() < deadline:
-        runs = service.runs('agent','actor')
+        runs = service.runs(operation.agent_id,'actor')
         if runs and all(r.state not in {'queued','starting','running','stopping','reconnecting'} for r in runs):
             return runs[0]
         time.sleep(.01)
@@ -197,6 +209,19 @@ def test_failed_event_transaction_rolls_back_alert_and_removes_evidence(runtime,
     assert run.alert_started_at is None
     assert service.events('agent', 'actor', {'limit':100}).items == []
     assert not evidence_path.exists()
+
+
+def test_real_intrusion_waits_for_clear_and_confirmation_then_records_one_event(runtime):
+    service, _, reader, _ = runtime
+    person = {'label':'person','x':.4,'y':.2,'width':.2,'height':.6,'confidence':.9}
+    reader.frames_to_read = [(0., []), (10., [])] + [(float(second), [person]) for second in range(11,21)]
+    run = finish(service, service.submit(intrusion_command(),'actor','intrusion-start'))
+    assert run.state == 'completed' and run.processed_media_ms == 20000
+    page = service.events('intrusion-agent','actor',{'limit':100})
+    assert len(page.items) == 1 and page.items[0].event_type == 'person_intrusion'
+    event = service.event('intrusion-agent',page.items[0].id,'actor')
+    assert event.start_media_ms == 11000 and event.end_media_ms == 19000
+    assert '连续确认 8.0 秒' in event.reason
 
 
 def test_bad_decoder_is_failure_never_absence(runtime):

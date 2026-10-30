@@ -18,6 +18,15 @@ def script():
     return module
 
 
+def intrusion_script():
+    path = ROOT / 'deploy/scripts/setup_intrusion.py'
+    assert path.is_file(), 'Public API intrusion registration script is not implemented'
+    spec = importlib.util.spec_from_file_location('setup_intrusion', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture
 def artifact(tmp_path):
     source = tmp_path / 'deploy/yolo-model.json'
@@ -114,6 +123,23 @@ def test_register_uses_public_upload_verify_and_publish_contracts_idempotently(a
     assert json.loads((model.parent / 'registration.json').read_text(encoding='utf-8')) == first
 
 
+def test_register_intrusion_uses_fixed_timing_and_publishes_idempotently(artifact):
+    root, model, manifest = artifact
+    api = API(manifest,model)
+    module = intrusion_script()
+    with client(api) as http:
+        first = module.register(http,root=root)
+        second = module.register(http,root=root)
+    assert first == second
+    assert len(api.models) == len(api.templates) == 1
+    assert api.models[0]['template']['rules'] == ['intrusion']
+    parameters = {item['key']:item['value'] for item in api.templates[0]['latest_revision']['config']['parameters']}
+    assert parameters == {'duration_seconds':8,'confidence_threshold':.5,'tracking_timeout_seconds':5,
+                          'exit_confirmation_seconds':10,'sample_interval_seconds':1}
+    assert api.templates[0]['name'] == '人员区域入侵监测'
+    assert json.loads((model.parent / 'intrusion-registration.json').read_text(encoding='utf-8')) == first
+
+
 @pytest.mark.parametrize('stage', ['models', 'agent-templates', 'agent-templates/template1/publish'])
 def test_lost_http_response_recovers_without_duplicate_models_or_templates(artifact, stage):
     root, model, manifest = artifact
@@ -166,6 +192,67 @@ def test_registration_against_actual_api_dtos(artifact, monkeypatch, with_source
         assert module.register(http, root=root, source_id=source_id) == first
         assert len(http.get('models').json()['items']) == 1
         assert len(http.get('agent-templates').json()['items']) == 1
+
+
+def test_intrusion_registration_against_actual_api_dtos(artifact, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(ROOT / 'backend'))
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.modules.models import yolo_services
+    root, _, _ = artifact
+    monkeypatch.setenv('VISION_AGENT_DEMO', 'false')
+    monkeypatch.setattr(yolo_services, 'dependencies_ready', lambda: True)
+    monkeypatch.setattr(yolo_services, 'black_frame', lambda: SimpleNamespace(shape=(640, 640, 3)))
+    class Detector:
+        def __init__(self, *args, **kwargs): pass
+        def detect(self, frame): return []
+    monkeypatch.setattr(yolo_services, 'YoloPersonDetector', Detector)
+    app = create_app(var_root=root / 'var', testing=True)
+    model_service = yolo_services.YoloModelServices(app.state.config, app.state.sessions)
+    app.state.model_services = model_service
+    app.state.agent_services.model_adapter = model_service
+    with TestClient(app, base_url='http://testserver/api/v1/') as http:
+        module = intrusion_script()
+        first = module.register(http,root=root)
+        assert module.register(http,root=root) == first
+        models = http.get('models').json()['items']
+        templates = http.get('agent-templates').json()['items']
+        assert len(models) == len(templates) == 1
+        assert models[0]['template']['rules'] == ['intrusion']
+        assert templates[0]['name'] == '人员区域入侵监测'
+
+
+def test_presence_and_intrusion_share_one_trusted_file_but_keep_separate_capabilities(artifact, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(ROOT / 'backend'))
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.modules.models import yolo_services
+    root, _, _ = artifact
+    monkeypatch.setenv('VISION_AGENT_DEMO', 'false')
+    monkeypatch.setattr(yolo_services, 'dependencies_ready', lambda: True)
+    monkeypatch.setattr(yolo_services, 'black_frame', lambda: SimpleNamespace(shape=(640, 640, 3)))
+    class Detector:
+        def __init__(self, *args, **kwargs): pass
+        def detect(self, frame): return []
+    monkeypatch.setattr(yolo_services, 'YoloPersonDetector', Detector)
+    app = create_app(var_root=root / 'var', testing=True)
+    model_service = yolo_services.YoloModelServices(app.state.config, app.state.sessions)
+    app.state.model_services = model_service
+    app.state.agent_services.model_adapter = model_service
+    with TestClient(app, base_url='http://testserver/api/v1/') as http:
+        presence = script().register(http,root=root)
+        intrusion = intrusion_script().register(http,root=root)
+        assert presence['file_id'] == intrusion['file_id']
+        models = http.get('models').json()['items']
+        templates = http.get('agent-templates').json()['items']
+        assert len(models) == len(templates) == 2
+        assert {item['template']['rules'][0] for item in models} == {'absence','intrusion'}
+        assert {item['name'] for item in templates} == {'人员在岗监测','人员区域入侵监测'}
+        assert len(list((root / 'var/model-files').iterdir())) == 1
 
 
 def test_user_template_changes_are_preserved_without_new_template(artifact):

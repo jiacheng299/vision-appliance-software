@@ -24,10 +24,14 @@ from ..agents.contracts import (ACTIVE_STATES, AgentEventDTO, AgentEventPage, Ch
 from ..agents.schemas import channel_sources
 from ..models.bridge import RegistryAgentServices
 from .models import LocalAgentState, LocalEvent, LocalOperation, LocalRun
+from .intrusion import IntrusionRule
 from .presence import PresenceRule
 
-SUPPORTED_PARAMETERS = {'target','rule','duration_seconds','confidence_threshold','min_count',
-                        'alarm_interval_seconds','sample_interval_seconds'}
+COMMON_PARAMETERS = {'target','rule','duration_seconds','confidence_threshold','sample_interval_seconds'}
+RULE_PARAMETERS = {
+    'absence': COMMON_PARAMETERS | {'min_count','alarm_interval_seconds'},
+    'intrusion': COMMON_PARAMETERS | {'tracking_timeout_seconds','exit_confirmation_seconds'},
+}
 
 
 class LocalAgentServices(RegistryAgentServices):
@@ -237,16 +241,25 @@ class LocalAgentServices(RegistryAgentServices):
 
     def _parameters(self, channel):
         values = {p.key:p.value for p in channel.parameters}
-        if set(values)-SUPPORTED_PARAMETERS or channel.target!='person' or channel.rule!='absence' or not channel.capability_ref:
-            raise Error(422,'local_capability_unsupported','当前本地执行器仅支持人员在岗监测及该模型声明的参数。')
-        result = dict(confidence=.5,min_count=1,duration_seconds=channel.duration_seconds or 30,
-                      alarm_interval_seconds=60,sample_interval_seconds=1)
+        allowed = RULE_PARAMETERS.get(channel.rule,set())
+        if set(values)-allowed or channel.target!='person' or channel.rule not in RULE_PARAMETERS or not channel.capability_ref:
+            raise Error(422,'local_capability_unsupported','当前本地执行器仅支持人员在岗和人员区域入侵监测及其声明参数。')
+        if channel.rule == 'absence':
+            result = dict(confidence=.5,min_count=1,duration_seconds=channel.duration_seconds or 30,
+                          alarm_interval_seconds=60,sample_interval_seconds=1)
+        else:
+            result = dict(confidence=.5,duration_seconds=channel.duration_seconds or 8,
+                          tracking_timeout_seconds=5,exit_confirmation_seconds=10,sample_interval_seconds=1)
         for key,value in values.items():
             if key in ('target','rule'):
                 if value != getattr(channel,key): raise Error(422,'parameter_conflict','目标或规则与模板不一致。')
             else: result['confidence' if key=='confidence_threshold' else key] = value
-        if result['min_count'] < 1:
+        if channel.rule == 'absence' and result['min_count'] < 1:
             raise Error(422,'presence_count_invalid','在岗要求人数必须至少为1。')
+        if channel.rule == 'intrusion' and result['tracking_timeout_seconds'] >= result['exit_confirmation_seconds']:
+            raise Error(422,'intrusion_timing_invalid','目标跟踪超时必须小于离开确认时间。')
+        if channel.rule == 'intrusion' and result['sample_interval_seconds'] >= result['tracking_timeout_seconds']:
+            raise Error(422,'intrusion_sampling_invalid','分析采样间隔必须小于目标跟踪超时。')
         if result['duration_seconds'] != channel.duration_seconds:
             raise Error(422,'parameter_conflict','持续时间与任务配置不一致。')
         return result
@@ -279,7 +292,7 @@ class LocalAgentServices(RegistryAgentServices):
                             source = self._checked_source(db,snapshot)
                             sources.resolve_execution_input(db,self.config,source.id,self.gateway)
                             identity = self._source_identity(db,source.id)
-                        if not binding.regions: raise Error(422,'region_required','人员在岗监测需要划定区域。')
+                        if not binding.regions: raise Error(422,'region_required','人员监测需要划定区域。')
                         if source.kind=='file' and (binding.start_media_ms is None or binding.end_media_ms>source.duration_ms):
                             raise Error(422,'media_range_required','录像监测需要有效的起止时间。')
                         prepared.append((channel,binding,snapshot,identity))
@@ -431,9 +444,15 @@ class LocalAgentServices(RegistryAgentServices):
                 reader_factory = VideoFrameReader
             detector = detector_factory(path,confidence=parameters['confidence'])
             interval = parameters['sample_interval_seconds']
-            rule = PresenceRule([r.points for r in binding.regions],min_count=parameters['min_count'],
-                duration_seconds=parameters['duration_seconds'],alarm_interval_seconds=parameters['alarm_interval_seconds'],
-                max_gap_seconds=max(3,interval*1.5))
+            if channel.rule == 'absence':
+                rule = PresenceRule([r.points for r in binding.regions],min_count=parameters['min_count'],
+                    duration_seconds=parameters['duration_seconds'],alarm_interval_seconds=parameters['alarm_interval_seconds'],
+                    max_gap_seconds=max(3,interval*1.5))
+            else:
+                rule = IntrusionRule([r.points for r in binding.regions],entry_seconds=parameters['duration_seconds'],
+                    occlusion_seconds=parameters['tracking_timeout_seconds'],
+                    exit_seconds=parameters['exit_confirmation_seconds'],
+                    max_gap_seconds=min(parameters['tracking_timeout_seconds'],max(1.5,interval*1.5)))
             with self.writing() as db:
                 row = db.get(LocalRun,identifier)
                 if row.state not in ACTIVE_STATES: return
@@ -456,28 +475,43 @@ class LocalAgentServices(RegistryAgentServices):
                             if time.monotonic()-last_source_check>=2:
                                 with self.sessions() as db: self._checked_source(db,run.source_snapshot,source_identity)
                                 last_source_check = time.monotonic()
-                            boxes = rule.targets_in_regions(detector.detect(frame))
+                            detected = detector.detect(frame)
+                            boxes = rule.targets_in_regions(detected) if channel.rule == 'absence' else detected
                             if stop.is_set(): break
                             observation = rule.observe(timestamp,boxes)
                             stamp = now()
+                            if channel.rule == 'absence':
+                                message = f'区域内 {observation.count} 人；已连续缺岗 {observation.absent_seconds:.1f} 秒。'
+                                targets = [{key:box[key] for key in ('label','x','y','width','height')}|{'id':f'person-{i}'}
+                                           for i,box in enumerate(boxes)]
+                            else:
+                                labels = {'waiting_clear':'等待区域连续清空后布防','armed':'区域已布防',
+                                          'confirming':'正在确认入侵','occluded':'目标短暂遮挡，确认计时暂停',
+                                          'alarmed':'本次区域入侵已报警'}
+                                message = f'区域内 {observation.count} 人；{labels[observation.phase]}；有效确认 {observation.confirmed_seconds:.1f} 秒。'
+                                targets = [{key:target.box[key] for key in ('label','x','y','width','height')}|{'id':target.id}
+                                           for target in observation.targets]
                             with self.writing() as db:
                                 row = db.get(LocalRun,identifier)
                                 if row.state not in ACTIVE_STATES or row.state=='stopping': stop.set(); break
                                 self._change(row,state='running',started_at=row.payload.get('started_at') or stamp,
                                     last_heartbeat_at=stamp,processed_media_ms=round(timestamp*1000) if run.source_kind=='file' else None,
-                                    message=f'区域内 {observation.count} 人；已连续缺岗 {observation.absent_seconds:.1f} 秒。')
+                                    message=message)
                                 row.observation = {'observed_at':stamp,'timestamp':timestamp,'count':observation.count,
-                                    'targets':[{key:box[key] for key in ('label','x','y','width','height')}|{'id':f'person-{i}'} for i,box in enumerate(boxes)]}
+                                    'targets':targets}
                                 self._refresh_operations(db)
                             observed, failures, last_timestamp = True, 0, timestamp
-                            if (observation.transition or observation.alarm) and not stop.is_set():
+                            if channel.rule == 'absence' and (observation.transition or observation.alarm) and not stop.is_set():
                                 self._record_transition_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
+                            elif channel.rule == 'intrusion' and observation.alarm and not stop.is_set():
+                                self._record_intrusion_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
                     if stop.is_set(): break
                     if run.source_kind=='file':
                         if not observed or last_timestamp is None or (binding.end_media_ms is not None
                             and last_timestamp*1000+max(interval*1000,250)<binding.end_media_ms):
                             raise Error(422,'video_decode_failed','录像未能完整解码到所选范围。')
-                        self._finish(identifier,'completed','所选录像已完成真实人员在岗分析。')
+                        summary = '人员在岗' if channel.rule == 'absence' else '人员区域入侵'
+                        self._finish(identifier,'completed',f'所选录像已完成真实{summary}分析。')
                         return
                     raise Error(503,'camera_frame_timeout','摄像头视频已中断。')
                 except Exception as exc:
@@ -491,7 +525,8 @@ class LocalAgentServices(RegistryAgentServices):
                         with self.writing() as db:
                             row = db.get(LocalRun,identifier)
                             if row.state=='stopping': stop.set(); break
-                            self._change(row,state='reconnecting',last_heartbeat_at=now(),message=f'视频中断，正在重连（{failures}/{resources["reconnect_attempts"]}）；缺岗计时已清空。')
+                            reset = '缺岗计时已清空' if channel.rule == 'absence' else '入侵状态已清空，恢复后等待区域清空重新布防'
+                            self._change(row,state='reconnecting',last_heartbeat_at=now(),message=f'视频中断，正在重连（{failures}/{resources["reconnect_attempts"]}）；{reset}。')
                             row.observation = {}
                         stop.wait(min(2**failures,5))
                         continue
@@ -512,7 +547,7 @@ class LocalAgentServices(RegistryAgentServices):
                     '视频读取或人员检测失败，请检查视频源与模型后重试。')
                 self._finish(identifier,'failed',message,code if code in allowed else 'local_inference_failed')
 
-    def _save_evidence(self, run, frame, boxes, binding, count, restored=False):
+    def _save_evidence(self, run, frame, boxes, binding, count, event_type):
         import cv2
         import numpy as np
         image = frame.copy()
@@ -523,9 +558,11 @@ class LocalAgentServices(RegistryAgentServices):
         for box in boxes:
             x,y,w,h = (box[k] for k in ('x','y','width','height'))
             cv2.rectangle(image,(round(x*width),round(y*height)),(round((x+w)*width),round((y+h)*height)),(0,200,0),2)
-        label = 'PERSON PRESENCE RESTORED' if restored else 'PERSON ABSENCE'
-        color = (0,180,0) if restored else (0,0,255)
-        cv2.putText(image,f'{label} | count={count}',(12,25),cv2.FONT_HERSHEY_SIMPLEX,.55,color,2)
+        title, color = {
+            'person_presence_restored': ('PERSON PRESENCE RESTORED',(0,180,0)),
+            'person_intrusion': ('PERSON INTRUSION',(0,0,255)),
+        }.get(event_type,('PERSON ABSENCE',(0,0,255)))
+        cv2.putText(image,f'{title} | count={count}',(12,25),cv2.FONT_HERSHEY_SIMPLEX,.55,color,2)
         ok, encoded = cv2.imencode('.jpg',image,[cv2.IMWRITE_JPEG_QUALITY,85])
         if not ok: raise ValueError('Image encoding failed')
         key = f'local-evidence/{run.id}/{uid()}.jpg'
@@ -542,9 +579,10 @@ class LocalAgentServices(RegistryAgentServices):
     def _record_transition_event(self, run, observation, timestamp, frame, boxes, binding, stop, source_identity=None):
         restored = observation.transition == 'restored'
         duration = observation.present_seconds if restored else observation.absent_seconds
+        event_type = 'person_presence_restored' if restored else 'person_absence'
         key = None
         try:
-            key = self._save_evidence(run,frame,boxes,binding,observation.count,restored=restored)
+            key = self._save_evidence(run,frame,boxes,binding,observation.count,event_type)
         except Exception:
             pass  # A genuine detection remains visible when evidence storage fails.
         try:
@@ -559,7 +597,6 @@ class LocalAgentServices(RegistryAgentServices):
                     self._change(row,alert_state='absence',alert_started_at=stamp)
                 elif restored:
                     self._change(row,alert_state='normal',alert_started_at=None)
-                event_type = 'person_presence_restored' if restored else 'person_absence'
                 severity = 'info' if restored else 'warning'
                 reason = (f'监测区域内人数已恢复至 {observation.count}，已连续在岗 {duration:.1f} 秒。'
                     if restored else f'监测区域内人数为 {observation.count}，已连续缺岗 {duration:.1f} 秒。')
@@ -570,6 +607,36 @@ class LocalAgentServices(RegistryAgentServices):
                     start_media_ms=round(max(binding.start_media_ms or 0,timestamp*1000-duration*1000)) if run.source_kind=='file' else None,
                     end_media_ms=round(timestamp*1000) if run.source_kind=='file' else None,
                     evidence=[EvidenceDTO(id=evidence_id,kind='image',state='ready' if key else 'failed',message='YOLO 实际分析帧与监测区域。' if key else '事件已保存，截图写入失败。')],feedback_history=[])
+                db.add(LocalEvent(id=identifier,agent_id=run.agent_id,actor_id=row.actor_id,run_id=run.id,
+                                  payload=event.model_dump(mode='json'),evidence_key=key))
+        except Exception:
+            if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
+            raise
+
+    def _record_intrusion_event(self, run, observation, timestamp, frame, boxes, binding, stop, source_identity=None):
+        event_type = 'person_intrusion'
+        key = None
+        try:
+            key = self._save_evidence(run,frame,boxes,binding,observation.count,event_type)
+        except Exception:
+            pass  # A genuine detection remains visible when evidence storage fails.
+        try:
+            with self.writing() as db:
+                row = db.get(LocalRun,run.id)
+                if stop.is_set() or row.state!='running':
+                    if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
+                    return
+                self._checked_source(db,run.source_snapshot,source_identity)
+                stamp, identifier, evidence_id = now(), uid(), uid()
+                elapsed = observation.confirmed_seconds
+                reason = f'人员进入监测区域并连续确认 {elapsed:.1f} 秒。'
+                event = EventDetail(id=identifier,agent_id=run.agent_id,run_id=run.id,revision_id=run.revision_id,
+                    source_id=run.source_id,channel_id=run.channel_id,occurred_at=stamp,updated_at=stamp,row_version=1,
+                    event_type=event_type,severity='warning',reason=reason,
+                    evidence_status='ready' if key else 'failed',review_status='unreviewed',
+                    start_media_ms=round(max(binding.start_media_ms or 0,timestamp*1000-elapsed*1000)) if run.source_kind=='file' else None,
+                    end_media_ms=round(timestamp*1000) if run.source_kind=='file' else None,
+                    evidence=[EvidenceDTO(id=evidence_id,kind='image',state='ready' if key else 'failed',message='YOLO 实际分析帧与监测区域。' if key else '报警已保存，截图写入失败。')],feedback_history=[])
                 db.add(LocalEvent(id=identifier,agent_id=run.agent_id,actor_id=row.actor_id,run_id=run.id,
                                   payload=event.model_dump(mode='json'),evidence_key=key))
         except Exception:
