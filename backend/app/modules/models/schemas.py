@@ -182,6 +182,22 @@ class MultimodalAnalysis(DTO):
     limitations: list[str] = Field(default_factory=list)
 
 
+class MultimodalVideoAnalysis(DTO):
+    triggered: StrictBool
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    event_type: str | None = Field(default=None, max_length=160)
+    reason: str = Field(min_length=1, max_length=2000)
+    observed_timestamp_ms: int | None = Field(default=None, ge=0, strict=True)
+
+    @model_validator(mode='after')
+    def coherent(self):
+        if self.triggered and not self.event_type:
+            raise ValueError('Triggered video analysis requires an event type')
+        if not self.triggered and self.event_type:
+            raise ValueError('Non-triggered video analysis cannot declare an event type')
+        return self
+
+
 class PlanResult(DTO):
     id: str
     strategy: Literal['template', 'multimodal']

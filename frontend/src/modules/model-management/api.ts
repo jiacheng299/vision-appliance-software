@@ -29,7 +29,7 @@ export const modelApi = {
   select: (usage:Usage,deployment_id:string,row_version:number) => client.put(`/llm/selections/${usage}`,{deployment_id,row_version}),
   parse: (requirement_text:string) => client.post<ParseResult>('/requirements/parse',{requirement_text}).then(r=>r.data),
 }
-const publicCodes = new Set(['model_verifier_unavailable','model_conflict','model_archived','model_file_required','model_file_empty','model_file_too_large','model_version_exists','model_history_confirmation','model_in_use','llm_not_selected','llm_not_healthy','analysis_service_unavailable','reference_service_unavailable','catalog_changed','task_mode_invalid','execution_plan_stale','execution_plan_blocked','multimodal_service_unavailable','multimodal_execution_unavailable'])
+const publicCodes = new Set(['model_verifier_unavailable','model_conflict','model_archived','model_file_required','model_file_empty','model_file_too_large','model_version_exists','model_history_confirmation','model_in_use','llm_not_selected','llm_not_healthy','analysis_service_unavailable','reference_service_unavailable','catalog_changed','task_mode_invalid','execution_plan_stale','execution_plan_blocked','multimodal_service_unavailable','multimodal_execution_unavailable','multimodal_api_not_configured','multimodal_api_timeout','multimodal_api_invalid_response','multimodal_deployment_changed','multimodal_requirement_required','multimodal_template_limit'])
 export function memberError(error:unknown):string{
   const detail=(error as {response?:{data?:{error?:{code?:string;message?:string}}}})?.response?.data?.error
   return detail?.code&&publicCodes.has(detail.code)&&detail.message?detail.message:humanError(error)

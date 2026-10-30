@@ -8,6 +8,7 @@ from ...shared.errors import Error
 from ...shared.monitoring_parameters import ParameterSetting, validate_settings
 from ..agents.schemas import CapabilityRef
 from .integrations import ModelServices
+from .multimodal_api import MultimodalApiClient
 from .models import ModelFile, ModelPair
 from .schemas import ModelInput
 from .service import file_hash
@@ -41,6 +42,20 @@ def black_frame():
 class YoloModelServices(ModelServices):
     def __init__(self, config, sessions):
         self.config, self.sessions = config, sessions
+        self.multimodal_api = MultimodalApiClient(config)
+
+    def deployments(self):
+        deployment = self.multimodal_api.deployment()
+        return [deployment] if deployment else []
+
+    def analyze_multimodal(self, channel, sources, deployment):
+        return self.multimodal_api.plan(channel, sources, deployment)
+
+    def match_template(self, text, catalog):
+        return self.multimodal_api.match_template(text, catalog)
+
+    def analyze_frames(self, instruction, frames, deployment):
+        return self.multimodal_api.analyze_frames(instruction, frames, deployment)
 
     def _artifact(self):
         root = self.config.var_root.resolve()

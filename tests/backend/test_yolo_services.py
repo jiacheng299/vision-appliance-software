@@ -78,6 +78,19 @@ def test_readiness_requires_installed_artifact_and_dependencies(prepared, monkey
     assert service.is_ready() is False
 
 
+def test_configured_multimodal_api_is_exposed_as_a_real_deployment(prepared):
+    module = implementation()
+    config, sessions, _, _ = prepared
+    config.multimodal_api_url = 'http://127.0.0.1:11434/v1/chat/completions'
+    config.multimodal_model = 'local-vision'
+    service = module.YoloModelServices(config, sessions)
+    deployments = service.deployments()
+    assert len(deployments) == 1
+    assert deployments[0].id == 'openai-compatible-multimodal'
+    assert deployments[0].version == 'local-vision'
+    assert deployments[0].inputs == ['text','image'] and deployments[0].health == 'healthy'
+
+
 def test_readiness_rejects_unloadable_native_dependencies(prepared, monkeypatch):
     module = implementation()
     service = module.YoloModelServices(prepared[0], prepared[1])
