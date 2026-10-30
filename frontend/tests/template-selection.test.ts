@@ -29,4 +29,11 @@ describe('template selection first step',()=>{
     expect(w.get('[role="option"]').attributes('disabled')).toBeDefined()
     w.unmount()
   })
+  it('uses business names instead of raw model target and rule identifiers',()=>{
+    const t=template();t.published_revision!.config.default_target='person';t.published_revision!.config.default_rule='absence'
+    const w=mount(TemplateSelection,{props:{templates:[t],selectedId:t.id}})
+    const text=w.get('[aria-label="模板详情"]').text()
+    expect(text).toContain('人员在岗');expect(text).not.toContain('absence');expect(text).not.toContain('person')
+    w.unmount()
+  })
 })

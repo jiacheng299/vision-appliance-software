@@ -2,13 +2,12 @@
 import { computed,onBeforeUnmount,onMounted,ref,watch } from 'vue'
 import { onBeforeRouteLeave,useRoute,useRouter } from 'vue-router'
 import { NButton,NInput,NInputNumber,NSelect } from 'naive-ui'
-import { Plus,Video,Trash2,Info } from 'lucide-vue-next'
+import { Plus,Video,Trash2,Info,RefreshCw } from 'lucide-vue-next'
 import { agentApi,listAgentSources,type AgentDetail,type CapabilityCatalog,type ChannelSource,type Operation,type Revision,type Validation } from '../agents/api'
 import { templatesApi,allPublishedTemplates,modelKey,templateError,type AgentTemplate,type TemplateRevision,type TemplateConfig,type ParameterSetting,type ParameterDefinition } from '../agents/templatesApi'
 import { retryKey } from './state'
 import type { Source } from '../../shared/api/types'
 import { channelSources } from '../agents/channelSources'
-import { label } from '../agents/state'
 import TaskConditions from './TaskConditions.vue'
 import TaskReview from './TaskReview.vue'
 import TemplateSelection from './TemplateSelection.vue'
@@ -25,6 +24,7 @@ const templates=ref<AgentTemplate[]>([]),sources=ref<Source[]>([]),definitions=r
 const templateId=ref<string|null>(null),version=ref<TemplateRevision|null>(null),name=ref(''),description=ref('')
 const step=ref(0)
 const activeIndex=ref(0)
+const refreshingSources=ref(false),sourceRefreshError=ref('')
 const bindings=ref<ChannelSource[]>([{source_id:'',regions:[],start_media_ms:null,end_media_ms:null}]),parameters=ref<ParameterSetting[]>([])
 const agent=ref<AgentDetail|null>(null),revision=ref<Revision|null>(null),validation=ref<Validation|null>(null),operation=ref<Operation|null>(null)
 const busy=ref(false),loading=ref(true),error=ref(''),loadError=ref(''),notice=ref(''),pendingRegions=ref<Record<string,boolean>>({}),ack=ref(false),legacyDraft=ref('')
@@ -32,13 +32,25 @@ const pendingRegion=computed(()=>Object.values(pendingRegions.value).some(Boolea
 const saved=ref(''),validated=ref(''),validationClock=ref(Date.now())
 let allowLeave=false,stopped=false,pollTimer:ReturnType<typeof setTimeout>|undefined,validationTimer:ReturnType<typeof setTimeout>|undefined
 const sourceFor=(b:ChannelSource)=>sources.value.find(s=>s.id===b.source_id)
+function label(status:string){const labels:Record<string,string>={ready:'已就绪',online:'在线',connecting:'连接中',failed:'连接失败',processing:'处理中',pending:'待验证',offline:'已离线'};return labels[status]??'未就绪'}
 const activeBinding=computed(()=>bindings.value[activeIndex.value])
 const activeSource=computed(()=>activeBinding.value?sourceFor(activeBinding.value):undefined)
 const selectedTemplate=computed(()=>templates.value.find(t=>t.id===templateId.value))
 const model=computed(()=>catalog.value?.items.find(i=>modelKey(i.reference)===modelKey(version.value?.config.model_ref)))
 const currentRule=computed(()=>String(parameters.value.find(p=>p.key==='rule')?.value??version.value?.config.default_rule??''))
+const needsRegions=computed(()=>model.value?.requires_region?.includes(currentRule.value)??['absence','intrusion'].includes(currentRule.value))
+function inputIssue(b:ChannelSource){
+  const source=sourceFor(b)
+  if(!source)return b.source_id?'视频源不可用':'待选择视频源'
+  if(!['ready','online'].includes(source.status))return '视频源未就绪'
+  if(pendingRegions.value[b.source_id])return '区域绘制未完成'
+  if(needsRegions.value&&!b.regions?.length)return '待设置区域'
+  if(source.kind==='file'&&(b.start_media_ms==null||b.end_media_ms==null))return '待设置录像范围'
+  return ''
+}
+const incomplete=computed(()=>bindings.value.filter(b=>inputIssue(b)).length)
 const signature=computed(()=>JSON.stringify({template:version.value?.id,name:name.value,description:description.value,sources:bindings.value,parameters:parameters.value}))
-const dirty=computed(()=>signature.value!==saved.value||pendingRegion.value),frozen=computed(()=>busy.value||!!operation.value||revision.value?.state==='published'||!!legacyDraft.value||!version.value)
+const dirty=computed(()=>signature.value!==saved.value||pendingRegion.value),frozen=computed(()=>busy.value||refreshingSources.value||!!operation.value||revision.value?.state==='published'||!!legacyDraft.value||!version.value)
 const executable=computed(()=>!pendingRegion.value&&validation.value?.verdict==='executable'&&validated.value===signature.value&&Date.parse(validation.value.expires_at)>validationClock.value)
 watch(signature,()=>{validation.value=null;validated.value='';ack.value=false})
 function trackValidationExpiry(){
@@ -62,7 +74,7 @@ function chooseTemplate(id:string|null){
   selectVersion(templates.value.find(t=>t.id===id&&!t.archived_at&&t.published_revision?.state==='published'))
 }
 function goStep(target:number){
-  if(busy.value||operation.value)return
+  if(busy.value||refreshingSources.value||operation.value)return
   if(pendingRegion.value){error.value='请先闭合并保存正在绘制的区域。';return}
   if(target>0&&!version.value)return
   if(target===2&&!validation.value&&revision.value?.state!=='published')return
@@ -75,6 +87,7 @@ function changeSource(index:number,id:string|null){
   if(pendingRegions.value[old.source_id]&&!window.confirm('切换视频将放弃尚未保存的区域，确定继续？'))return
   delete pendingRegions.value[old.source_id]
   bindings.value[index]={source_id:id??'',regions:[],start_media_ms:null,end_media_ms:null}
+  error.value=''
 }
 function switchSource(index:number){
   if(busy.value||index===activeIndex.value)return
@@ -110,6 +123,13 @@ function check(){
   }
 }
 function displayError(e:unknown){return e instanceof Error&&!('response' in e)?e.message:templateError(e)}
+async function refreshSources(){
+  if(busy.value||refreshingSources.value)return
+  refreshingSources.value=true;sourceRefreshError.value=''
+  try{const values=await listAgentSources();if(!stopped){sources.value=values;error.value=''}}
+  catch(e){if(!stopped)sourceRefreshError.value=displayError(e)}
+  finally{if(!stopped)refreshingSources.value=false}
+}
 async function persist(){
   check()
   if(!agent.value){
@@ -176,7 +196,7 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validatio
 </script>
 <template>
   <div class="tc-page">
-  <div class="page-heading"><div><h1>创建监测任务 <small class="tc-draft">草稿</small></h1><p>先确定监测模板，再配置视频与检测区域</p></div><RouterLink to="/agents">返回任务列表</RouterLink></div>
+  <div class="page-heading"><div><h1>创建监测任务 <small class="tc-draft">{{revision?.state==='published'?'已发布':'草稿'}}</small></h1><p>先确定监测模板，再配置视频与检测区域</p></div><RouterLink to="/agents">返回任务列表</RouterLink></div>
   <ErrorBanner :error="loadError" @retry="initialize"/><ErrorBanner :error="error" :retryable="false"/><p v-if="notice" class="notice">{{notice}}</p><div v-if="loading" class="loading-line"/>
   <section v-if="legacyDraft" class="panel"><h2>历史任务配置</h2><p>此任务创建于模板关联功能启用前，原配置与自然语言执行方案完整保留。</p><RouterLink :to="{path:'/create/legacy',query:{draft:legacyDraft}}">继续编辑历史任务</RouterLink></section>
   <template v-else>
@@ -187,11 +207,11 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validatio
     <fieldset class="create-fields">
       <div class="tc-identity"><div class="field"><label>任务名称</label><NInput v-model:value="name" :disabled="frozen" :maxlength="160" aria-label="任务名称" placeholder="例如：园区人员在岗监测"/></div><div class="tc-pinned-template"><label>智能体模板</label><strong>{{selectedTemplate?.name}} · v{{version?.revision_no}}</strong><span>已确认模板</span></div><details><summary>任务说明（选填）</summary><NInput v-model:value="description" :disabled="frozen" type="textarea" :maxlength="2000" aria-label="任务说明"/></details></div>
       <div class="tc-video-workspace">
-        <aside class="tc-sources" aria-label="监控视频列表"><div class="tc-section-heading"><h2>监控视频 <small>{{bindings.length}} 路</small></h2><NButton size="small" :disabled="frozen||bindings.length>=16" @click="addSource"><Plus :size="14"/>添加视频源</NButton></div>
+        <aside class="tc-sources" aria-label="监控视频列表"><div class="tc-section-heading"><h2>监控视频 <small>{{bindings.length}} 路</small></h2><div class="tc-source-actions"><NButton size="small" aria-label="刷新视频源" title="刷新视频源列表与连接状态" :disabled="busy||loading||refreshingSources" :loading="refreshingSources" @click="refreshSources"><RefreshCw :size="14"/></NButton><NButton size="small" :disabled="frozen||bindings.length>=16" @click="addSource"><Plus :size="14"/>添加视频源</NButton></div></div><p v-if="sourceRefreshError" class="tc-source-error" role="alert">{{sourceRefreshError}}</p>
           <article v-for="(binding,index) in bindings" :key="binding.source_id||`empty-${index}`" :class="['tc-source-card',{active:activeIndex===index}]">
             <div class="tc-source-top"><button type="button" class="tc-source-select" :aria-label="`配置视频${index+1}`" :aria-current="activeIndex===index?'true':undefined" :disabled="busy" @click="switchSource(index)"><span class="tc-thumbnail"><img v-if="safeMediaUrl(sourceFor(binding)?.thumbnail_url??null)" :src="safeMediaUrl(sourceFor(binding)?.thumbnail_url??null)!" alt="视频源缩略图"/><Video v-else :size="23"/></span><span><strong>{{sourceFor(binding)?.name??`视频 ${index+1}`}}</strong><small>{{sourceFor(binding)?label(sourceFor(binding)!.status):'请选择视频源'}}</small><small :class="{'tc-configured':(binding.regions?.length??0)>0}">{{binding.regions?.length?`${binding.regions.length} 个区域 · 已配置`:'尚未设置区域'}}</small></span></button><button v-if="bindings.length>1" type="button" class="tc-remove" :disabled="frozen" :aria-label="`移除视频${index+1}`" @click="removeSource(index)"><Trash2 :size="14"/></button></div>
             <NSelect :value="binding.source_id||null" :options="sources.map(s=>({label:s.name,value:s.id,disabled:bindings.some((b,i)=>i!==index&&b.source_id===s.id)}))" :disabled="frozen" filterable placeholder="选择本路视频" :aria-label="index===0?'检测视频源':`检测视频源${index+1}`" @update:value="changeSource(index,$event)"/>
-          </article><p class="tc-source-hint">各视频分别设置区域。每路占用一个并发名额，超过上限的运行会排队。</p>
+          </article><div v-if="!sources.length&&!loading" class="tc-empty-sources"><p>还没有可用视频源</p><RouterLink to="/sources">前往视频源管理接入</RouterLink></div><p class="tc-source-hint">各视频分别设置区域。每路占用一个并发名额，超过上限的运行会排队。</p>
         </aside>
         <section class="tc-preview" aria-label="当前视频配置"><div class="tc-section-heading"><h2>{{activeSource?.name??'配置视频与监测区域'}}</h2><span v-if="activeSource" class="tc-source-kind">{{activeSource.kind==='camera'?'监控直播':'录像文件'}}</span></div>
           <template v-if="activeSource&&activeBinding">
@@ -204,7 +224,7 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validatio
       </div>
     </fieldset>
   </section><div v-show="step===2"><TaskReview :template-name="selectedTemplate?.name??''" :version="version" :name="name" :bindings="bindings" :sources="sources" :settings="parameters" :definitions="definitions" :validation="validation" :operation="operation" :expired="!!validation&&Date.parse(validation.expires_at)<=validationClock" v-model:ack="ack" :can-acknowledge="executable&&!busy" :published="revision?.state==='published'" @refresh="poll"/><RouterLink v-if="agent" class="tc-task-link" :to="`/agents/${agent.id}/live`">查看任务详情</RouterLink></div></div>
-  <footer class="tc-footer"><div><strong v-if="version">已选择：{{selectedTemplate?.name}} · v{{version.revision_no}}</strong><strong v-else>请选择一个已发布模板</strong><p>{{step===0?'确认后进入视频与区域配置':step===1?`${bindings.filter(b=>b.source_id).length} 路视频 · 共用规则，各路独立报警`:'验证通过后，核对并确认启动'}}</p></div><div class="agent-actions">
+  <footer class="tc-footer"><div><strong v-if="step===1" :class="{'tc-attention':incomplete}">{{bindings.length}} 路视频 · {{incomplete?`${incomplete} 路待完善`:'已完成视频配置'}}</strong><strong v-else-if="version">已选择：{{selectedTemplate?.name}} · v{{version.revision_no}}</strong><strong v-else>请选择一个已发布模板</strong><p>{{step===0?'确认后进入视频与区域配置':step===1?(incomplete?'逐路核对视频、区域及录像范围，再验证任务。':'共用规则，各路独立报警；保存不会启动监测。'):'验证通过后，核对并确认启动'}}</p></div><div class="agent-actions">
     <NButton v-if="step===0" type="primary" aria-label="确认模板，下一步" :disabled="!version||busy||loading||!!loadError" @click="goStep(1)">确认模板，下一步</NButton>
     <template v-if="step===1"><NButton :disabled="busy||!!operation" @click="goStep(0)">上一步</NButton><NButton :disabled="frozen||loading" :loading="busy" @click="save">保存草稿</NButton><NButton type="primary" :disabled="frozen||loading" :loading="busy" @click="evaluate">验证任务</NButton></template>
     <template v-if="step===2"><NButton :disabled="busy||!!operation" @click="goStep(1)">返回修改配置</NButton><NButton type="primary" aria-label="确认启动" :disabled="!executable||!ack||busy||!!operation" :loading="busy" @click="start">确认启动</NButton></template>
@@ -214,4 +234,7 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validatio
 </template>
 <style scoped>
 .tc-draft{display:inline-block;font-size:11px;padding:4px 9px;background:#e2edff;color:#2367ed;border-radius:5px;vertical-align:middle;margin-left:10px}.tc-steps{display:flex;gap:20px;margin:24px 0}.tc-steps button{flex:1;display:flex;align-items:center;gap:12px;padding:12px;border:0;background:transparent;font:inherit;color:#8491a6;text-align:left}.tc-steps button.active{color:#2367ed;font-weight:650}.tc-steps button.complete{color:#2d936a}.tc-steps button span{display:grid;place-items:center;width:30px;height:30px;border:1px solid #d5deed;border-radius:50%}.tc-steps button.active span{background:#2367ed;color:white;border-color:#2367ed}.tc-basic-layout .create-summary{position:static}.tc-footer{position:sticky;bottom:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:20px;padding:18px 20px;background:#fff;border:1px solid #e4eaf3;border-radius:8px;box-shadow:0 -4px 16px #16305b06}.tc-footer strong{font-size:13px;color:#263951}.tc-footer p{font-size:11px;color:#8390a5;margin-top:7px}.tc-footer .agent-actions{margin:0}
+</style>
+<style scoped>
+@media(max-width:760px){.tc-steps{gap:2px}.tc-steps button{display:grid;grid-template-columns:24px minmax(0,1fr);font-size:10px;gap:5px;padding:8px 0;line-height:1.6}.tc-steps button span{width:24px;height:24px}.tc-steps button::after{display:none}.tc-footer{padding:13px}.tc-footer strong{font-size:12px}}
 </style>

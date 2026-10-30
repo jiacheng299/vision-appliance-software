@@ -150,3 +150,46 @@ it('ignores a successful operation response after leaving this page',async()=>{
   resolve({id:'op',agent_id:'task-1',kind:'start',state:'succeeded',channels:[],message:'完成',data_origin:'mock'});await flushPromises()
   expect(navigation.push).not.toHaveBeenCalled()
 })
+
+it('shows an actionable empty video list without allowing validation',async()=>{
+  vi.mocked(listAgentSources).mockResolvedValue([])
+  const w=await page();await choose(w)
+  expect(w.text()).toContain('还没有可用视频源')
+  await press(w,'验证任务')
+  expect(agentApi.validate).not.toHaveBeenCalled();expect(templatesApi.instantiate).not.toHaveBeenCalled()
+})
+it('keeps template confirmation disabled when initial loading fails and retries on request',async()=>{
+  vi.mocked(allPublishedTemplates).mockRejectedValueOnce(new Error('模板加载失败'))
+  const w=await page()
+  expect(w.text()).toContain('模板加载失败')
+  expect(w.get('[aria-label="确认模板，下一步"]').attributes('disabled')).toBeDefined()
+  await press(w,'重试')
+  expect(w.find('[aria-label="选择模板：火灾检测"]').exists()).toBe(true)
+})
+it('preserves the remaining video region when deleting the active video',async()=>{
+  vi.mocked(listAgentSources).mockResolvedValue([source,{...source,id:'source-2',name:'第二路'}])
+  const w=await page();await configure(w)
+  const roi=[{id:'retained',points:[[0,0],[1,0],[1,1]]}]
+  w.getComponent({name:'RegionEditor'}).vm.$emit('change',roi);await nextTick()
+  await press(w,'添加视频源');picker(w,'检测视频源2').vm.$emit('update:value','source-2');await nextTick()
+  await w.get('[aria-label="移除视频2"]').trigger('click');await press(w,'保存草稿')
+  expect(vi.mocked(templatesApi.instantiate).mock.calls[0]![1].source?.regions).toEqual(roi)
+})
+it('blocks a validation which expires after the user has checked confirmation',async()=>{
+  const w=await page();await configure(w);await press(w,'验证任务');await w.get('input[type="checkbox"]').setValue(true)
+  vi.spyOn(Date,'now').mockReturnValue(Date.parse('2099-01-02T00:00:00Z'))
+  await press(w,'确认启动')
+  expect(agentApi.confirm).not.toHaveBeenCalled();expect(agentApi.submit).not.toHaveBeenCalled()
+  expect(w.text()).toContain('验证已过期')
+})
+it('refreshes source health without discarding selected videos or saved regions',async()=>{
+  const w=await page();await configure(w)
+  const roi=[{id:'kept',points:[[0,0],[1,0],[1,1]]}]
+  w.getComponent({name:'RegionEditor'}).vm.$emit('change',roi);await nextTick()
+  vi.mocked(listAgentSources).mockResolvedValue([{...source,status:'failed'}])
+  await w.get('[aria-label="刷新视频源"]').trigger('click');await flushPromises()
+  await press(w,'保存草稿');expect(templatesApi.instantiate).not.toHaveBeenCalled()
+  vi.mocked(listAgentSources).mockResolvedValue([source])
+  await w.get('[aria-label="刷新视频源"]').trigger('click');await flushPromises();await press(w,'保存草稿')
+  expect(vi.mocked(templatesApi.instantiate).mock.calls[0]![1].source).toEqual(expect.objectContaining({source_id:'source-1',regions:roi}))
+})

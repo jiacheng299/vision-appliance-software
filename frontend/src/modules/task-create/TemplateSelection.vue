@@ -11,6 +11,8 @@ const filtered=computed(()=>available.value.filter(t=>`${t.name} ${t.description
 const selected=computed(()=>props.templates.find(t=>t.id===props.selectedId))
 const version=computed(()=>props.version??selected.value?.published_revision)
 const conditions=computed(()=>Object.fromEntries((version.value?.config.parameters??[]).map(p=>[p.key,p.value])))
+const businessLabels:Record<string,string>={person:'人员',vehicle:'车辆',fire:'火源',smoke:'烟雾',absence:'人员在岗',intrusion:'区域入侵',presence:'目标出现',dwell:'区域停留'}
+function business(value:unknown){const key=String(value??'');return businessLabels[key]??(label(key)||'由模板指定')}
 </script>
 <template>
   <section class="template-selection">
@@ -36,7 +38,7 @@ const conditions=computed(()=>Object.fromEntries((version.value?.config.paramete
         <template v-if="version&&selected">
           <div class="selection-detail-title"><span class="selection-icon"><UserRound :size="27"/></span><div><h2>{{selected.name}}</h2><span class="selection-version">模板版本 v{{version.revision_no}} · 已发布</span></div></div>
           <p class="selection-subtitle">{{version.config.summary||selected.description}}</p>
-          <dl><div><dt>监测目标</dt><dd>{{label(String(conditions.target??version.config.default_target??''))||'由模板指定'}}</dd></div><div><dt>监测规则</dt><dd>{{label(String(conditions.rule??version.config.default_rule??''))||'由模板指定'}}</dd></div><div v-if="conditions.duration_seconds!=null"><dt>默认确认时长</dt><dd>{{conditions.duration_seconds}} 秒</dd></div><div><dt>开放配置项</dt><dd>{{version.config.parameters?.length??0}} 项</dd></div><div><dt>支持多路视频</dt><dd>各路独立监测与报警</dd></div></dl>
+          <dl><div><dt>监测目标</dt><dd>{{business(conditions.target??version.config.default_target)}}</dd></div><div><dt>监测规则</dt><dd>{{business(conditions.rule??version.config.default_rule)}}</dd></div><div v-if="conditions.duration_seconds!=null"><dt>默认确认时长</dt><dd>{{conditions.duration_seconds}} 秒</dd></div><div><dt>开放配置项</dt><dd>{{version.config.parameters?.length??0}} 项</dd></div><div><dt>支持多路视频</dt><dd>各路独立监测与报警</dd></div></dl>
           <p class="selection-info"><Info :size="17"/>下一步可配置视频源、监测区域和模板开放的条件值。</p>
         </template>
         <p v-else class="selection-empty">从左侧选择一个模板，查看其监测能力与条件。</p>
