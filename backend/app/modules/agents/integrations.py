@@ -73,6 +73,9 @@ class AgentServices:
     def playback(self, run: RunDTO, actor_id: str) -> PlaybackDTO:
         self.unavailable('media')
 
+    def detection_frame(self, run: RunDTO, actor_id: str):
+        self.unavailable('media')
+
     def evidence(self, agent_id: str, event_id: str, evidence_id: str, actor_id: str) -> PlaybackDTO:
         self.unavailable('events')
 

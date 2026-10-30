@@ -264,6 +264,18 @@ def playback(agent_id: str, run_id: str, db=Depends(get_db), provider=Depends(pr
     return provider.playback(run, WORKSPACE_ACTOR_ID)
 
 
+@router.get('/agents/{agent_id}/runs/{run_id}/detection-frame', response_class=Response,
+            responses={200: {'content': {'image/jpeg': {}}}, 204: {'description': 'No fresh detection frame'}})
+def detection_frame(agent_id: str, run_id: str, db=Depends(get_db), provider=Depends(providers)):
+    run = workflow.scoped_run(db, provider, agent_id, run_id, WORKSPACE_ACTOR_ID)
+    frame = provider.detection_frame(run, WORKSPACE_ACTOR_ID)
+    headers = {'Cache-Control': 'no-store'}
+    if frame is None:
+        return Response(status_code=204, headers=headers)
+    content, observed_at = frame
+    return Response(content, media_type='image/jpeg', headers={**headers, 'X-Detection-Observed-At': observed_at})
+
+
 @router.delete('/agents/{agent_id}/playback-sessions/{session_id}', response_model=EmptyResult)
 def release_playback(agent_id: str, session_id: str, db=Depends(get_db), provider=Depends(providers)):
     service.get_agent(db, agent_id); provider.release_playback(agent_id, session_id, WORKSPACE_ACTOR_ID)

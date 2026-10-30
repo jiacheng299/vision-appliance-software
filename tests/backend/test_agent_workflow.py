@@ -88,6 +88,23 @@ def start_demo(client,provider,agent):
     return rev,workspace(client,agent)
 
 
+def test_detection_frame_route_keeps_run_scope_and_disables_caching(demo):
+    client,provider,agent,_=demo
+    _,runs=start_demo(client,provider,agent)
+    run=runs[0]
+    provider.detection_frame=lambda run,actor: (b'jpeg-pixels','2026-10-30T00:00:00Z')
+    path=f"/agents/{agent['id']}/runs/{run['id']}/detection-frame"
+    response=client.get(API+path)
+    assert response.status_code==200 and response.content==b'jpeg-pixels'
+    assert response.headers['content-type']=='image/jpeg'
+    assert response.headers['cache-control']=='no-store'
+    assert response.headers['x-detection-observed-at']=='2026-10-30T00:00:00Z'
+    provider.detection_frame=lambda run,actor: None
+    assert client.get(API+path).status_code==204
+    assert client.get(API+path.replace(run['id'],'not-a-run')).status_code==404
+    assert client.get(API+path.replace(agent['id'],'not-an-agent')).status_code==404
+
+
 def clone(client,agent,base):
     result=post(client,f"/agents/{agent['id']}/revisions",{'base_revision_id':base['id'],'row_version':detail(client,agent)['row_version']})
     assert result.status_code==201,result.text

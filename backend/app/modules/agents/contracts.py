@@ -236,6 +236,7 @@ class PlaybackDTO(DTO):
     regions: list[Region] = Field(default_factory=list)
     targets: list[TargetBox] = Field(default_factory=list)
     observed_at: str | None = None
+    detection_available: bool = False
     media_origin_ms: int = 0
     duration_ms: int | None = None
     data_origin: Origin = 'real'

@@ -19,7 +19,7 @@ function playback() {
   return {
     id: 'session-1', agent_id: 'agent-1', run_id: 'run-1', protocol: 'mock' as const,
     expires_at: new Date(Date.now() + 60_000).toISOString(), message: '',
-    media_origin_ms: 0, data_origin: 'mock' as const,
+    media_origin_ms: 0, data_origin: 'mock' as const, detection_available:false,
   }
 }
 
@@ -31,6 +31,28 @@ const run = (alert_state: Run['alert_state']): Run => ({
 } as Run)
 
 describe('persisted absence alert presentation', () => {
+  it('defaults to same-frame detection and never overlays old person boxes on original video',async()=>{
+    vi.spyOn(HTMLMediaElement.prototype,'canPlayType').mockReturnValue('probably')
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{})
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{})
+    vi.spyOn(agentApi,'releasePlayback').mockResolvedValue({} as never)
+    vi.spyOn(agentApi,'detectionFrame').mockResolvedValue(null)
+    const load=async()=>({...playback(),protocol:'hls' as const,data_origin:'real' as const,detection_available:true,
+      playback_url:'/api/v1/sources/camera/live/index.m3u8',regions:[],targets:[{id:'old',label:'person',x:.1,y:.1,width:.2,height:.4}]})
+    const w=mount(RunPlayer,{props:{identity:'run',agentId:'agent-1',load,isLive:true}})
+    try {
+      await flushPromises()
+      expect(w.find('.detection-preview').exists()).toBe(true)
+      expect(w.find('video').exists()).toBe(false)
+      expect(w.find('rect').exists()).toBe(false)
+      await w.findAll('button').find(b=>b.text()==='切换原始视频')!.trigger('click');await flushPromises()
+      expect(w.find('video').exists()).toBe(true)
+      expect(w.find('rect').exists()).toBe(false)
+      await w.findAll('button').find(b=>b.text()==='切换检测画面')!.trigger('click');await flushPromises()
+      expect(w.find('.detection-preview').exists()).toBe(true)
+      expect(w.find('video').exists()).toBe(false)
+    } finally {w.unmount();vi.restoreAllMocks()}
+  })
   it('automatically opens a new live player after a real media failure',async()=>{
     vi.useFakeTimers()
     vi.spyOn(HTMLMediaElement.prototype,'canPlayType').mockReturnValue('probably')

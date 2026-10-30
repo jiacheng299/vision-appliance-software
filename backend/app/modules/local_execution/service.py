@@ -26,6 +26,7 @@ from ..models.bridge import RegistryAgentServices
 from .models import LocalAgentState, LocalEvent, LocalOperation, LocalRun
 from .intrusion import IntrusionRule
 from .presence import PresenceRule
+from .preview import DetectionFrames
 
 COMMON_PARAMETERS = {'target','rule','duration_seconds','confidence_threshold','sample_interval_seconds'}
 RULE_PARAMETERS = {
@@ -47,6 +48,7 @@ class LocalAgentServices(RegistryAgentServices):
         self.lock = RLock()
         self.stops, self.futures = {}, {}
         self.pending = []
+        self.detection_frames = DetectionFrames()
         self.started = self.closing = False
         self.process_lock = None
 
@@ -407,6 +409,7 @@ class LocalAgentServices(RegistryAgentServices):
             except OSError:logging.getLogger(__name__).warning('Deleted task evidence cleanup failed')
 
     def _finish(self, identifier, state, message, code=None):
+        self.detection_frames.discard(identifier)
         with self.writing() as db:
             row = db.get(LocalRun,identifier)
             if row and row.state in ACTIVE_STATES:
@@ -466,9 +469,10 @@ class LocalAgentServices(RegistryAgentServices):
                         self._checked_source(db,run.source_snapshot,source_identity)
                         source, locator = sources.resolve_execution_input(db,self.config,run.source_id,self.gateway)
                     with reader_factory(self.config,locator=locator,kind=run.source_kind,width=source.width,
-                        height=source.height,interval=interval,start_ms=binding.start_media_ms or 0,
+                        height=source.height,interval=min(interval,1/3) if run.source_kind=='camera' else interval,start_ms=binding.start_media_ms or 0,
                         end_ms=binding.end_media_ms,stop=stop) as reader:
                         last_timestamp = None
+                        next_rule_timestamp = None
                         last_source_check = time.monotonic()
                         for timestamp,frame in reader.frames():
                             if stop.is_set(): break
@@ -478,7 +482,25 @@ class LocalAgentServices(RegistryAgentServices):
                             detected = detector.detect(frame)
                             boxes = rule.targets_in_regions(detected) if channel.rule == 'absence' else detected
                             if stop.is_set(): break
-                            observation = rule.observe(timestamp,boxes)
+                            preview_only = (run.source_kind=='camera' and next_rule_timestamp is not None
+                                            and timestamp < next_rule_timestamp-1e-6)
+                            if not preview_only:
+                                observation = rule.observe(timestamp,boxes)
+                                # Keep a fixed business clock; frame quantization must not accumulate drift.
+                                if next_rule_timestamp is None:
+                                    next_rule_timestamp = timestamp+interval
+                                else:
+                                    steps = math.floor(max(0,(timestamp-next_rule_timestamp+1e-6)/interval))+1
+                                    next_rule_timestamp += steps*interval
+                            if run.source_kind == 'camera':
+                                try:
+                                    self.detection_frames.publish(identifier,frame,boxes,binding.regions,
+                                        alert_active=channel.rule=='absence' and rule.state=='absence')
+                                except Exception:
+                                    self.detection_frames.discard(identifier)
+                                    logging.getLogger(__name__).warning('Detection preview encoding failed')
+                                # Preview samples never change the configured business-rule cadence.
+                                if preview_only: continue
                             stamp = now()
                             if channel.rule == 'absence':
                                 message = f'区域内 {observation.count} 人；已连续缺岗 {observation.absent_seconds:.1f} 秒。'
@@ -497,7 +519,7 @@ class LocalAgentServices(RegistryAgentServices):
                                 self._change(row,state='running',started_at=row.payload.get('started_at') or stamp,
                                     last_heartbeat_at=stamp,processed_media_ms=round(timestamp*1000) if run.source_kind=='file' else None,
                                     message=message)
-                                row.observation = {'observed_at':stamp,'timestamp':timestamp,'count':observation.count,
+                                row.observation = {'source_identity':source_identity,'observed_at':stamp,'timestamp':timestamp,'count':observation.count,
                                     'targets':targets}
                                 self._refresh_operations(db)
                             observed, failures, last_timestamp = True, 0, timestamp
@@ -527,7 +549,7 @@ class LocalAgentServices(RegistryAgentServices):
                             if row.state=='stopping': stop.set(); break
                             reset = '缺岗计时已清空' if channel.rule == 'absence' else '入侵状态已清空，恢复后等待区域清空重新布防'
                             self._change(row,state='reconnecting',last_heartbeat_at=now(),message=f'视频中断，正在重连（{failures}/{resources["reconnect_attempts"]}）；{reset}。')
-                            row.observation = {}
+                            row.observation = {'source_identity':source_identity}
                         stop.wait(min(2**failures,5))
                         continue
                     raise
@@ -726,8 +748,19 @@ class LocalAgentServices(RegistryAgentServices):
             expires_at=(datetime.now(timezone.utc)+timedelta(minutes=15)).isoformat().replace('+00:00','Z'),
             regions=binding.regions,targets=observed.get('targets',[]) if source.kind=='camera' else [],
             observed_at=observed.get('observed_at') if source.kind=='camera' else None,
+            detection_available=source.kind=='camera' and run.state=='running',
             # File endpoint serves the original full recording. Positions already refer to its media clock.
             media_origin_ms=0,duration_ms=source.duration_ms,message='真实视频；黄色区域为监测范围。')
+
+    def detection_frame(self, run, actor_id):
+        with self.sessions() as db:
+            row = db.get(LocalRun,run.id)
+            if not row or row.actor_id!=actor_id or row.agent_id!=run.agent_id:
+                raise Error(404,'run_not_found','运行记录不存在。')
+            if row.state!='running' or run.source_kind!='camera':
+                return None
+            self._checked_source(db,run.source_snapshot,row.observation.get('source_identity'))
+        return self.detection_frames.read(run.id)
 
     def evidence(self, agent_id, event_id, evidence_id, actor_id):
         detail = self.event(agent_id,event_id,actor_id)

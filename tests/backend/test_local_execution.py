@@ -299,6 +299,81 @@ def test_verified_camera_remains_readable_during_connection_probe(runtime):
         with pytest.raises(Error):resolve_execution_input(db,config,'video',Gateway())
 
 
+@pytest.mark.parametrize('interval,expected',[(1,[0,1,2]),(.5,[0,2/3,1,5/3,2])])
+def test_camera_preview_samples_three_frames_per_second_without_accelerating_rules(runtime,monkeypatch,interval,expected):
+    import numpy as np
+    from app.modules.local_execution.models import LocalRun
+    service,sessions,_,_=runtime
+    class Gateway:
+        def ensure_published(self,source,networks): return 'plaza'
+        def close(self): pass
+    service.gateway.close()
+    service.gateway=Gateway()
+    with sessions() as db:
+        source=db.get(Source,'video')
+        source.kind='camera';source.status='online';source.address='rtsp://127.0.0.1:8554/plaza'
+        source.sha256=None;source.duration_ms=None
+        db.commit()
+    cmd=command()
+    cmd.source_kinds={'video':'camera'}
+    cmd.source_snapshots=[SourceSnapshot(id='video',row_version=1,kind='camera',width=640,height=480,sha256=None,duration_ms=None)]
+    binding=cmd.config.channels[0].sources[0]
+    binding.start_media_ms=binding.end_media_ms=None
+    cmd.config.channels[0].parameters[0].value=interval
+    from app.modules.local_execution.presence import PresenceRule
+    observations=[]
+    observe=PresenceRule.observe
+    def record(rule,timestamp,boxes):
+        observations.append(timestamp)
+        return observe(rule,timestamp,boxes)
+    monkeypatch.setattr(PresenceRule,'observe',record)
+    class CameraReader:
+        interval=None
+        def __init__(self,*args,**kwargs):
+            CameraReader.interval=kwargs['interval'];self.stop=kwargs['stop']
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def frames(self):
+            # A missing 4/3 sample must not create catch-up bursts or clock drift.
+            for stamp in [0,1/3,2/3,1,5/3,2]:
+                if stamp==1/3:
+                    with sessions() as db:
+                        db.get(Source,'video').row_version+=1
+                        db.commit()
+                yield stamp,np.zeros((48,64,3),dtype=np.uint8)
+            self.stop.set()
+    class CameraDetector:
+        def __init__(self,*args,**kwargs): pass
+        def detect(self,frame): return []
+    service.reader_factory=CameraReader;service.detector_factory=CameraDetector
+    updates=[];access=[]
+    publish=service.detection_frames.publish
+    def capture(*args,**kwargs):
+        publish(*args,**kwargs)
+        assert service.detection_frames.read(args[0]) is not None
+        with sessions() as db:
+            row=db.get(LocalRun,args[0])
+            updates.append(row.observation.get('timestamp'))
+            from app.modules.agents.contracts import RunDTO
+            run=RunDTO.model_validate(row.payload)
+        if run.state=='running':
+            try:
+                access.append(200 if service.detection_frame(run,'actor') else 204)
+            except Error as exc:
+                access.append(exc.status)
+    service.detection_frames.publish=capture
+    run=finish(service,service.submit(cmd,'actor','camera-preview'))
+    assert run.state=='stopped'
+    assert CameraReader.interval==pytest.approx(1/3)
+    assert len(updates)==6
+    assert observations==pytest.approx(expected)
+    assert access==[200]*5  # Health-only row-version changes cannot reject fresh previews.
+    assert service.detection_frames.read(run.id) is None
+    with pytest.raises(Error) as exc:
+        service.detection_frame(run,'another-actor')
+    assert exc.value.status==404
+
+
 @pytest.mark.parametrize('field,value',[
     ('address','rtsp://127.0.0.1:8554/other'),('credentials','changed-secret'),
     ('width',1280),('media_key','different.mp4'),('archived',True),

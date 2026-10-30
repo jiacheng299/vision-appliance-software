@@ -44,6 +44,7 @@ const keyOptions = (key: string) => ({ ...jsonOptions, headers: { ...jsonOptions
 const base = (id: string) => `/agents/${encodeURIComponent(id)}`
 export interface ListFilters { status?: string; scene?: string; archived?: boolean; sort?:string }
 export const agentApi = {
+  detectionFrame: (agentId: string, runId: string, signal?: AbortSignal) => client.get<Blob>(`${base(agentId)}/runs/${encodeURIComponent(runId)}/detection-frame`, {responseType:'blob',signal,timeout:2500}).then(r => r.status===204 ? null : {image:r.data,observedAt:String(r.headers['x-detection-observed-at']??'')}),
   list: (q = '', source_id = '', cursor?: string, filters: ListFilters = {}) => client.get<AgentPage>('/agents', { params: { q, source_id: source_id || undefined, cursor, limit: 24, ...filters } }).then(r => r.data),
   detail: (id: string) => client.get<AgentDetail>(`/agents/${encodeURIComponent(id)}`).then(r => r.data),
   create: (body: AgentCreate, key: string) => client.post<AgentDetail>('/agents', body, { ...jsonOptions, headers: { ...jsonOptions.headers, 'Idempotency-Key': key } }).then(r => r.data),

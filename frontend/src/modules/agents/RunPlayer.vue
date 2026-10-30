@@ -6,12 +6,17 @@ import { safeMediaUrl } from '../../shared/media/url'
 import { formatDate } from '../../shared/ui/resource'
 import { agentApi, type Playback } from './api'
 import { agentError } from './state'
+import DetectionPreview from './DetectionPreview.vue'
 const props=withDefaults(defineProps<{identity:string;agentId:string;load:()=>Promise<Playback>;mediaKind?:'image'|'video';isLive?:boolean;alertActive?:boolean;alertLabel?:string}>(),{mediaKind:'video',isLive:false,alertActive:false,alertLabel:'人员缺岗'})
 const emit=defineEmits<{position:[mediaMs:number]}>()
 const session=ref<Playback|null>(null),error=ref(''),loading=ref(false),video=ref<HTMLVideoElement|null>(null),surface=ref<HTMLElement|null>(null),ratio=ref(16/9)
 let generation=0,timer:ReturnType<typeof setTimeout>|undefined,hls:Hls|null=null,peer:RTCPeerConnection|null=null,whepUrl:string|null=null,controller:AbortController|null=null
 let targetTimer:ReturnType<typeof setTimeout>|undefined
 const mediaVersion=ref(0)
+const view=ref<'detection'|'original'>('detection'),preview=ref<InstanceType<typeof DetectionPreview>|null>(null)
+const canDetect=computed(()=>props.isLive&&props.mediaKind==='video'&&session.value?.detection_available===true)
+const usingDetection=computed(()=>canDetect.value&&view.value==='detection')
+async function switchView(){view.value=view.value==='detection'?'original':'detection';disposeMedia();await nextTick();if(!usingDetection.value)await attach(generation)}
 let recoveryTimer:ReturnType<typeof setTimeout>|undefined,recoveryAttempts=0
 function mediaFailure(message:string,current:number){
   if(current!==generation)return
@@ -98,17 +103,18 @@ async function refresh(){
     const value=await props.load()
     if(request!==generation){release(value);return}
     if(value.agent_id!==props.agentId)throw new Error('SESSION_SCOPE_INVALID')
-    session.value=value;await nextTick();await attach(request)
+    session.value=value;await nextTick();if(!usingDetection.value)await attach(request)
     if(request!==generation)return
     const expires=Date.parse(value.expires_at)
     if(!Number.isFinite(expires)||expires<=Date.now())throw new Error('SESSION_EXPIRED')
     timer=setTimeout(()=>void refresh(),Math.max(1000,expires-Date.now()-30000))
-    if(props.isLive)targetTimer=setTimeout(()=>void updateTargets(request),1000)
+    if(props.isLive&&value.data_origin==='mock')targetTimer=setTimeout(()=>void updateTargets(request),1000)
   }catch(e){if(request===generation){disposeMedia();error.value=(e as {response?:unknown}).response?agentError(e):'无法建立有效的播放会话，请重试或检查视频网关。'}}
   finally{if(request===generation)loading.value=false}
 }
 async function fullscreen(){try{await surface.value?.requestFullscreen()}catch{error.value='当前环境无法进入全屏。'}}
 function screenshot(){
+  if(usingDetection.value){preview.value?.screenshot();return}
   if(!video.value||video.value.readyState<2||session.value?.data_origin==='mock'){error.value='当前没有可截图的真实画面。';return}
   try{
     const canvas=document.createElement('canvas');canvas.width=video.value.videoWidth;canvas.height=video.value.videoHeight
@@ -116,8 +122,8 @@ function screenshot(){
     canvas.toBlob(blob=>{if(!blob)return;const target=URL.createObjectURL(blob),link=document.createElement('a');link.href=target;link.download=`preview-${Date.now()}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(target),1000)},'image/png')
   }catch{error.value='此画面暂不允许浏览器截图，请通过事件证据服务查看。'}
 }
-watch(()=>props.identity,()=>{recoveryAttempts=0;void refresh()},{immediate:true})
-watch(()=>props.isLive,value=>{clearTimeout(targetTimer);if(value&&session.value)targetTimer=setTimeout(()=>void updateTargets(generation),1000)})
+watch(()=>props.identity,()=>{view.value='detection';recoveryAttempts=0;void refresh()},{immediate:true})
+watch(()=>props.isLive,value=>{clearTimeout(targetTimer);if(value&&session.value?.data_origin==='mock')targetTimer=setTimeout(()=>void updateTargets(generation),1000)})
 onUnmounted(()=>{generation++;clearTimeout(timer);clearTimeout(targetTimer);clearTimeout(recoveryTimer);clearInterval(observationTimer);disposeMedia();release(session.value)})
 </script>
 <template>
@@ -125,18 +131,19 @@ onUnmounted(()=>{generation++;clearTimeout(timer);clearTimeout(targetTimer);clea
     <div ref="surface" class="run-player-surface" :class="{'alert-active':alertActive}">
       <div class="run-frame" :class="{'alert-active':alertActive}" :style="{aspectRatio:ratio,'--frame-ratio':ratio}">
         <div v-if="alertActive" class="run-alert-banner" role="alert">{{alertLabel}}</div>
-        <template v-if="session?.protocol==='mock'"><div class="mock-room"><span class="mock-room-label">模拟场景示意图 · 非真实{{mediaKind==='image'?'截图':'视频'}}</span><div class="mock-floor"/><span class="mock-person"/></div></template>
+        <DetectionPreview v-if="usingDetection&&session?.run_id" ref="preview" :agent-id="agentId" :run-id="session.run_id" @ratio="ratio=$event"/>
+        <template v-else-if="session?.protocol==='mock'"><div class="mock-room"><span class="mock-room-label">模拟场景示意图 · 非真实{{mediaKind==='image'?'截图':'视频'}}</span><div class="mock-floor"/><span class="mock-person"/></div></template>
         <img v-else-if="session&&mediaKind==='image'&&url" :src="url" alt="事件证据截图" @error="error='证据图片暂时无法读取，请重试。'"/>
         <video v-else-if="session" :key="mediaVersion" ref="video" @timeupdate="position" controls playsinline :autoplay="isLive" muted @playing="playing" @loadedmetadata="ratio=video?.videoWidth&&video?.videoHeight?video.videoWidth/video.videoHeight:16/9" @error="mediaError"/>
         <div v-else class="run-player-placeholder">{{loading?'正在申请受保护的播放会话…':'暂无可用画面'}}</div>
-        <svg v-if="session" class="run-overlays" :class="{'alert-active':alertActive}" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="后端提供的监测区域与目标位置">
+        <svg v-if="session&&!usingDetection" class="run-overlays" :class="{'alert-active':alertActive}" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="后端提供的监测区域与目标位置">
           <polygon v-for="region in session.regions" :key="region.id" :points="polygon(region.points)" class="roi-saved"/>
-          <template v-if="targetsFresh"><rect v-for="box in session.targets" :key="box.id" :x="box.x*1000" :y="box.y*1000" :width="box.width*1000" :height="box.height*1000" fill="none" stroke="#72ef9d" stroke-width="3" vector-effect="non-scaling-stroke"/></template>
+          <template v-if="session.data_origin==='mock'&&targetsFresh"><rect v-for="box in session.targets" :key="box.id" :x="box.x*1000" :y="box.y*1000" :width="box.width*1000" :height="box.height*1000" fill="none" stroke="#72ef9d" stroke-width="3" vector-effect="non-scaling-stroke"/></template>
         </svg>
       </div>
     </div>
     <label v-if="session?.protocol==='mock'&&session.duration_ms!=null&&mediaKind==='video'" class="mock-position">模拟回放位置（仅演示）<input type="range" :min="0" :max="session.duration_ms" step="100" aria-label="模拟回放位置" @input="emit('position',Number(($event.target as HTMLInputElement).value)+session.media_origin_ms)"/></label><p v-if="error" class="error-banner" role="alert">{{error}}</p>
-    <p v-if="session?.message" class="muted">{{session.message}}</p><p v-if="session?.observed_at" class="muted">叠加数据观测时间：{{formatDate(session.observed_at)}}</p>
-    <div class="agent-actions"><NButton size="small" :loading="loading" @click="refresh">{{error?'重试播放':'刷新会话'}}</NButton><NButton size="small" :disabled="!session" @click="fullscreen">全屏</NButton><NButton v-if="mediaKind==='video'" size="small" :disabled="!session||session.data_origin==='mock'" title="保存当前预览帧，不会自动创建事件证据" @click="screenshot">截图</NButton></div>
+    <p v-if="session?.message" class="muted">{{session.message}}</p><p v-if="session?.observed_at&&session.data_origin==='mock'" class="muted">叠加数据观测时间：{{formatDate(session.observed_at)}}</p>
+    <div class="agent-actions"><NButton v-if="canDetect" size="small" @click="switchView">{{usingDetection?'切换原始视频':'切换检测画面'}}</NButton><NButton size="small" :loading="loading" @click="refresh">{{error?'重试播放':'刷新会话'}}</NButton><NButton size="small" :disabled="!session" @click="fullscreen">全屏</NButton><NButton v-if="mediaKind==='video'" size="small" :disabled="!session||session.data_origin==='mock'" title="保存当前预览帧，不会自动创建事件证据" @click="screenshot">截图</NButton></div>
   </div>
 </template>
