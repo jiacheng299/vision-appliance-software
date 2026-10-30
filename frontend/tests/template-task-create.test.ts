@@ -134,3 +134,19 @@ it('switches video workspace without losing regions and protects unfinished draw
   const body=vi.mocked(templatesApi.instantiate).mock.calls[0]![1]
   expect(body.sources?.map(b=>b.regions)).toEqual([first,second])
 })
+
+it('only navigates to the monitoring page after the start operation succeeds',async()=>{
+  vi.mocked(agentApi.operation).mockResolvedValue({id:'op',agent_id:'task-1',kind:'start',state:'succeeded',channels:[],message:'全部运行已启动',data_origin:'mock'})
+  const w=await page();await configure(w);await press(w,'验证任务')
+  expect(navigation.push).not.toHaveBeenCalled()
+  await w.get('input[type="checkbox"]').setValue(true);await press(w,'确认启动')
+  expect(navigation.push).toHaveBeenCalledWith('/agents/task-1/live')
+})
+it('ignores a successful operation response after leaving this page',async()=>{
+  let resolve!:(v:Awaited<ReturnType<typeof agentApi.operation>>)=>void
+  vi.mocked(agentApi.operation).mockImplementation(()=>new Promise(r=>{resolve=r}))
+  const w=await page();await configure(w);await press(w,'验证任务');await w.get('input[type="checkbox"]').setValue(true);await press(w,'确认启动')
+  wrappers.splice(wrappers.indexOf(w),1);w.unmount()
+  resolve({id:'op',agent_id:'task-1',kind:'start',state:'succeeded',channels:[],message:'完成',data_origin:'mock'});await flushPromises()
+  expect(navigation.push).not.toHaveBeenCalled()
+})

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed,onBeforeUnmount,onMounted,ref,watch } from 'vue'
 import { onBeforeRouteLeave,useRoute,useRouter } from 'vue-router'
-import { NButton,NCheckbox,NInput,NInputNumber,NSelect } from 'naive-ui'
+import { NButton,NInput,NInputNumber,NSelect } from 'naive-ui'
 import { Plus,Video,Trash2,Info } from 'lucide-vue-next'
 import { agentApi,listAgentSources,type AgentDetail,type CapabilityCatalog,type ChannelSource,type Operation,type Revision,type Validation } from '../agents/api'
 import { templatesApi,allPublishedTemplates,modelKey,templateError,type AgentTemplate,type TemplateRevision,type TemplateConfig,type ParameterSetting,type ParameterDefinition } from '../agents/templatesApi'
@@ -10,6 +10,7 @@ import type { Source } from '../../shared/api/types'
 import { channelSources } from '../agents/channelSources'
 import { label } from '../agents/state'
 import TaskConditions from './TaskConditions.vue'
+import TaskReview from './TaskReview.vue'
 import TemplateSelection from './TemplateSelection.vue'
 import RegionEditor from '../../shared/media/RegionEditor.vue'
 import MediaPlayer from '../../shared/media/MediaPlayer.vue'
@@ -134,7 +135,7 @@ async function save(){if(busy.value)return;busy.value=true;error.value='';try{aw
 async function evaluate(){if(busy.value)return;busy.value=true;error.value='';try{const r=await persist();validation.value=await agentApi.validate(r);agent.value=await agentApi.detail(agent.value!.id);revision.value=agent.value.latest_revision;validated.value=signature.value;ack.value=false;step.value=2;notice.value='任务验证已完成，请核对结果。'}catch(e){error.value=displayError(e)}finally{busy.value=false}}
 async function poll(){
   if(stopped||!agent.value||!operation.value)return
-  try{operation.value=await agentApi.operation(agent.value.id,operation.value.id);if(['pending','running'].includes(operation.value.state))pollTimer=setTimeout(()=>void poll(),1000);else if(operation.value.state==='succeeded'){allowLeave=true;await router.push(`/agents/${agent.value.id}/live`)}}catch(e){error.value=displayError(e)}
+  try{const result=await agentApi.operation(agent.value.id,operation.value.id);if(stopped)return;operation.value=result;if(['pending','running'].includes(operation.value.state))pollTimer=setTimeout(()=>void poll(),1000);else if(operation.value.state==='succeeded'){allowLeave=true;await router.push(`/agents/${agent.value.id}/live`)}}catch(e){if(!stopped)error.value=displayError(e)}
 }
 async function start(){
   if(busy.value||!ack.value||!executable.value||!agent.value||!revision.value||!validation.value)return
@@ -202,11 +203,7 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validatio
         <TaskConditions :settings="parameters" @update:settings="parameters=$event" :definitions="definitions" :model="model" :source-count="bindings.length" :rule="currentRule" :disabled="frozen||!version"/>
       </div>
     </fieldset>
-  </section><aside v-show="step===2" class="panel create-summary"><h2>核对配置与验证结果</h2><p>模板：{{selectedTemplate?.name??'尚未选择'}}</p><p>模板版本 {{version?`v${version.revision_no}`:'尚未选择'}}</p><p>视频：{{bindings.filter(b=>b.source_id).length}} 路</p><p v-for="(b,index) in bindings" :key="index">{{index+1}}. {{sourceFor(b)?.name??'尚未选择'}} · {{b.regions?.length??0}} 个区域</p><p class="notice">所有视频共用检测条件，报警独立记录。只有验证通过并确认后才会启动分析。</p>
-    <section v-if="validation" class="create-assessment"><h3>{{label(validation.verdict)}}</h3><ul><li v-for="message in [...(validation.missing_conditions??[]),...(validation.unsupported_conditions??[]),...(validation.evidence_limitations??[])]" :key="message">{{message}}</li></ul></section>
-    <NCheckbox v-model:checked="ack" :disabled="!executable||busy||!!operation">已核对模板版本、视频范围和检测条件</NCheckbox>
-    <p v-if="operation" class="notice">{{label(operation.state)}} · {{operation.message}}</p><NButton v-if="operation" :disabled="busy" @click="poll">刷新启动状态</NButton><RouterLink v-if="agent" :to="`/agents/${agent.id}/live`">查看任务详情</RouterLink>
-  </aside></div>
+  </section><div v-show="step===2"><TaskReview :template-name="selectedTemplate?.name??''" :version="version" :name="name" :bindings="bindings" :sources="sources" :settings="parameters" :definitions="definitions" :validation="validation" :operation="operation" :expired="!!validation&&Date.parse(validation.expires_at)<=validationClock" v-model:ack="ack" :can-acknowledge="executable&&!busy" :published="revision?.state==='published'" @refresh="poll"/><RouterLink v-if="agent" class="tc-task-link" :to="`/agents/${agent.id}/live`">查看任务详情</RouterLink></div></div>
   <footer class="tc-footer"><div><strong v-if="version">已选择：{{selectedTemplate?.name}} · v{{version.revision_no}}</strong><strong v-else>请选择一个已发布模板</strong><p>{{step===0?'确认后进入视频与区域配置':step===1?`${bindings.filter(b=>b.source_id).length} 路视频 · 共用规则，各路独立报警`:'验证通过后，核对并确认启动'}}</p></div><div class="agent-actions">
     <NButton v-if="step===0" type="primary" aria-label="确认模板，下一步" :disabled="!version||busy||loading||!!loadError" @click="goStep(1)">确认模板，下一步</NButton>
     <template v-if="step===1"><NButton :disabled="busy||!!operation" @click="goStep(0)">上一步</NButton><NButton :disabled="frozen||loading" :loading="busy" @click="save">保存草稿</NButton><NButton type="primary" :disabled="frozen||loading" :loading="busy" @click="evaluate">验证任务</NButton></template>
