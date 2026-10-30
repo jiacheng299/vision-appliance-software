@@ -9,7 +9,7 @@ import { retryKey } from './state'
 import type { Source } from '../../shared/api/types'
 import { channelSources } from '../agents/channelSources'
 import { label } from '../agents/state'
-import ParameterFields from '../agents/ParameterFields.vue'
+import TaskConditions from './TaskConditions.vue'
 import TemplateSelection from './TemplateSelection.vue'
 import RegionEditor from '../../shared/media/RegionEditor.vue'
 import MediaPlayer from '../../shared/media/MediaPlayer.vue'
@@ -35,6 +35,7 @@ const activeBinding=computed(()=>bindings.value[activeIndex.value])
 const activeSource=computed(()=>activeBinding.value?sourceFor(activeBinding.value):undefined)
 const selectedTemplate=computed(()=>templates.value.find(t=>t.id===templateId.value))
 const model=computed(()=>catalog.value?.items.find(i=>modelKey(i.reference)===modelKey(version.value?.config.model_ref)))
+const currentRule=computed(()=>String(parameters.value.find(p=>p.key==='rule')?.value??version.value?.config.default_rule??''))
 const signature=computed(()=>JSON.stringify({template:version.value?.id,name:name.value,description:description.value,sources:bindings.value,parameters:parameters.value}))
 const dirty=computed(()=>signature.value!==saved.value||pendingRegion.value),frozen=computed(()=>busy.value||!!operation.value||revision.value?.state==='published'||!!legacyDraft.value||!version.value)
 const executable=computed(()=>!pendingRegion.value&&validation.value?.verdict==='executable'&&validated.value===signature.value&&Date.parse(validation.value.expires_at)>validationClock.value)
@@ -198,8 +199,8 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validatio
             <p v-else class="tc-preview-hint"><Info :size="15"/>直播使用静态帧划区，可重新选取当前帧，无需设置录像起止时间。</p>
           </template><div v-else class="tc-no-source"><Video :size="42"/><h3>先选择本路视频</h3><p>从左侧选择摄像头或录像，再设置监测区域。</p></div>
         </section>
+        <TaskConditions :settings="parameters" @update:settings="parameters=$event" :definitions="definitions" :model="model" :source-count="bindings.length" :rule="currentRule" :disabled="frozen||!version"/>
       </div>
-      <h2 class="agent-section-title">3. 设置模板条件</h2><ParameterFields :settings="parameters" @update:settings="parameters=$event" :definitions="definitions" :model="model" :disabled="frozen||!version"/>
     </fieldset>
   </section><aside v-show="step===2" class="panel create-summary"><h2>核对配置与验证结果</h2><p>模板：{{selectedTemplate?.name??'尚未选择'}}</p><p>模板版本 {{version?`v${version.revision_no}`:'尚未选择'}}</p><p>视频：{{bindings.filter(b=>b.source_id).length}} 路</p><p v-for="(b,index) in bindings" :key="index">{{index+1}}. {{sourceFor(b)?.name??'尚未选择'}} · {{b.regions?.length??0}} 个区域</p><p class="notice">所有视频共用检测条件，报警独立记录。只有验证通过并确认后才会启动分析。</p>
     <section v-if="validation" class="create-assessment"><h3>{{label(validation.verdict)}}</h3><ul><li v-for="message in [...(validation.missing_conditions??[]),...(validation.unsupported_conditions??[]),...(validation.evidence_limitations??[])]" :key="message">{{message}}</li></ul></section>
