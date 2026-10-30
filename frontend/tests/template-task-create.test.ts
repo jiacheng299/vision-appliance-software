@@ -116,3 +116,21 @@ it('blocks unavailable sources without losing their reference',async()=>{
   const w=await page();await press(w,'保存草稿')
   expect(agentApi.save).not.toHaveBeenCalled();expect(w.text()).toContain('视频源当前不可访问')
 })
+
+it('switches video workspace without losing regions and protects unfinished drawing',async()=>{
+  vi.mocked(listAgentSources).mockResolvedValue([source,{...source,id:'source-2',name:'第二路'}])
+  const w=await page();await configure(w)
+  const first=[{id:'first',points:[[0,0],[1,0],[1,1]]}],second=[{id:'second',points:[[.5,.5],[1,.5],[1,1]]}]
+  w.getComponent({name:'RegionEditor'}).vm.$emit('change',first);await nextTick()
+  await press(w,'添加视频源');picker(w,'检测视频源2').vm.$emit('update:value','source-2');await nextTick()
+  expect(w.findAllComponents({name:'RegionEditor'})).toHaveLength(1)
+  w.getComponent({name:'RegionEditor'}).vm.$emit('change',second);await nextTick()
+  w.getComponent({name:'RegionEditor'}).vm.$emit('pending',true);await nextTick()
+  await w.get('[aria-label="配置视频1"]').trigger('click')
+  expect(w.get('[aria-label="配置视频2"]').attributes('aria-current')).toBe('true')
+  expect(w.text()).toContain('请先闭合并保存')
+  w.getComponent({name:'RegionEditor'}).vm.$emit('pending',false);await nextTick()
+  await w.get('[aria-label="配置视频1"]').trigger('click');await press(w,'保存草稿')
+  const body=vi.mocked(templatesApi.instantiate).mock.calls[0]![1]
+  expect(body.sources?.map(b=>b.regions)).toEqual([first,second])
+})
