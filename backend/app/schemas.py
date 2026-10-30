@@ -153,6 +153,17 @@ class RuntimeSample(DTO):
     memory_percent: float
     gpu_percent: float | None
 
+class RuntimeModelDTO(DTO):
+    id: str
+    name: str
+    version: str
+    runtime_type: str
+    template_name: str
+    status: Literal['ready','unavailable','pending','failed']
+    message: str
+    data_origin: Literal['real','mock'] = 'real'
+
+
 class RuntimeDTO(RuntimeSample):
     disk: dict[str,int]
     sources: dict[str,int]
@@ -160,7 +171,7 @@ class RuntimeDTO(RuntimeSample):
     data_origin: Literal['real','mock'] = 'real'
     runtime_available: bool = True
     services: list[ServiceDTO]
-    models: list[dict] = []
+    models: list[RuntimeModelDTO] = Field(default_factory=list)
     workers: list[dict] = []
     history: list[RuntimeSample] = []
 

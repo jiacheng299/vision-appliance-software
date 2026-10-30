@@ -10,6 +10,8 @@ from ..schemas import RuntimeDTO, DashboardDTO, EventPage, LogPage
 from .sources import source_dto
 from .agents.workspace import WORKSPACE_ACTOR_ID
 from .agents.contracts import ExecutionSummary
+from .models.models import ModelPair
+from .models.schemas import ModelInput
 
 router = APIRouter(tags=['runtime'])
 
@@ -19,12 +21,13 @@ def executable(value):
 def worker_rows(db):
     return list(db.scalars(select(Worker).where(Worker.heartbeat_at>time.time()-15)))
 
-def dependency_services(app,db):
+def dependency_services(app,db,local_model=None):
     observed = now()
     worker = bool(worker_rows(db))
     ffmpeg = executable(app.state.config.ffmpeg) and executable(app.state.config.ffprobe)
     gateway = app.state.media_gateway.health()
-    local_model = bool(getattr(app.state.model_services,'is_ready',lambda:False)())
+    if local_model is None:
+        local_model = bool(getattr(app.state.model_services,'is_ready',lambda:False)())
     return [
         {'key':'api','name':'API','status':'ready','message':'API 与持久层可用。','observed_at':observed},
         {'key':'worker','name':'Worker','status':'ready' if worker else 'unavailable','message':'独立 Worker 心跳正常。' if worker else '未收到独立 Worker 心跳，请启动 Worker。','observed_at':observed},
@@ -46,15 +49,36 @@ def summary_events(db, summary):
         evidence_status=e.evidence_status, review_status=e.review_status) for e in summary.recent_events]
 
 
+def runtime_models(app, db, runtime_ready):
+    origin = getattr(app.state.model_services, 'data_origin', 'real')
+    pairs = db.scalars(select(ModelPair).where(
+        ModelPair.status == 'available', ModelPair.data_origin == origin,
+    ).order_by(ModelPair.created_at.desc(), ModelPair.model_id, ModelPair.version)).all()
+    result = []
+    for pair in pairs:
+        definition = ModelInput.model_validate(pair.definition)
+        if pair.validation == 'passed' and runtime_ready:
+            status, message = 'ready', '模型校验通过，当前本地执行器可用。'
+        elif pair.validation == 'passed':
+            status, message = 'unavailable', '模型已校验，但本地执行器或可信模型产物当前不可用。'
+        else:
+            status, message = pair.validation, pair.validation_message
+        result.append({'id':pair.model_id, 'name':definition.name, 'version':pair.version,
+            'runtime_type':definition.runtime_type, 'template_name':definition.template.name,
+            'status':status, 'message':message, 'data_origin':pair.data_origin})
+    return result
+
+
 def runtime_snapshot(app,db,record=True):
     summary = execution_summary(app)
+    local_model_ready = bool(getattr(app.state.model_services,'is_ready',lambda:False)())
     sample = {'observed_at':now(),'cpu_percent':psutil.cpu_percent(interval=0.1),'memory_percent':psutil.virtual_memory().percent,'gpu_percent':None}
     if record:
         app.state.runtime_history.append(sample)
     usage = shutil.disk_usage(app.state.config.var_root)
     total = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False))
     online = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False,Source.kind=='camera',Source.status=='online'))
-    return {**sample,'disk':{'used_bytes':usage.used,'total_bytes':usage.total,'free_bytes':usage.free},'sources':{'total':total,'online':online},'runs':{'running':summary.active_runs,'completed':summary.completed,'failed':summary.failed},'data_origin':summary.data_origin,'runtime_available':summary.active_runs is not None,'services':dependency_services(app,db),'models':[],'workers':[{'id':w.id,'status':'online','observed_at':__import__('datetime').datetime.fromtimestamp(w.heartbeat_at,__import__('datetime').timezone.utc).isoformat().replace('+00:00','Z')} for w in worker_rows(db)],'history':list(app.state.runtime_history)}
+    return {**sample,'disk':{'used_bytes':usage.used,'total_bytes':usage.total,'free_bytes':usage.free},'sources':{'total':total,'online':online},'runs':{'running':summary.active_runs,'completed':summary.completed,'failed':summary.failed},'data_origin':summary.data_origin,'runtime_available':summary.active_runs is not None,'services':dependency_services(app,db,local_model_ready),'models':runtime_models(app,db,local_model_ready),'workers':[{'id':w.id,'status':'online','observed_at':__import__('datetime').datetime.fromtimestamp(w.heartbeat_at,__import__('datetime').timezone.utc).isoformat().replace('+00:00','Z')} for w in worker_rows(db)],'history':list(app.state.runtime_history)}
 
 @router.get('/runtime/overview',response_model=RuntimeDTO)
 def overview(request:Request,db=Depends(get_db)):
