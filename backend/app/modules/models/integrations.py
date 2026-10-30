@@ -27,6 +27,9 @@ class ModelServices:
     def analyze_multimodal(self, channel, sources, deployment):
         raise Error(503, 'multimodal_service_unavailable', '多模态任务分析与执行适配器尚未接入。', retryable=True)
 
+    def analyze_frames(self, instruction, frames, deployment):
+        raise Error(503, 'multimodal_service_unavailable', '多模态视频分析适配器尚未接入。', retryable=True)
+
     def evaluate(self, config, sources, catalog, deployment):
         raise Error(503, 'analysis_service_unavailable', '真实能力与证据评估服务尚未接入，不能确认可执行。', retryable=True)
 

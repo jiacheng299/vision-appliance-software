@@ -176,5 +176,5 @@ def selected(db, adapter, usage):
     row = db.get(LLMSelection, usage)
     deployment = next((d for d in adapter.deployments() if row and d.id == row.deployment_id and usage in d.usages and d.health == 'healthy'), None)
     if not deployment:
-        raise Error(503, 'llm_not_selected', '该用途尚未绑定健康的本地模型，请在模型管理中选择；没有部署服务时可保存草稿。', retryable=True)
+        raise Error(503, 'llm_not_selected', '该用途尚未绑定健康的模型部署，请在模型管理中选择；没有部署服务时可保存草稿。', retryable=True)
     return deployment

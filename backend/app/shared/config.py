@@ -22,6 +22,13 @@ class Config(BaseSettings):
     deepseek_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('VISION_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY', 'deepseek_api_key'))
     deepseek_model: str = Field(default='deepseek-flash', min_length=1, max_length=160)
     deepseek_match_threshold: float = Field(default=.8, ge=0, le=1, allow_inf_nan=False)
+    multimodal_api_url: str = Field(default='', max_length=2048)
+    multimodal_api_key: SecretStr | None = None
+    multimodal_model: str = Field(default='', max_length=80)
+    multimodal_api_timeout_seconds: int = Field(default=60, ge=5, le=300)
+    multimodal_match_threshold: float = Field(default=.8, ge=0, le=1, allow_inf_nan=False)
+    multimodal_max_frames: int = Field(default=8, ge=1, le=32)
+    multimodal_max_image_bytes: int = Field(default=2 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     media_gateway_api_url: str = 'http://127.0.0.1:9997'
     media_gateway_hls_url: str = 'http://127.0.0.1:8888'
     media_gateway_rtsp_port: int = Field(default=8554, ge=1, le=65535)
