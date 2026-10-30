@@ -469,7 +469,7 @@ class LocalAgentServices(RegistryAgentServices):
                         self._checked_source(db,run.source_snapshot,source_identity)
                         source, locator = sources.resolve_execution_input(db,self.config,run.source_id,self.gateway)
                     with reader_factory(self.config,locator=locator,kind=run.source_kind,width=source.width,
-                        height=source.height,interval=min(interval,1/3) if run.source_kind=='camera' else interval,start_ms=binding.start_media_ms or 0,
+                        height=source.height,interval=min(interval,1/20) if run.source_kind=='camera' else interval,start_ms=binding.start_media_ms or 0,
                         end_ms=binding.end_media_ms,stop=stop) as reader:
                         last_timestamp = None
                         next_rule_timestamp = None

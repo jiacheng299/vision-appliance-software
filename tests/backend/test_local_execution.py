@@ -300,7 +300,7 @@ def test_verified_camera_remains_readable_during_connection_probe(runtime):
 
 
 @pytest.mark.parametrize('interval,expected',[(1,[0,1,2]),(.5,[0,2/3,1,5/3,2])])
-def test_camera_preview_samples_three_frames_per_second_without_accelerating_rules(runtime,monkeypatch,interval,expected):
+def test_camera_preview_targets_twenty_fps_without_accelerating_rules(runtime,monkeypatch,interval,expected):
     import numpy as np
     from app.modules.local_execution.models import LocalRun
     service,sessions,_,_=runtime
@@ -364,7 +364,7 @@ def test_camera_preview_samples_three_frames_per_second_without_accelerating_rul
     service.detection_frames.publish=capture
     run=finish(service,service.submit(cmd,'actor','camera-preview'))
     assert run.state=='stopped'
-    assert CameraReader.interval==pytest.approx(1/3)
+    assert CameraReader.interval==pytest.approx(1/20)
     assert len(updates)==6
     assert observations==pytest.approx(expected)
     assert access==[200]*5  # Health-only row-version changes cannot reject fresh previews.

@@ -22,7 +22,7 @@ class YoloPersonDetector:
         self._cv2 = cv2
         self._confidence = float(confidence)
         options = ort.SessionOptions()
-        options.intra_op_num_threads = 1
+        options.intra_op_num_threads = 2
         options.inter_op_num_threads = 1
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
         try:

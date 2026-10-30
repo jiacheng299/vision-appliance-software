@@ -105,6 +105,22 @@ def test_detection_frame_route_keeps_run_scope_and_disables_caching(demo):
     assert client.get(API+path.replace(agent['id'],'not-an-agent')).status_code==404
 
 
+def test_detection_stream_is_scoped_and_delivers_complete_jpegs(demo):
+    client,provider,agent,_=demo
+    _,runs=start_demo(client,provider,agent)
+    run=runs[0]
+    frames=iter([(b'one','time-1'),(b'two','time-2'),None])
+    provider.detection_frame=lambda run,actor: next(frames)
+    path=f"/agents/{agent['id']}/runs/{run['id']}/detection-stream"
+    response=client.get(API+path)
+    assert response.status_code==200
+    assert response.headers['content-type']=='multipart/x-mixed-replace; boundary=vision-frame'
+    assert response.headers['cache-control']=='no-store'
+    assert response.content.count(b'--vision-frame')==2
+    assert b'\r\n\r\none\r\n' in response.content and b'\r\n\r\ntwo\r\n' in response.content
+    assert client.get(API+path.replace(run['id'],'not-a-run')).status_code==404
+
+
 def clone(client,agent,base):
     result=post(client,f"/agents/{agent['id']}/revisions",{'base_revision_id':base['id'],'row_version':detail(client,agent)['row_version']})
     assert result.status_code==201,result.text

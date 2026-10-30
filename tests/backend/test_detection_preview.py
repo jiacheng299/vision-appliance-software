@@ -1,9 +1,32 @@
 """The returned JPEG must contain its own frame and matching detection boxes."""
 import cv2
 import numpy as np
+import asyncio
 
 from app.modules.local_execution.preview import DetectionFrames
 from app.modules.agents.schemas import Region
+
+
+def test_continuous_stream_sends_new_complete_frames_and_stops_on_missing_data():
+    from app.shared.detection_stream import multipart_frames
+    frames=iter([(b'one','time-1'),(b'one','time-1'),(b'two','time-2'),None])
+    async def read(): return next(frames)
+    async def disconnected(): return False
+    async def collect(): return [part async for part in multipart_frames(read,disconnected)]
+    parts=asyncio.run(collect())
+    assert len(parts)==2
+    assert b'Content-Type: image/jpeg\r\n' in parts[0]
+    assert b'Content-Length: 3\r\n' in parts[0]
+    assert parts[0].endswith(b'\r\n\r\none\r\n')
+    assert parts[1].endswith(b'\r\n\r\ntwo\r\n')
+
+
+def test_continuous_stream_stops_reading_when_browser_disconnects():
+    from app.shared.detection_stream import multipart_frames
+    async def read(): raise AssertionError('Disconnected clients must not keep polling')
+    async def disconnected(): return True
+    async def collect(): return [part async for part in multipart_frames(read,disconnected)]
+    assert asyncio.run(collect())==[]
 
 
 def test_preview_keeps_matching_frame_and_boxes_isolated_per_run():

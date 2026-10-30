@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 import json
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from ...shared.detection_stream import multipart_frames
 from ...shared.db import get_db
 from ...shared.errors import Error
 from .workspace import WORKSPACE_ACTOR_ID
@@ -274,6 +276,22 @@ def detection_frame(agent_id: str, run_id: str, db=Depends(get_db), provider=Dep
         return Response(status_code=204, headers=headers)
     content, observed_at = frame
     return Response(content, media_type='image/jpeg', headers={**headers, 'X-Detection-Observed-At': observed_at})
+
+
+@router.get('/agents/{agent_id}/runs/{run_id}/detection-stream', response_class=StreamingResponse,
+            responses={200: {'content': {'multipart/x-mixed-replace': {}}}})
+def detection_stream(agent_id: str, run_id: str, request: Request, db=Depends(get_db), provider=Depends(providers)):
+    run = workflow.scoped_run(db, provider, agent_id, run_id, WORKSPACE_ACTOR_ID)
+    # Finish the request's read transaction before keeping the response open.
+    db.rollback()
+    async def read():
+        try:
+            return await run_in_threadpool(provider.detection_frame, run, WORKSPACE_ACTOR_ID)
+        except Error:
+            return None
+    return StreamingResponse(multipart_frames(read,request.is_disconnected),
+        media_type='multipart/x-mixed-replace; boundary=vision-frame',
+        headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'})
 
 
 @router.delete('/agents/{agent_id}/playback-sessions/{session_id}', response_model=EmptyResult)
