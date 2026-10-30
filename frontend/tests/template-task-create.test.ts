@@ -23,7 +23,7 @@ beforeEach(()=>{
   vi.spyOn(templatesApi,'parameters').mockResolvedValue({version:'1',items:pool,editable_by_user:false})
   vi.spyOn(templatesApi,'detail').mockResolvedValue(template())
   vi.spyOn(agentApi,'catalog').mockResolvedValue(catalog)
-  vi.spyOn(templatesApi,'instantiate').mockImplementation(async(_id,body)=>{stored.name=body.name;stored.latest_revision.config.channels![0]!.sources=[body.source!];stored.latest_revision.config.channels![0]!.parameters=body.parameters;return stored})
+  vi.spyOn(templatesApi,'instantiate').mockImplementation(async(_id,body)=>{stored.name=body.name;stored.latest_revision.config.channels![0]!.sources=body.sources??[body.source!];stored.latest_revision.config.channels![0]!.parameters=body.parameters;return stored})
   vi.spyOn(agentApi,'detail').mockImplementation(async()=>stored)
   vi.spyOn(agentApi,'save').mockImplementation(async(_revision,config)=>{stored.latest_revision.config=config;stored.latest_revision.row_version++;return stored.latest_revision})
   vi.spyOn(agentApi,'validate').mockImplementation(async()=>{stored.latest_revision.row_version++;return{id:'validation',revision_id:stored.latest_revision.id,capability_fingerprint:'fp',data_origin:'mock',created_at:'2026-10-27T00:00:00Z',verdict:'executable',config_hash:'hash',expires_at:'2099-01-01T00:00:00Z',missing_conditions:[],unsupported_conditions:[],evidence_limitations:[]} satisfies Validation})
@@ -36,6 +36,45 @@ async function page(){const w=mount(TemplateTaskCreatePage,{global:{stubs:{Route
 function picker(w:ReturnType<typeof mount>,name:string){const selected=w.findAllComponents({name:'TaskSelect'}).find(s=>s.attributes('aria-label')===name);expect(selected,`${name} control`).toBeDefined();return selected!}
 async function press(w:ReturnType<typeof mount>,name:string){await w.findAll('button').find(b=>b.text()===name)!.trigger('click');await flushPromises()}
 async function configure(w:ReturnType<typeof mount>){picker(w,'选择智能体模板').vm.$emit('update:value','template-1');picker(w,'检测视频源').vm.$emit('update:value','source-1');await nextTick()}
+
+it('creates one task with two independent video regions and shared parameters',async()=>{
+  vi.mocked(listAgentSources).mockResolvedValue([source,{...source,id:'source-2',name:'第二路'}])
+  const w=await page();await configure(w)
+  w.getComponent({name:'RegionEditor'}).vm.$emit('change',[{id:'roi',points:[[0,0],[1,0],[1,1]]}]);await nextTick()
+  await press(w,'添加视频源')
+  picker(w,'检测视频源2').vm.$emit('update:value','source-2');await nextTick()
+  expect(w.findAllComponents({name:'RegionEditor'})).toHaveLength(2)
+  await press(w,'保存任务草稿')
+  const body=vi.mocked(templatesApi.instantiate).mock.calls[0]![1]
+  expect(body.sources?.map(b=>b.source_id)).toEqual(['source-1','source-2'])
+  expect(body.sources?.[0]?.regions).toHaveLength(1)
+  expect(body.sources?.[1]?.regions).toEqual([])
+  expect(body.parameters).toEqual([{key:'confidence_threshold',value:.8,required:true}])
+})
+
+it('loads every source from an existing multi-video draft and keeps them on save',async()=>{
+  navigation.query={draft:'task-1'}
+  vi.mocked(listAgentSources).mockResolvedValue([source,{...source,id:'source-2',name:'第二路'}])
+  stored.latest_revision.config.channels![0]!.sources!.push({...stored.latest_revision.config.channels![0]!.sources![0]!,source_id:'source-2',regions:[]})
+  const w=await page()
+  expect(picker(w,'检测视频源2').props('value')).toBe('source-2')
+  await press(w,'保存任务草稿')
+  expect(vi.mocked(agentApi.save).mock.calls[0]![1].channels![0]!.sources!.map(b=>b.source_id)).toEqual(['source-1','source-2'])
+})
+
+it('removing one video preserves the other video region and invalidates startup approval',async()=>{
+  vi.mocked(listAgentSources).mockResolvedValue([source,{...source,id:'source-2',name:'第二路'}])
+  const w=await page();await configure(w);await press(w,'添加视频源')
+  picker(w,'检测视频源2').vm.$emit('update:value','source-2');await nextTick()
+  const roi=[{id:'second-region',points:[[.5,.5],[1,.5],[1,1]]}]
+  w.findAllComponents({name:'RegionEditor'})[1]!.vm.$emit('change',roi);await nextTick()
+  await press(w,'验证任务');await w.get('input[type="checkbox"]').setValue(true)
+  await w.get('button[aria-label="移除视频1"]').trigger('click');await nextTick()
+  expect(picker(w,'检测视频源').props('value')).toBe('source-2')
+  expect(w.findAll('button').find(b=>b.text()==='确认启动')!.attributes('disabled')).toBeDefined()
+  await press(w,'保存任务草稿')
+  expect(vi.mocked(agentApi.save).mock.calls[0]![1].channels![0]!.sources).toEqual([expect.objectContaining({source_id:'source-2',regions:roi})])
+})
 
 it('creates tasks through the selected template version without an independent model picker',async()=>{
   const w=await page();await configure(w);await press(w,'保存任务草稿')

@@ -19274,6 +19274,22 @@
             "type": "array",
             "maxItems": 32,
             "title": "Parameters"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChannelSource"
+                },
+                "type": "array",
+                "maxItems": 16,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
           }
         },
         "additionalProperties": false,

@@ -123,6 +123,41 @@ def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):
     finally: second.close()
 
 
+@pytest.mark.parametrize('first_fails',[False,True])
+def test_one_task_runs_two_sources_concurrently_with_independent_events_and_failures(runtime,first_fails):
+    from threading import Barrier
+    from app.shared.models import Setting
+    service,sessions,_,config=runtime
+    with sessions() as db:
+        db.add(Source(id='video2',name='第二路',kind='file',status='ready',width=640,height=480,
+                      duration_ms=60000,sha256='def',media_key='second.mp4'))
+        row=db.get(Setting,'resources');row.values={**row.values,'max_concurrent_jobs':2};db.commit()
+    (config.var_root/'media/second.mp4').write_bytes(b'second source')
+    cmd=command()
+    cmd.source_kinds['video2']='file'
+    cmd.source_snapshots.append(SourceSnapshot(id='video2',row_version=1,kind='file',sha256='def',width=640,height=480,duration_ms=60000))
+    cmd.config.channels[0].sources.append(cmd.config.channels[0].sources[0].model_copy(update={'source_id':'video2'}))
+    started=Barrier(2)
+    class TwoReaders(Reader):
+        def __init__(self,*args,**kwargs):
+            super().__init__(*args,**kwargs);self.second=Path(kwargs['locator']).name=='second.mp4'
+        def frames(self):
+            started.wait(timeout=3)  # Both sources must actually enter execution together.
+            if not self.second and first_fails:raise RuntimeError('one source failed')
+            for stamp in [0,15,30,45]:yield stamp,[PERSON] if self.second else []
+    service.reader_factory=TwoReaders
+    finish(service,service.submit(cmd,'actor','two-sources'))
+    runs={r.source_id:r for r in service.runs('agent','actor')}
+    assert len(runs)==2 and {r.channel_id for r in runs.values()}=={'channel'}
+    assert runs['video2'].state=='completed'
+    assert runs['video'].state==('failed' if first_fails else 'completed')
+    events=service.events('agent','actor',{'limit':100}).items
+    assert len(events)==(0 if first_fails else 1)
+    if events:
+        assert events[0].source_id=='video' and events[0].run_id==runs['video'].id
+    assert service.runs('agent','another-actor')==[]
+
+
 def test_absence_and_recovery_are_persisted_once(runtime):
     service, _, reader, _ = runtime
     reader.frames_to_read = [

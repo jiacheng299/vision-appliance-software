@@ -29,6 +29,40 @@ def publish(c,t,key=None):
 def task(c,t,source,parameters=None,key=None):
     return post(c,f'/agent-templates/{t["id"]}/tasks',{'name':'仓库任务','template_revision_id':t['published_revision']['id'],'source':{'source_id':source},'parameters':parameters or []},key)
 
+
+def test_one_template_task_accepts_multiple_sources_and_keeps_independent_regions(templates):
+    c,_,ref,source=templates
+    t=publish(c,make(c,ref))
+    other=post(c,'/sources',{'kind':'camera','name':'第二路','address':'rtsp://127.0.0.1/second'}).json()['id']
+    bindings=[{'source_id':source,'regions':[{'id':'roi','points':[[0,0],[.5,0],[.5,.5]]}]},
+              {'source_id':other,'regions':[{'id':'roi','points':[[.5,.5],[1,.5],[1,1]]}]}]
+    body={'name':'多路任务','template_revision_id':t['published_revision']['id'],'sources':bindings}
+    key=str(uuid4());response=post(c,f'/agent-templates/{t["id"]}/tasks',body,key)
+    assert response.status_code==201,response.text
+    created=response.json();config=created['latest_revision']['config']
+    assert len(config['channels'])==1
+    assert [b['source_id'] for b in config['channels'][0]['sources']]==[source,other]
+    assert config['channels'][0]['sources'][0]['regions']!=config['channels'][0]['sources'][1]['regions']
+    assert post(c,f'/agent-templates/{t["id"]}/tasks',body,key).json()['id']==created['id']
+    revision=created['latest_revision'];config['channels'][0]['sources'].pop(0)
+    saved=c.patch(API+'/revisions/'+revision['id'],json={'row_version':revision['row_version'],'config':config})
+    assert saved.status_code==200,saved.text
+    assert saved.json()['config']['channels'][0]['sources'][0]['source_id']==other
+    card=c.get(API+'/agent-templates/'+t['id']).json()
+    assert card['task_count']==1
+
+
+@pytest.mark.parametrize('invalid',['empty','duplicate','mixed','too_many'])
+def test_multi_source_task_rejects_ambiguous_or_invalid_selection(templates,invalid):
+    c,_,ref,source=templates;t=publish(c,make(c,ref))
+    body={'name':'多路任务','template_revision_id':t['published_revision']['id'],'sources':[{'source_id':source}]}
+    if invalid=='empty':body['sources']=[]
+    elif invalid=='duplicate':body['sources']*=2
+    elif invalid=='mixed':body['source']={'source_id':source}
+    else:body['sources']=[{'source_id':str(i)} for i in range(17)]
+    response=post(c,f'/agent-templates/{t["id"]}/tasks',body)
+    assert response.status_code==422,response.text
+
 def test_developer_option_pool_is_read_only_and_typed(templates):
     c,_,ref,_=templates
     catalog=c.get(API+'/agent-parameter-options').json()

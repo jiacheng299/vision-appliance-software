@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import Field
+from pydantic import Field, model_validator
 from ...schemas import DTO
 from ...shared.monitoring_parameters import ParameterSetting
 from ..agents.schemas import CapabilityRef, ChannelSource, AgentDetail, AgentDTO
@@ -84,4 +84,13 @@ class TemplateTaskCreate(DTO):
     description:str=Field(default='',max_length=2000)
     template_revision_id:str=Field(min_length=1,max_length=80)
     source:ChannelSource|None=None
+    sources:list[ChannelSource]|None=Field(default=None,min_length=1,max_length=16)
     parameters:list[ParameterSetting]=Field(default_factory=list,max_length=32)
+
+    @model_validator(mode='after')
+    def source_selection(self):
+        if self.source is not None and self.sources is not None:
+            raise ValueError('Use source or sources, not both')
+        if self.sources and len({b.source_id for b in self.sources})!=len(self.sources):
+            raise ValueError('Duplicate task sources')
+        return self

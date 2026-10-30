@@ -153,7 +153,8 @@ def instantiate(db,identifier,body,actor,key):
         raise Error(422,'template_not_published','请选择该模板的已发布版本。')
     config=TemplateConfig.model_validate(version.config)
     source=body.source or config.default_source
-    if source is None:
+    bindings=body.sources if body.sources is not None else [source] if source is not None else []
+    if not bindings:
         raise Error(422,'template_source_required','模板没有默认视频源，请为任务选择接入的视频源。')
     settings=selected_settings(config,body.parameters)
     target,rule,duration=effective_conditions(config,settings)
@@ -162,7 +163,7 @@ def instantiate(db,identifier,body,actor,key):
     # Nonstandard rules use the unchanged compatibility assessment path.
     channel=ChannelConfig(channel_id=uid(),name=config.title,task_mode='template' if canonical else None,
         requirement_text=canonical or config.summary or config.title,target=target,rule=rule,duration_seconds=duration,
-        capability_ref=config.model_ref,sources=[source],parameters=settings)
+        capability_ref=config.model_ref,sources=bindings,parameters=settings)
     reference=AgentTemplateRef(template_id=identifier,revision_id=version.id,revision_no=version.revision_no,name=config.title)
     payload=AgentCreate(name=body.name,description=body.description,config=RevisionConfig(channels=[channel],agent_template_ref=reference))
     # Use a stable channel identity for retries of the same version/source command.
@@ -190,12 +191,12 @@ def assert_task_binding(db,agent_id,config):
     version=db.get(AgentTemplateRevision,link.template_revision_id)
     if ref.template_id!=link.template_id or ref.revision_id!=version.id: raise Error(422,'template_reference_invalid','模板关联不一致。')
     template=TemplateConfig.model_validate(version.config)
-    if len(config.channels)!=1: raise Error(422,'template_task_scope_invalid','模板任务仅允许一路视频配置。')
+    if len(config.channels)!=1: raise Error(422,'template_task_scope_invalid','模板任务的所有视频必须共用一个监测通道的规则。')
     channel=config.channels[0]
     if channel.task_mode!=previous['channels'][0].get('task_mode') or channel.execution_plan is not None:
         raise Error(422,'template_execution_immutable','模板任务不能切换执行模式或覆盖模型执行方案。')
-    if channel.capability_ref!=template.model_ref or len(channel_sources(channel))!=1:
-        raise Error(422,'template_model_immutable','任务必须使用创建时模板的模型及单视频结构。')
+    if channel.capability_ref!=template.model_ref or not channel_sources(channel):
+        raise Error(422,'template_model_immutable','任务必须使用创建时模板的模型，并至少选择一路视频。')
     if {p.key for p in channel.parameters}!={p.key for p in template.parameters}:
         raise Error(422,'template_parameter_mismatch','任务不能添加或删除模板配置项。')
     if {p.key:p.required for p in channel.parameters}!={p.key:p.required for p in template.parameters}:

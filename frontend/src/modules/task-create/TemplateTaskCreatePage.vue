@@ -19,15 +19,16 @@ const route=useRoute(),router=useRouter()
 const templates=ref<AgentTemplate[]>([]),sources=ref<Source[]>([]),definitions=ref<ParameterDefinition[]>([]),catalog=ref<CapabilityCatalog|null>(null)
 const templateId=ref<string|null>(null),version=ref<TemplateRevision|null>(null),name=ref(''),description=ref('')
 const selectionMode=ref<'manual'|'natural'>('manual'),requirementText=ref(''),matcher=ref<TemplateMatcherStatus|null>(null),matchResult=ref<TemplateMatchResult|null>(null),matching=ref(false),matcherError=ref(''),matcherStatusError=ref('')
-const binding=ref<ChannelSource>({source_id:'',regions:[],start_media_ms:null,end_media_ms:null}),parameters=ref<ParameterSetting[]>([])
+const bindings=ref<ChannelSource[]>([{source_id:'',regions:[],start_media_ms:null,end_media_ms:null}]),parameters=ref<ParameterSetting[]>([])
 const agent=ref<AgentDetail|null>(null),revision=ref<Revision|null>(null),validation=ref<Validation|null>(null),operation=ref<Operation|null>(null)
-const busy=ref(false),loading=ref(true),error=ref(''),loadError=ref(''),notice=ref(''),pendingRegion=ref(false),ack=ref(false),legacyDraft=ref('')
+const busy=ref(false),loading=ref(true),error=ref(''),loadError=ref(''),notice=ref(''),pendingRegions=ref<Record<string,boolean>>({}),ack=ref(false),legacyDraft=ref('')
+const pendingRegion=computed(()=>Object.values(pendingRegions.value).some(Boolean))
 const saved=ref(''),validated=ref(''),validationClock=ref(Date.now())
 let allowLeave=false,stopped=false,matchSequence=0,pollTimer:ReturnType<typeof setTimeout>|undefined,validationTimer:ReturnType<typeof setTimeout>|undefined
-const source=computed(()=>sources.value.find(s=>s.id===binding.value.source_id))
+const sourceFor=(b:ChannelSource)=>sources.value.find(s=>s.id===b.source_id)
 const selectedTemplate=computed(()=>templates.value.find(t=>t.id===templateId.value))
 const model=computed(()=>catalog.value?.items.find(i=>modelKey(i.reference)===modelKey(version.value?.config.model_ref)))
-const signature=computed(()=>JSON.stringify({template:version.value?.id,name:name.value,description:description.value,source:binding.value,parameters:parameters.value,selectionMode:selectionMode.value,requirementText:requirementText.value}))
+const signature=computed(()=>JSON.stringify({template:version.value?.id,name:name.value,description:description.value,sources:bindings.value,parameters:parameters.value,selectionMode:selectionMode.value,requirementText:requirementText.value}))
 const dirty=computed(()=>signature.value!==saved.value||pendingRegion.value),frozen=computed(()=>busy.value||!!operation.value||revision.value?.state==='published'||!!legacyDraft.value||!version.value)
 const executable=computed(()=>!pendingRegion.value&&validation.value?.verdict==='executable'&&validated.value===signature.value&&Date.parse(validation.value.expires_at)>validationClock.value)
 watch(signature,()=>{validation.value=null;validated.value='';ack.value=false})
@@ -42,8 +43,8 @@ watch(validation,trackValidationExpiry,{flush:'sync'})
 function selectVersion(row?:AgentTemplate){
   templateId.value=row?.id??null;version.value=row?.published_revision??null
   parameters.value=JSON.parse(JSON.stringify(version.value?.config.parameters??[])) as ParameterSetting[]
-  binding.value=JSON.parse(JSON.stringify((version.value?.config as TemplateConfig|undefined)?.default_source??{source_id:'',regions:[],start_media_ms:null,end_media_ms:null})) as ChannelSource
-  pendingRegion.value=false
+  bindings.value=[JSON.parse(JSON.stringify((version.value?.config as TemplateConfig|undefined)?.default_source??{source_id:'',regions:[],start_media_ms:null,end_media_ms:null})) as ChannelSource]
+  pendingRegions.value={}
   if(!name.value&&selectedTemplate.value)name.value=`${selectedTemplate.value.name}任务`
 }
 function chooseTemplate(id:string|null){
@@ -76,33 +77,46 @@ async function matchTemplate(){
     selectVersion(detail);matchResult.value=result
   }catch(e){if(current())matcherError.value=displayError(e)}finally{if(current())matching.value=false}
 }
-function changeSource(id:string|null){
+function changeSource(index:number,id:string|null){
   if(frozen.value)return
-  if(id===binding.value.source_id)return
-  if(pendingRegion.value&&!window.confirm('切换视频将放弃尚未保存的区域，确定继续？'))return
-  binding.value={source_id:id??'',regions:[],start_media_ms:null,end_media_ms:null};pendingRegion.value=false
+  const old=bindings.value[index];if(!old||id===old.source_id)return
+  if(id&&bindings.value.some((b,i)=>i!==index&&b.source_id===id)){error.value='同一任务不能重复选择相同视频源。';return}
+  if(pendingRegions.value[old.source_id]&&!window.confirm('切换视频将放弃尚未保存的区域，确定继续？'))return
+  delete pendingRegions.value[old.source_id]
+  bindings.value[index]={source_id:id??'',regions:[],start_media_ms:null,end_media_ms:null}
+}
+function addSource(){if(!frozen.value&&bindings.value.length<16)bindings.value.push({source_id:'',regions:[],start_media_ms:null,end_media_ms:null})}
+function removeSource(index:number){
+  if(frozen.value||bindings.value.length<=1)return
+  const old=bindings.value[index]!
+  if(pendingRegions.value[old.source_id]&&!window.confirm('移除视频将放弃其正在绘制的区域，确定继续？'))return
+  delete pendingRegions.value[old.source_id];bindings.value.splice(index,1)
 }
 function check(){
   if(!name.value.trim())throw Error('请填写任务名称。')
   if(!templateId.value||!version.value)throw Error('请选择已发布的智能体模板。')
-  if(!binding.value.source_id)throw Error('请选择一个检测视频源。')
-  if(!source.value||!['ready','online'].includes(source.value.status))throw Error('视频源当前不可访问，请重新选择可用视频源。')
+  if(!bindings.value.length||bindings.value.some(b=>!b.source_id))throw Error('请选择一个检测视频源，并补全每一路视频选择。')
+  if(new Set(bindings.value.map(b=>b.source_id)).size!==bindings.value.length)throw Error('同一任务不能重复选择相同视频源。')
   if(pendingRegion.value)throw Error('请先闭合并保存正在绘制的区域。')
-  for(const region of binding.value.regions??[]){const invalid=regionError(region.points as Point[]);if(invalid)throw Error(`检测区域无效：${invalid}`)}
-  const {start_media_ms:start,end_media_ms:end}=binding.value
-  if(source.value.kind==='camera'&&(start!=null||end!=null))throw Error('监控直播不能设置录像范围，请重新选择视频源。')
-  if((start!=null&&(!Number.isFinite(start)||start<0))||(end!=null&&(!Number.isFinite(end)||end<=0))||(start!=null&&end!=null&&start>=end)||(source.value.duration_ms!=null&&((start??0)>=source.value.duration_ms||(end??0)>source.value.duration_ms)))throw Error('请核对录像起止位置，范围必须位于当前视频内。')
+  for(const binding of bindings.value){
+    const source=sourceFor(binding)
+    if(!source||!['ready','online'].includes(source.status))throw Error('视频源当前不可访问，请重新选择可用视频源。')
+    for(const region of binding.regions??[]){const invalid=regionError(region.points as Point[]);if(invalid)throw Error(`检测区域无效：${invalid}`)}
+    const {start_media_ms:start,end_media_ms:end}=binding
+    if(source.kind==='camera'&&(start!=null||end!=null))throw Error('监控直播不能设置录像范围，请重新选择视频源。')
+    if((start!=null&&(!Number.isFinite(start)||start<0))||(end!=null&&(!Number.isFinite(end)||end<=0))||(start!=null&&end!=null&&start>=end)||(source.duration_ms!=null&&((start??0)>=source.duration_ms||(end??0)>source.duration_ms)))throw Error('请核对录像起止位置，范围必须位于当前视频内。')
+  }
 }
 function displayError(e:unknown){return e instanceof Error&&!('response' in e)?e.message:templateError(e)}
 async function persist(){
   check()
   if(!agent.value){
-    const body={name:name.value.trim(),description:description.value.trim(),template_revision_id:version.value!.id,source:binding.value,parameters:parameters.value}
+    const body={name:name.value.trim(),description:description.value.trim(),template_revision_id:version.value!.id,...(bindings.value.length===1?{source:bindings.value[0]!}:{sources:bindings.value}),parameters:parameters.value}
     agent.value=await templatesApi.instantiate(templateId.value!,body,retryKey(`template-task:${version.value!.id}`,body));revision.value=agent.value.latest_revision
   }else{
     if(!revision.value)throw Error('任务草稿状态缺失，请重新加载。')
     const config=JSON.parse(JSON.stringify(revision.value.config)) as Revision['config'],channel=config.channels![0]!
-    channel.sources=[JSON.parse(JSON.stringify(binding.value))];channel.source_id=null;channel.regions=[];channel.start_media_ms=null;channel.end_media_ms=null
+    channel.sources=JSON.parse(JSON.stringify(bindings.value));channel.source_id=null;channel.regions=[];channel.start_media_ms=null;channel.end_media_ms=null
     channel.parameters=JSON.parse(JSON.stringify(parameters.value)) as ParameterSetting[]
     const values=Object.fromEntries(parameters.value.filter(p=>p.value!=null&&p.value!=='').map(p=>[p.key,p.value]))
     channel.target=String(values.target??version.value!.config.default_target??'');channel.rule=String(values.rule??version.value!.config.default_rule??'')
@@ -146,7 +160,7 @@ async function initialize(){
       if(!version.value)throw Error('任务引用的模板版本不存在。')
       agent.value=task;revision.value=task.latest_revision;name.value=task.name;description.value=task.description
       const channel=task.latest_revision.config.channels![0]!
-      binding.value=JSON.parse(JSON.stringify(channelSources(channel)[0]??{source_id:'',regions:[],start_media_ms:null,end_media_ms:null})) as ChannelSource
+      bindings.value=JSON.parse(JSON.stringify(channelSources(channel).length?channelSources(channel):[{source_id:'',regions:[],start_media_ms:null,end_media_ms:null}])) as ChannelSource[]
       parameters.value=JSON.parse(JSON.stringify(channel.parameters??[])) as ParameterSetting[]
     }else if(route.query.template)chooseTemplate(String(route.query.template))
     saved.value=signature.value
@@ -159,7 +173,7 @@ window.addEventListener('beforeunload',beforeUnload)
 onBeforeUnmount(()=>{stopped=true;matchSequence++;clearTimeout(pollTimer);clearTimeout(validationTimer);window.removeEventListener('beforeunload',beforeUnload)})
 </script>
 <template>
-  <div class="page-heading"><div><h1>任务创建</h1><p>选择智能体模板，配置一个视频源及检测条件，再验证和启动</p></div><RouterLink to="/agents">管理智能体模板</RouterLink></div>
+  <div class="page-heading"><div><h1>任务创建</h1><p>选择智能体模板，配置一路或多路视频，共用检测条件，各路独立监测与报警</p></div><RouterLink to="/agents">管理智能体模板</RouterLink></div>
   <ErrorBanner :error="loadError" @retry="initialize"/><ErrorBanner :error="error" :retryable="false"/><p v-if="notice" class="notice">{{notice}}</p><div v-if="loading" class="loading-line"/>
   <section v-if="legacyDraft" class="panel"><h2>历史任务配置</h2><p>此任务创建于模板关联功能启用前，原配置与自然语言执行方案完整保留。</p><RouterLink :to="{path:'/create/legacy',query:{draft:legacyDraft}}">继续编辑历史任务</RouterLink></section>
   <div v-else class="create-layout"><section class="panel create-main">
@@ -182,12 +196,21 @@ onBeforeUnmount(()=>{stopped=true;matchSequence++;clearTimeout(pollTimer);clearT
     <p v-if="version" class="hint">模板版本 v{{version.revision_no}} · {{model?plainModelName(model.name):version.config.model_ref?.model_id}} {{version.config.model_ref?.model_version}}。任务保存后固定使用此版本。</p>
     <fieldset :disabled="frozen" class="create-fields"><h2 class="agent-section-title">2. 配置检测视频</h2>
       <div class="field"><label>任务名称</label><NInput v-model:value="name" :disabled="frozen" :maxlength="160" aria-label="任务名称" placeholder="例如：一号仓库火灾检测"/></div><div class="field"><label>任务说明</label><NInput v-model:value="description" :disabled="frozen" type="textarea" :maxlength="2000" aria-label="任务说明"/></div>
-      <div class="field"><label>检测视频源</label><NSelect :value="binding.source_id||null" :options="sources.map(s=>({label:`${s.name} · ${s.kind==='file'?'录像文件':'监控直播'}`,value:s.id}))" :disabled="frozen" filterable placeholder="选择一路视频" aria-label="检测视频源" @update:value="changeSource"/></div>
-      <template v-if="source"><MediaPlayer v-if="source.kind==='file'" :source="source"/><template v-if="source.kind==='file'"><div class="field-grid"><div class="field"><label>录像开始位置（秒，选填）</label><NInputNumber :value="binding.start_media_ms==null?null:binding.start_media_ms/1000" :disabled="frozen" :min="0" :precision="3" aria-label="任务录像开始位置" @update:value="binding.start_media_ms=$event==null?null:Math.round($event*1000)"/></div><div class="field"><label>录像结束位置（秒，选填）</label><NInputNumber :value="binding.end_media_ms==null?null:binding.end_media_ms/1000" :disabled="frozen" :min="0" :precision="3" aria-label="任务录像结束位置" @update:value="binding.end_media_ms=$event==null?null:Math.round($event*1000)"/></div></div></template><div class="field"><label>检测区域</label><RegionEditor :key="`${version?.id}:${binding.source_id}`" :regions="binding.regions??[]" :source="source" :disabled="frozen" :demo="catalog?.data_origin==='mock'" @change="binding.regions=$event" @pending="pendingRegion=$event"/></div></template>
+      <p class="hint">最多16路视频，共用下方检测条件；各路区域、录像范围、报警计时相互独立。每路占用一个并发执行名额，超过系统并发上限的画面会排队。</p>
+      <section v-for="(binding,index) in bindings" :key="binding.source_id||`empty-${index}`" class="channel-source-editor">
+        <div class="panel-title"><h3>视频 {{index+1}}<span v-if="sourceFor(binding)"> · {{sourceFor(binding)!.name}}</span></h3><NButton v-if="bindings.length>1" size="small" :disabled="frozen" :aria-label="`移除视频${index+1}`" @click="removeSource(index)">移除视频</NButton></div>
+        <div class="field"><label>检测视频源</label><NSelect :value="binding.source_id||null" :options="sources.map(s=>({label:`${s.name} · ${s.kind==='file'?'录像文件':'监控直播'}`,value:s.id,disabled:bindings.some((b,i)=>i!==index&&b.source_id===s.id)}))" :disabled="frozen" filterable placeholder="选择本路视频" :aria-label="index===0?'检测视频源':`检测视频源${index+1}`" @update:value="changeSource(index,$event)"/></div>
+        <template v-if="sourceFor(binding)">
+          <MediaPlayer v-if="sourceFor(binding)!.kind==='file'" :source="sourceFor(binding)!"/>
+          <div v-if="sourceFor(binding)!.kind==='file'" class="field-grid"><div class="field"><label>录像开始位置（秒，选填）</label><NInputNumber :value="binding.start_media_ms==null?null:binding.start_media_ms/1000" :disabled="frozen" :min="0" :precision="3" :aria-label="index===0?'任务录像开始位置':`视频${index+1}录像开始位置`" @update:value="binding.start_media_ms=$event==null?null:Math.round($event*1000)"/></div><div class="field"><label>录像结束位置（秒，选填）</label><NInputNumber :value="binding.end_media_ms==null?null:binding.end_media_ms/1000" :disabled="frozen" :min="0" :precision="3" :aria-label="index===0?'任务录像结束位置':`视频${index+1}录像结束位置`" @update:value="binding.end_media_ms=$event==null?null:Math.round($event*1000)"/></div></div>
+          <div class="field"><label>本路检测区域</label><RegionEditor :key="`${version?.id}:${binding.source_id}`" :regions="binding.regions??[]" :source="sourceFor(binding)" :disabled="frozen" :demo="catalog?.data_origin==='mock'" @change="binding.regions=$event" @pending="pendingRegions[binding.source_id]=$event"/></div>
+        </template>
+      </section>
+      <NButton :disabled="frozen||bindings.length>=16" @click="addSource">添加视频源</NButton>
       <h2 class="agent-section-title">3. 设置模板条件</h2><ParameterFields :settings="parameters" @update:settings="parameters=$event" :definitions="definitions" :model="model" :disabled="frozen||!version"/>
     </fieldset>
     <div class="agent-actions"><NButton :disabled="frozen||!version||loading" :loading="busy" @click="save">保存任务草稿</NButton><NButton type="primary" :disabled="frozen||!version||loading" :loading="busy" @click="evaluate">验证任务</NButton></div>
-  </section><aside class="panel create-summary"><h2>任务执行依据</h2><p>模板：{{selectedTemplate?.name??'尚未选择'}}</p><p>版本：{{version?`v${version.revision_no}`:'尚未选择'}}</p><p>视频：{{source?.name??'尚未选择'}}</p><p class="notice">修改模板不会改变本任务。只有验证通过并确认后才会启动分析。</p>
+  </section><aside class="panel create-summary"><h2>任务执行依据</h2><p>模板：{{selectedTemplate?.name??'尚未选择'}}</p><p>版本：{{version?`v${version.revision_no}`:'尚未选择'}}</p><p>视频：{{bindings.filter(b=>b.source_id).length}} 路</p><p v-for="(b,index) in bindings" :key="index">{{index+1}}. {{sourceFor(b)?.name??'尚未选择'}} · {{b.regions?.length??0}} 个区域</p><p class="notice">修改模板不会改变本任务。所有视频共用检测条件，报警独立记录。只有验证通过并确认后才会启动分析。</p>
     <section v-if="validation" class="create-assessment"><h3>{{label(validation.verdict)}}</h3><ul><li v-for="message in [...(validation.missing_conditions??[]),...(validation.unsupported_conditions??[]),...(validation.evidence_limitations??[])]" :key="message">{{message}}</li></ul></section>
     <NCheckbox v-model:checked="ack" :disabled="!executable||busy||!!operation">已核对模板版本、视频范围和检测条件</NCheckbox><NButton block type="primary" :disabled="!executable||!ack||busy||!!operation" :loading="busy" @click="start">确认启动</NButton>
     <p v-if="operation" class="notice">{{label(operation.state)}} · {{operation.message}}</p><NButton v-if="operation" :disabled="busy" @click="poll">刷新启动状态</NButton><RouterLink v-if="agent" :to="`/agents/${agent.id}/live`">查看任务详情</RouterLink>

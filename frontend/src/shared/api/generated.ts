@@ -3341,6 +3341,8 @@ export interface components {
             source?: components["schemas"]["ChannelSource"] | null;
             /** Parameters */
             parameters?: components["schemas"]["ParameterSetting"][];
+            /** Sources */
+            sources?: components["schemas"]["ChannelSource"][] | null;
         };
         /** TemplateTaskDTO */
         TemplateTaskDTO: {
