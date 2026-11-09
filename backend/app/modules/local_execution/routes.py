@@ -1,12 +1,46 @@
-"""Protected evidence access through the agent's existing event/run scope checks."""
-from fastapi import APIRouter, Depends, Request
+"""Scoped access to local execution evidence and diagnostics."""
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from ...shared.db import get_db
 from ...shared.errors import Error
 from ..agents import gateway_routes
+from ..agents.service import get_agent
 from ..agents.workspace import WORKSPACE_ACTOR_ID
+from .models import LocalEvent, LocalRun
+from .trust_checks import RECORDS_LIMIT, TrustCheckDTO, read_trust_checks
 
 router = APIRouter(tags=['local-execution'])
+
+
+@router.get('/agents/{agent_id}/trust-checks', response_model=list[TrustCheckDTO])
+def trust_checks(agent_id: str, request: Request,
+                 source_id: str | None = Query(None, min_length=1, max_length=80), db=Depends(get_db)):
+    get_agent(db, agent_id)
+    if request.app.state.agent_services.data_origin != 'real':
+        return []
+    candidates = read_trust_checks(request.app.state.config.var_root, agent_id, source_id)
+    if not candidates:
+        return []
+    runs = {
+        run_id: (source, channel, kind)
+        for run_id, source, channel, kind in db.execute(
+            select(LocalRun.id, LocalRun.source_id, LocalRun.channel_id, LocalRun.payload['source_kind'].as_string())
+            .where(LocalRun.agent_id == agent_id, LocalRun.actor_id == WORKSPACE_ACTOR_ID,
+                   LocalRun.id.in_({record.run_id for record in candidates}))
+        )
+    }
+    records = [row for row in candidates
+               if runs.get(row.run_id) == (row.source_id, row.channel_id, row.source_kind)][:RECORDS_LIMIT]
+    event_ids = {row.event_id for row in records if row.event_id}
+    if event_ids:
+        event_runs = dict(db.execute(select(LocalEvent.id, LocalEvent.run_id)
+            .where(LocalEvent.agent_id == agent_id, LocalEvent.actor_id == WORKSPACE_ACTOR_ID,
+                   LocalEvent.id.in_(event_ids))).all())
+        for row in records:
+            if row.event_id and event_runs.get(row.event_id) != row.run_id:
+                row.event_id = None
+    return records
 
 
 @router.get('/agents/{agent_id}/events/{event_id}/evidence/{evidence_id}/media',response_class=FileResponse)

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AwareDatetime, Field, ValidationError
+from pydantic import AwareDatetime, Field
 
 from ...schemas import DTO
 from ...shared.errors import Error
@@ -57,7 +57,7 @@ def read_trust_checks(var_root: Path, agent_id: str, source_id: str | None) -> l
                     continue
                 fields = {key: row[key] for key in TrustCheckDTO.model_fields if key in row}
                 records.append(TrustCheckDTO.model_validate(fields))
-            except (ValueError, RecursionError, ValidationError):
+            except (ValueError, RecursionError):
                 continue
             seen.add(line)
             if len(records) >= RECORDS_LIMIT * 3:
