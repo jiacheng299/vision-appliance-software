@@ -546,10 +546,13 @@ class LocalAgentServices(RegistryAgentServices):
                                     'targets':targets}
                                 self._refresh_operations(db)
                             observed, failures, last_timestamp = True, 0, timestamp
+                            event = None
                             if channel.rule == 'absence' and (observation.transition or observation.alarm) and not stop.is_set():
-                                self._record_transition_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
+                                event = self._record_transition_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
                             elif channel.rule == 'intrusion' and observation.alarm and not stop.is_set():
-                                self._record_intrusion_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
+                                event = self._record_intrusion_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
+                            if safety is not None and event is not None:
+                                safety.check_event(event, binding)
                     if stop.is_set(): break
                     if run.source_kind=='file':
                         if not observed or last_timestamp is None or (binding.end_media_ms is not None
@@ -659,6 +662,7 @@ class LocalAgentServices(RegistryAgentServices):
         except Exception:
             if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
             raise
+        return event
 
     def _record_intrusion_event(self, run, observation, timestamp, frame, boxes, binding, stop, source_identity=None):
         event_type = 'person_intrusion'
@@ -689,6 +693,7 @@ class LocalAgentServices(RegistryAgentServices):
         except Exception:
             if key: controlled_path(self.config,'media',key).unlink(missing_ok=True)
             raise
+        return event
 
     @staticmethod
     def _cursor(agent_id, actor_id, kind, filters=None, sequence=None):

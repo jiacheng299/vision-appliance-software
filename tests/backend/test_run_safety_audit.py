@@ -37,3 +37,18 @@ def test_reporter_failure_disables_only_this_observer():
     reporter.report(SafetySignal('sample_gap'))
     reporter.report(SafetySignal('invalid_sample_time'))
     assert len(records) == 1
+
+
+def test_event_scope_and_selected_media_interval_are_audited():
+    records = []
+    scope = dict(agent_id='task', revision_id='rev', channel_id='channel', source_id='video')
+    run = SimpleNamespace(**scope, id='run', source_kind='file')
+    reporter = run_safety_audit.RunSafetyAudit(SimpleNamespace(submit=records.append), run, max_gap_seconds=3)
+    binding = SimpleNamespace(start_media_ms=1000, end_media_ms=5000)
+    data = dict(**scope, run_id='run', id='event', start_media_ms=1000, end_media_ms=5000,
+                evidence_status='ready', evidence=[SimpleNamespace(state='ready')])
+    reporter.check_event(SimpleNamespace(**data), binding)
+    assert not records
+    reporter.check_event(SimpleNamespace(**(data | {'source_id': 'foreign', 'end_media_ms': 6000})), binding)
+    assert {row['reason'] for row in records} == {'event_scope_mismatch', 'event_media_range_invalid'}
+    assert all(row['source_id'] == 'video' and row['event_id'] == 'event' for row in records)

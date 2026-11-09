@@ -113,8 +113,8 @@ def test_safety_observation_preserves_alarms_when_samples_are_interrupted(runtim
     service.close()
     path = config.var_root / 'logs' / 'model-safety.jsonl'
     if config.model_safety_observe:
-        record = json.loads(path.read_text(encoding='utf-8'))
-        assert record['reason'] == 'sample_gap'
+        rows = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()]
+        record, = (row for row in rows if row['reason'] == 'sample_gap')
         assert record['run_id'] == run.id and record['source_id'] == 'video'
         assert (record['start_seconds'], record['end_seconds']) == (30, 59)
     else:
@@ -137,6 +137,29 @@ def test_safety_observation_reports_weak_detection_flicker(runtime, make_command
     assert record['reason'] == 'unstable_detection'
     assert record['run_id'] == run.id
     assert (record['start_seconds'], record['end_seconds']) == (0, 3 * interval)
+
+
+@pytest.mark.parametrize('runtime', [True], indirect=True)
+@pytest.mark.parametrize('make_command', [command, intrusion_command])
+def test_safety_audit_links_failed_evidence_without_suppressing_alarms(runtime, make_command, monkeypatch):
+    service, _, frames, config = runtime
+
+    def fail_snapshot(*args):
+        raise OSError('private snapshot path')
+
+    monkeypatch.setattr(service, '_save_evidence', fail_snapshot)
+    if make_command is intrusion_command:
+        frames.frames_to_read = [(float(i), [] if i < 11 else [PERSON]) for i in range(20)]
+    request = make_command()
+    run = finish(service, service.submit(request, 'actor', 'safety-evidence'))
+    assert run.state == 'completed'
+    event, = service.events(request.agent_id, 'actor', {'limit': 100}).items
+    assert event.evidence_status == 'failed'
+    service.close()
+    path = config.var_root / 'logs' / 'model-safety.jsonl'
+    record = json.loads(path.read_text(encoding='utf-8'))
+    assert record['reason'] == 'evidence_unavailable' and record['event_id'] == event.id
+    assert 'private' not in str(record)
 
 
 def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):
