@@ -34,6 +34,7 @@ export type Workspace = components['schemas']['WorkspaceDTO']
 export type MonitorEvent = components['schemas']['AgentEventDTO']
 export type MonitorEventPage = components['schemas']['AgentEventPage']
 export type EventDetail = components['schemas']['EventDetail']
+export type TrustCheck = components['schemas']['TrustCheckDTO']
 export type Playback = components['schemas']['PlaybackDTO']
 export type Missed = components['schemas']['MissedDTO']
 export type ExportJob = components['schemas']['ExportDTO']
@@ -57,6 +58,7 @@ export const agentApi = {
   validation: (id: string) => client.get<Validation>(`/validations/${encodeURIComponent(id)}`).then(r => r.data),
   confirm: (revision: Revision, validation: Validation, key: string) => client.post<Revision>(`/revisions/${encodeURIComponent(revision.id)}/confirmations`, { row_version: revision.row_version, validation_id: validation.id, config_hash: validation.config_hash, limitations_acknowledged: true }, keyOptions(key)).then(r => r.data),
   workspace: (id: string) => client.get<Workspace>(`${base(id)}/workspace`).then(r => r.data),
+  trustChecks: (id: string, source_id?: string) => client.get<TrustCheck[]>(`${base(id)}/trust-checks`, {params:{source_id}}).then(r => r.data),
   submit: (id: string, kind: 'start'|'apply', body: components['schemas']['StartInput'], key: string) => client.post<Operation>(`${base(id)}/${kind === 'start' ? 'run-groups' : 'revision-applications'}`, body, keyOptions(key)).then(r => r.data),
   stop: (id: string, runId: string, key: string) => client.post<Operation>(`${base(id)}/runs/${encodeURIComponent(runId)}/stop`, {}, keyOptions(key)).then(r => r.data),
   stopChannel: (id:string, channelId:string, key:string) => client.post<Operation>(`${base(id)}/channels/${encodeURIComponent(channelId)}/stop`,{},keyOptions(key)).then(r=>r.data),
