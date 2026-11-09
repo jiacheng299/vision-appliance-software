@@ -17872,6 +17872,17 @@
             "type": "array",
             "title": "Models"
           },
+          "trust_check_status": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "active",
+              "unavailable",
+              "write_failed"
+            ],
+            "title": "Trust Check Status",
+            "default": "disabled"
+          },
           "workers": {
             "items": {
               "additionalProperties": true,

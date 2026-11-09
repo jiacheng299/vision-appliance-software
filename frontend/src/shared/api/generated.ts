@@ -2888,6 +2888,12 @@ export interface components {
             /** Models */
             models?: components["schemas"]["RuntimeModelDTO"][];
             /**
+             * Trust Check Status
+             * @default disabled
+             * @enum {string}
+             */
+            trust_check_status: "disabled" | "active" | "unavailable" | "write_failed";
+            /**
              * Workers
              * @default []
              */
