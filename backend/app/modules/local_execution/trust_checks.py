@@ -38,7 +38,7 @@ def _read_tail(root: Path, suffix: str) -> bytes:
     except FileNotFoundError:
         return b''
     except OSError:
-        raise Error(503, 'trust_checks_unavailable', '可信检查记录暂时无法读取。', retryable=True) from None
+        raise Error(503, 'trust_checks_unavailable', '模型防护记录暂时无法读取。', retryable=True) from None
     return data.partition(b'\n')[2] if offset else data
 
 

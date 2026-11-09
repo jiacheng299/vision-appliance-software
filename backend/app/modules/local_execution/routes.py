@@ -26,7 +26,7 @@ def trust_checks(agent_id: str, request: Request,
         with audit.read_access() if audit is not None else nullcontext():
             candidates = read_trust_checks(request.app.state.config.var_root, agent_id, source_id)
     except TimeoutError:
-        raise Error(503, 'trust_checks_unavailable', '可信检查日志正在写入，请稍后刷新。', retryable=True) from None
+        raise Error(503, 'trust_checks_unavailable', '模型防护日志正在写入，请稍后刷新。', retryable=True) from None
     if not candidates:
         return []
     runs = {
