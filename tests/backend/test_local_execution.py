@@ -208,6 +208,7 @@ def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):
     finally: second.close()
 
 
+@pytest.mark.parametrize('runtime', [False, True], indirect=True)
 @pytest.mark.parametrize('first_fails',[False,True])
 def test_one_task_runs_two_sources_concurrently_with_independent_events_and_failures(runtime,first_fails):
     from threading import Barrier
@@ -241,6 +242,12 @@ def test_one_task_runs_two_sources_concurrently_with_independent_events_and_fail
     if events:
         assert events[0].source_id=='video' and events[0].run_id==runs['video'].id
     assert service.runs('agent','another-actor')==[]
+    if config.model_safety_observe:
+        service.close()
+        path = config.var_root / 'logs' / 'model-safety.jsonl'
+        record = json.loads(path.read_text(encoding='utf-8'))
+        assert record['source_id'] == 'video' and record['run_id'] == runs['video'].id
+        assert record['reason'] == ('observation_interrupted' if first_fails else 'evidence_unavailable')
 
 
 def test_absence_and_recovery_are_persisted_once(runtime):
