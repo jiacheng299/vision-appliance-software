@@ -33,17 +33,17 @@ function position(row: TrustCheck) {
 </script>
 
 <template>
-  <section class="panel trust-checks-panel" aria-label="可信检查记录">
-    <div class="panel-title"><h2>可信检查</h2><small>近期最多 30 条</small></div>
+  <section class="panel trust-checks-panel" aria-label="模型防护记录">
+    <div class="panel-title"><h2>模型防护</h2><small>近期最多 30 条</small></div>
     <p class="muted">回查采样、检测和证据异常。业务报警继续按任务规则产生。</p>
     <div class="toolbar trust-filter">
       <NSelect v-model:value="sourceId" :options="options" clearable placeholder="全部视频源"
-        aria-label="筛选可信检查视频源"/>
-      <NButton size="small" :loading="loading" @click="refresh">刷新检查记录</NButton>
+        aria-label="按视频源筛选模型防护记录"/>
+      <NButton size="small" :loading="loading" @click="refresh">刷新诊断记录</NButton>
     </div>
     <ErrorBanner :error="error" @retry="refresh"/>
-    <p v-if="loading && !data" class="muted" role="status">正在读取可信检查记录…</p>
-    <p v-else-if="!error && !data?.length" class="muted" role="status">暂无可信检查记录</p>
+    <p v-if="loading && !data" class="muted" role="status">正在读取模型防护记录…</p>
+    <p v-else-if="!error && !data?.length" class="muted" role="status">暂无模型防护记录</p>
     <div v-else-if="!error && data?.length" class="table-wrap">
       <table>
         <thead><tr><th>视频源</th><th>检查结果</th><th>记录时间</th><th>录像位置</th><th>关联报警</th></tr></thead>

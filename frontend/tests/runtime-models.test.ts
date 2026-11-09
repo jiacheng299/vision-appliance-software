@@ -47,7 +47,7 @@ describe('runtime model availability',()=>{
     const wrapper = mount(RuntimePage)
     try {
       await flushPromises()
-      expect(wrapper.get('[aria-label="可信检查"]').text()).toContain(label)
+      expect(wrapper.get('[aria-label="模型防护"]').text()).toContain(label)
     } finally {
       wrapper.unmount()
     }

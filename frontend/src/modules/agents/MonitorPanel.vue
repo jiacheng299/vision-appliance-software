@@ -44,8 +44,8 @@ async function stop(run:Run){
   <div class="agent-actions wall-view-toggle">
     <NButton :type="view==='wall'?'primary':'default'" @click="view='wall'">监控墙</NButton>
     <NButton :type="view==='single'?'primary':'default'" @click="view='single'">单画面与报警</NButton>
-    <NButton v-if="workspace?.data_origin==='real'" aria-label="可信检查" :aria-expanded="trustChecksOpen"
-      :type="trustChecksOpen?'primary':'default'" @click="trustChecksOpen=!trustChecksOpen">可信检查</NButton>
+    <NButton v-if="workspace?.data_origin==='real'" aria-label="模型防护" :aria-expanded="trustChecksOpen"
+      :type="trustChecksOpen?'primary':'default'" @click="trustChecksOpen=!trustChecksOpen">模型防护</NButton>
   </div>
   <TrustChecksPanel v-if="trustChecksOpen && workspace?.data_origin==='real'" :key="agentId"
     :agent-id="agentId" :runs="runs" :sources="sources"/>

@@ -48,14 +48,14 @@ it('reads real task diagnostics only while the trust check panel is open', async
   try {
     await flushPromises()
     expect(request).not.toHaveBeenCalled()
-    const toggle = wrapper.get('button[aria-label="可信检查"]')
+    const toggle = wrapper.get('button[aria-label="模型防护"]')
     await toggle.trigger('click')
     await flushPromises()
     expect(request).toHaveBeenCalledWith('task', undefined)
-    expect(wrapper.text()).toContain('暂无可信检查记录')
+    expect(wrapper.text()).toContain('暂无模型防护记录')
     await toggle.trigger('click')
-    expect(wrapper.find('[aria-label="可信检查记录"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="模型防护记录"]').exists()).toBe(false)
     await wrapper.setProps({ workspace: { ...workspace, data_origin: 'mock' } })
-    expect(wrapper.find('button[aria-label="可信检查"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="模型防护"]').exists()).toBe(false)
   } finally { wrapper.unmount() }
 })
