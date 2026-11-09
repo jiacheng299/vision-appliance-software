@@ -69,6 +69,15 @@ def runtime_models(app, db, runtime_ready):
     return result
 
 
+def trust_check_status(app):
+    if not app.state.config.model_safety_observe:
+        return 'disabled'
+    audit = getattr(app.state.agent_services, 'safety_audit', None)
+    if audit is None:
+        return 'unavailable'
+    return 'active' if audit.accepting else 'write_failed'
+
+
 def runtime_snapshot(app,db,record=True):
     summary = execution_summary(app)
     local_model_ready = bool(getattr(app.state.model_services,'is_ready',lambda:False)())
@@ -78,7 +87,14 @@ def runtime_snapshot(app,db,record=True):
     usage = shutil.disk_usage(app.state.config.var_root)
     total = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False))
     online = db.scalar(select(func.count()).select_from(Source).where(Source.archived==False,Source.kind=='camera',Source.status=='online'))
-    return {**sample,'disk':{'used_bytes':usage.used,'total_bytes':usage.total,'free_bytes':usage.free},'sources':{'total':total,'online':online},'runs':{'running':summary.active_runs,'completed':summary.completed,'failed':summary.failed},'data_origin':summary.data_origin,'runtime_available':summary.active_runs is not None,'services':dependency_services(app,db,local_model_ready),'models':runtime_models(app,db,local_model_ready),'workers':[{'id':w.id,'status':'online','observed_at':__import__('datetime').datetime.fromtimestamp(w.heartbeat_at,__import__('datetime').timezone.utc).isoformat().replace('+00:00','Z')} for w in worker_rows(db)],'history':list(app.state.runtime_history)}
+    return {**sample, 'trust_check_status':trust_check_status(app),
+        'disk':{'used_bytes':usage.used,'total_bytes':usage.total,'free_bytes':usage.free},
+        'sources':{'total':total,'online':online},
+        'runs':{'running':summary.active_runs,'completed':summary.completed,'failed':summary.failed},
+        'data_origin':summary.data_origin,'runtime_available':summary.active_runs is not None,
+        'services':dependency_services(app,db,local_model_ready),'models':runtime_models(app,db,local_model_ready),
+        'workers':[{'id':w.id,'status':'online','observed_at':__import__('datetime').datetime.fromtimestamp(w.heartbeat_at,__import__('datetime').timezone.utc).isoformat().replace('+00:00','Z')} for w in worker_rows(db)],
+        'history':list(app.state.runtime_history)}
 
 @router.get('/runtime/overview',response_model=RuntimeDTO)
 def overview(request:Request,db=Depends(get_db)):

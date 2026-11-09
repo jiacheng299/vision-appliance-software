@@ -22,6 +22,10 @@ class SafetyAudit:
         self._worker = Thread(target=self._write, args=(path,), daemon=True, name='model-safety-audit')
         self._worker.start()
 
+    @property
+    def accepting(self) -> bool:
+        return self._worker.is_alive() and not self._stopped.is_set()
+
     def submit(self, record: dict):
         if self._stopped.is_set():
             return

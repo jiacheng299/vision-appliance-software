@@ -172,6 +172,7 @@ class RuntimeDTO(RuntimeSample):
     runtime_available: bool = True
     services: list[ServiceDTO]
     models: list[RuntimeModelDTO] = Field(default_factory=list)
+    trust_check_status: Literal['disabled','active','unavailable','write_failed'] = 'disabled'
     workers: list[dict] = []
     history: list[RuntimeSample] = []
 

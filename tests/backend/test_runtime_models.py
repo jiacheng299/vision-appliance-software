@@ -1,3 +1,8 @@
+from types import SimpleNamespace
+
+import pytest
+
+
 def register_model(app, *, identifier='runtime-person-model', file_id='runtime-model-file',
                    validation='passed', status='available', validation_message='模型校验通过。'):
     from app.modules.models.models import ModelFile, ModelPair
@@ -62,3 +67,14 @@ def test_runtime_overview_preserves_pending_status_and_excludes_archived_version
     assert [(model['id'], model['status'], model['message']) for model in models] == [
         ('pending-model', 'pending', '等待算法适配器校验。'),
     ]
+
+
+@pytest.mark.parametrize(('enabled', 'accepting', 'expected'), [
+    (False, None, 'disabled'), (True, None, 'unavailable'),
+    (True, True, 'active'), (True, False, 'write_failed'),
+])
+def test_runtime_reports_actual_trust_check_status(client, app, monkeypatch, enabled, accepting, expected):
+    app.state.config.model_safety_observe = enabled
+    writer = None if accepting is None else SimpleNamespace(accepting=accepting)
+    monkeypatch.setattr(app.state.agent_services, 'safety_audit', writer, raising=False)
+    assert client.get('/api/v1/runtime/overview').json()['trust_check_status'] == expected
