@@ -19449,6 +19449,94 @@
         ],
         "title": "TemplateVersionCommand"
       },
+      "TrustCheckDTO": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "camera"
+            ],
+            "title": "Source Kind"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "title": "Channel Id"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Observed At"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid_sample_time",
+              "sample_time_not_increasing",
+              "sample_gap",
+              "observation_interrupted",
+              "unstable_detection",
+              "event_scope_mismatch",
+              "event_media_range_invalid",
+              "evidence_unavailable",
+              "observer_failed"
+            ],
+            "title": "Reason"
+          },
+          "start_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Seconds"
+          },
+          "end_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "source_kind",
+          "run_id",
+          "channel_id",
+          "observed_at",
+          "reason"
+        ],
+        "title": "TrustCheckDTO"
+      },
       "UploadComplete": {
         "properties": {
           "name": {

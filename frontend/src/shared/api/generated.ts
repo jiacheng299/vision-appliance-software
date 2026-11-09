@@ -3395,6 +3395,36 @@ export interface components {
             /** Revision Id */
             revision_id: string;
         };
+        /** TrustCheckDTO */
+        TrustCheckDTO: {
+            /** Source Id */
+            source_id: string;
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "file" | "camera";
+            /** Run Id */
+            run_id: string;
+            /** Channel Id */
+            channel_id: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "invalid_sample_time" | "sample_time_not_increasing" | "sample_gap" | "observation_interrupted" | "unstable_detection" | "event_scope_mismatch" | "event_media_range_invalid" | "evidence_unavailable" | "observer_failed";
+            /** Start Seconds */
+            start_seconds?: number | null;
+            /** End Seconds */
+            end_seconds?: number | null;
+            /** Event Id */
+            event_id?: string | null;
+        };
         /** UploadComplete */
         UploadComplete: {
             /** Name */
