@@ -95,6 +95,8 @@ npm run dev
 
 ## YOLO 安全观察
 
+机制、作用、启停步骤和日志排查见 [YOLO 模型安全观察报告](docs/MODEL_SAFETY_OBSERVATION.md)。
+
 安全观察默认关闭。在需要试用的工作台项目根目录下，将下面这一行加入 `.env.local` 并重启，再运行录像或摄像头监测任务。
 
 ```dotenv
