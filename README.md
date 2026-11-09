@@ -93,9 +93,9 @@ npm run dev
 
 前端开发服务在 5173，把 `/api/v1` 和 WebSocket 代理到 8000；生产运行用 `start.cmd` 同源服务。API 文档在 `/api/docs`，OpenAPI 在 `/api/openapi.json`。
 
-## YOLO 安全观察
+## YOLO 可信检查
 
-机制、作用、启停步骤和日志排查见 [YOLO 模型安全观察报告](docs/MODEL_SAFETY_OBSERVATION.md)。
+在 **运行状态** 查看可信检查卡片。在 **任务详情 → 画面与报警 → 可信检查** 展开记录，可按视频源筛选并查看关联报警。机制、启停步骤和日志排查见 [YOLO 可信检查报告](docs/MODEL_SAFETY_OBSERVATION.md)。
 
 安全观察默认关闭。在需要试用的工作台项目根目录下，将下面这一行加入 `.env.local` 并重启，再运行录像或摄像头监测任务。
 
