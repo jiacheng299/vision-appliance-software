@@ -1,9 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { NSelect } from 'naive-ui'
-import { agentApi, type TrustCheck } from '../src/modules/agents/api'
+import { agentApi, type Revision, type TrustCheck, type Workspace } from '../src/modules/agents/api'
 import TrustChecksPanel from '../src/modules/agents/TrustChecksPanel.vue'
 import EventDrawer from '../src/modules/agents/EventDrawer.vue'
+import MonitorPanel from '../src/modules/agents/MonitorPanel.vue'
 
 const sources = [{ id: 'one', name: '一号录像' }, { id: 'two', name: '二号录像' }]
 const row: TrustCheck = {
@@ -30,5 +31,28 @@ it('filters the task by source and opens the associated alarm', async () => {
     expect(wrapper.text()).toContain('证据未就绪')
     await wrapper.get('[aria-label="查看关联报警"]').trigger('click')
     expect(wrapper.getComponent(EventDrawer).props('eventId')).toBe('alarm')
+  } finally { wrapper.unmount() }
+})
+
+it('reads real task diagnostics only while the trust check panel is open', async () => {
+  const request = vi.spyOn(agentApi, 'trustChecks').mockResolvedValue([])
+  const wrapper = mount(MonitorPanel, {
+    props: { agentId: 'task', sources: [], canWrite: false,
+      workspace: { runs: [], data_origin: 'real', runtime_available: true } as Workspace,
+      revision: { id: 'revision', config: { schema_version: '1.0', channels: [] } } as Revision },
+    global: { stubs: { EventsPanel: true, MediaPlayer: true, VideoWall: true } },
+  })
+  try {
+    await flushPromises()
+    expect(request).not.toHaveBeenCalled()
+    const toggle = wrapper.get('button[aria-label="可信检查"]')
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(request).toHaveBeenCalledWith('task', undefined)
+    expect(wrapper.text()).toContain('暂无可信检查记录')
+    await toggle.trigger('click')
+    expect(wrapper.find('[aria-label="可信检查记录"]').exists()).toBe(false)
+    await wrapper.setProps({ workspace: { ...wrapper.props('workspace')!, data_origin: 'mock' } })
+    expect(wrapper.find('button[aria-label="可信检查"]').exists()).toBe(false)
   } finally { wrapper.unmount() }
 })
