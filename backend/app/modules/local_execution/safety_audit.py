@@ -16,6 +16,7 @@ class SafetyAudit:
     def __init__(self, path: Path, *, queue_size: int = 128):
         self._pending = Queue(maxsize=queue_size)
         self._stopped = Event()
+        self._discard_pending = Event()
         self._drop_lock = Lock()
         self._dropped = 0
         self._worker = Thread(target=self._write, args=(path,), daemon=True, name='model-safety-audit')
@@ -33,17 +34,23 @@ class SafetyAudit:
     def close(self):
         self._stopped.set()
         self._worker.join(timeout=.5)
+        # A stalled write may finish later, but the old writer must stop draining its queue.
+        self._discard_pending.set()
 
     def _write(self, path):
         handler = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             handler = _AuditFile(path, maxBytes=5 * 1024 * 1024, backupCount=2, encoding='utf-8', delay=True)
-            while not self._stopped.is_set() or not self._pending.empty():
+            while not self._discard_pending.is_set():
+                if self._stopped.is_set() and self._pending.empty():
+                    break
                 try:
                     record = self._pending.get(timeout=.1)
                 except Empty:
                     continue
+                if self._discard_pending.is_set():
+                    break
                 with self._drop_lock:
                     dropped, self._dropped = self._dropped, 0
                 if dropped:
