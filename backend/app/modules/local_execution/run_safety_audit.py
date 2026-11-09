@@ -4,12 +4,13 @@ from time import monotonic
 from ...shared.models import now
 from ..agents.contracts import RunDTO
 from .safety_audit import SafetyAudit
-from .safety_signals import SafetySignal
+from .safety_signals import ObservationWindow, SafetySignal
 
 
 class RunSafetyAudit:
-    def __init__(self, writer: SafetyAudit, run: RunDTO):
+    def __init__(self, writer: SafetyAudit, run: RunDTO, *, max_gap_seconds: float):
         self._writer = writer
+        self._window = ObservationWindow(max_gap_seconds)
         self._scope = {
             'run_id': run.id,
             'agent_id': run.agent_id,
@@ -19,6 +20,13 @@ class RunSafetyAudit:
             'source_kind': run.source_kind,
         }
         self._next_report: dict[str, float] = {}
+
+    def check_time(self, timestamp: float):
+        self.report(self._window.check_time(timestamp))
+
+    def interrupted(self):
+        self.report(SafetySignal('observation_interrupted', self._window.last_timestamp))
+        self._window.reset()
 
     def report(self, signal: SafetySignal | None, *, event_id: str | None = None):
         if self._writer is None or signal is None:

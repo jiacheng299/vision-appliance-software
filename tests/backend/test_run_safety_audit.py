@@ -11,8 +11,8 @@ def test_reports_are_limited_per_run_and_exclude_input_payload(monkeypatch):
     writer = SimpleNamespace(submit=records.append)
     run = dict(agent_id='task', revision_id='rev', channel_id='channel', source_kind='file',
                config_snapshot={'credentials': 'private'}, source_snapshot={'address': 'private'})
-    first = run_safety_audit.RunSafetyAudit(writer, SimpleNamespace(**run, id='run1', source_id='video1'))
-    second = run_safety_audit.RunSafetyAudit(writer, SimpleNamespace(**run, id='run2', source_id='video2'))
+    first = run_safety_audit.RunSafetyAudit(writer, SimpleNamespace(**run, id='run1', source_id='video1'), max_gap_seconds=3)
+    second = run_safety_audit.RunSafetyAudit(writer, SimpleNamespace(**run, id='run2', source_id='video2'), max_gap_seconds=3)
     gap = SafetySignal('sample_gap', 2, 8)
     first.report(gap)
     first.report(gap)
@@ -33,7 +33,7 @@ def test_reporter_failure_disables_only_this_observer():
 
     run = SimpleNamespace(id='run', agent_id='task', revision_id='rev', channel_id='channel',
                           source_id='video', source_kind='file')
-    reporter = run_safety_audit.RunSafetyAudit(SimpleNamespace(submit=broken), run)
+    reporter = run_safety_audit.RunSafetyAudit(SimpleNamespace(submit=broken), run, max_gap_seconds=3)
     reporter.report(SafetySignal('sample_gap'))
     reporter.report(SafetySignal('invalid_sample_time'))
     assert len(records) == 1

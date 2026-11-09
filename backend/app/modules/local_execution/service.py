@@ -27,6 +27,8 @@ from .models import LocalAgentState, LocalEvent, LocalOperation, LocalRun
 from .intrusion import IntrusionRule
 from .presence import PresenceRule
 from .preview import DetectionFrames
+from .run_safety_audit import RunSafetyAudit
+from .safety_audit import SafetyAudit
 
 COMMON_PARAMETERS = {'target','rule','duration_seconds','confidence_threshold','sample_interval_seconds'}
 RULE_PARAMETERS = {
@@ -51,6 +53,7 @@ class LocalAgentServices(RegistryAgentServices):
         self.detection_frames = DetectionFrames()
         self.started = self.closing = False
         self.process_lock = None
+        self.safety_audit: SafetyAudit | None = None
 
     @contextmanager
     def writing(self):
@@ -95,6 +98,11 @@ class LocalAgentServices(RegistryAgentServices):
                 self.heartbeat_stop = Event()
                 self.heartbeat = Thread(target=self._heartbeat,daemon=True,name='presence-heartbeat')
                 self.heartbeat.start()
+                if self.config.model_safety_observe:
+                    try:
+                        self.safety_audit = SafetyAudit(self.config.var_root / 'logs' / 'model-safety.jsonl')
+                    except (OSError, RuntimeError):
+                        logging.getLogger(__name__).warning('Model safety audit could not start')
             except Exception:
                 self._release_lock()
                 raise
@@ -150,6 +158,9 @@ class LocalAgentServices(RegistryAgentServices):
                     self._change(row,state='stopped' if row.payload.get('started_at') else 'canceled',ended_at=now(),message='应用已关闭，本次监测已停止。')
                 self._refresh_operations(db)
             self.started = False
+            if self.safety_audit is not None:
+                self.safety_audit.close()
+                self.safety_audit = None
             self._release_lock()
             if self.owns_gateway: self.gateway.close()
 
@@ -456,6 +467,10 @@ class LocalAgentServices(RegistryAgentServices):
                     occlusion_seconds=parameters['tracking_timeout_seconds'],
                     exit_seconds=parameters['exit_confirmation_seconds'],
                     max_gap_seconds=min(parameters['tracking_timeout_seconds'],max(1.5,interval*1.5)))
+            safety = None
+            if self.safety_audit is not None:
+                max_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
+                safety = RunSafetyAudit(self.safety_audit, run, max_gap_seconds=max_gap)
             with self.writing() as db:
                 row = db.get(LocalRun,identifier)
                 if row.state not in ACTIVE_STATES: return
@@ -485,6 +500,8 @@ class LocalAgentServices(RegistryAgentServices):
                             preview_only = (run.source_kind=='camera' and next_rule_timestamp is not None
                                             and timestamp < next_rule_timestamp-1e-6)
                             if not preview_only:
+                                if safety is not None:
+                                    safety.check_time(timestamp)
                                 observation = rule.observe(timestamp,boxes)
                                 # Keep a fixed business clock; frame quantization must not accumulate drift.
                                 if next_rule_timestamp is None:
@@ -539,6 +556,8 @@ class LocalAgentServices(RegistryAgentServices):
                 except Exception as exc:
                     rule.mark_unavailable()
                     if stop.is_set(): break
+                    if safety is not None:
+                        safety.interrupted()
                     # Only live transport failures reconnect. Changed source/model configuration must be revalidated.
                     code = getattr(exc,'code','video_decode_failed')
                     retryable = code in {'camera_frame_timeout','dependency_unavailable','media_source_not_published','camera_probe_failed','source_not_ready'}

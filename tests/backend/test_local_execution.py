@@ -42,8 +42,8 @@ class Reader:
 
 
 @pytest.fixture
-def runtime(tmp_path):
-    config = Config(var_root=tmp_path, agent_demo=False)
+def runtime(tmp_path, request):
+    config = Config(var_root=tmp_path, agent_demo=False, model_safety_observe=getattr(request, 'param', False))
     config.prepare()
     engine = make_engine(config)
     migrate(engine)
@@ -98,6 +98,27 @@ def finish(service, operation):
             return runs[0]
         time.sleep(.01)
     pytest.fail('executor failed to settle')
+
+
+@pytest.mark.parametrize('runtime', [False, True], indirect=True)
+def test_safety_observation_preserves_alarms_when_samples_are_interrupted(runtime):
+    service, _, frames, config = runtime
+    frames.frames_to_read = [(0., []), (15., []), (30., []), (59., [])]
+    run = finish(service, service.submit(command(), 'actor', 'safety-gap'))
+    assert run.state == 'completed'
+    events = service.events('agent', 'actor', {'limit': 100}).items
+    assert sorted((event.event_type, event.end_media_ms) for event in events) == [
+        ('person_absence', 30000), ('person_absence', 59000),
+    ]
+    service.close()
+    path = config.var_root / 'logs' / 'model-safety.jsonl'
+    if config.model_safety_observe:
+        record = json.loads(path.read_text(encoding='utf-8'))
+        assert record['reason'] == 'sample_gap'
+        assert record['run_id'] == run.id and record['source_id'] == 'video'
+        assert (record['start_seconds'], record['end_seconds']) == (30, 59)
+    else:
+        assert not path.exists()
 
 
 def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):

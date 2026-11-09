@@ -19,6 +19,7 @@ class Config(BaseSettings):
     version: str = '0.1.0'
     agent_demo: bool = False
     manual_review_enabled: bool = False
+    model_safety_observe: bool = False
     deepseek_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('VISION_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY', 'deepseek_api_key'))
     deepseek_model: str = Field(default='deepseek-flash', min_length=1, max_length=160)
     deepseek_match_threshold: float = Field(default=.8, ge=0, le=1, allow_inf_nan=False)
