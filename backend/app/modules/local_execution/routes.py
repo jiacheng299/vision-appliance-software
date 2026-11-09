@@ -1,4 +1,5 @@
 """Scoped access to local execution evidence and diagnostics."""
+from contextlib import nullcontext
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -17,9 +18,15 @@ router = APIRouter(tags=['local-execution'])
 def trust_checks(agent_id: str, request: Request,
                  source_id: str | None = Query(None, min_length=1, max_length=80), db=Depends(get_db)):
     get_agent(db, agent_id)
-    if request.app.state.agent_services.data_origin != 'real':
+    provider = request.app.state.agent_services
+    if provider.data_origin != 'real':
         return []
-    candidates = read_trust_checks(request.app.state.config.var_root, agent_id, source_id)
+    audit = getattr(provider, 'safety_audit', None)
+    try:
+        with audit.read_access() if audit is not None else nullcontext():
+            candidates = read_trust_checks(request.app.state.config.var_root, agent_id, source_id)
+    except TimeoutError:
+        raise Error(503, 'trust_checks_unavailable', '可信检查日志正在写入，请稍后刷新。', retryable=True) from None
     if not candidates:
         return []
     runs = {

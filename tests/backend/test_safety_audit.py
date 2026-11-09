@@ -1,6 +1,8 @@
 import json
 from threading import Event
 
+import pytest
+
 from app.modules.local_execution.safety_audit import SafetyAudit, _AuditFile
 
 
@@ -62,3 +64,24 @@ def test_slow_shutdown_abandons_queued_records_after_the_grace_period(tmp_path, 
         audit._worker.join(timeout=3)
     rows = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()]
     assert [row['reason'] for row in rows] == ['in_progress']
+
+
+def test_audit_read_access_times_out_during_a_blocked_write(tmp_path, monkeypatch):
+    entered, release = Event(), Event()
+
+    def blocked_write(handler, record):
+        entered.set()
+        assert release.wait(3)
+
+    monkeypatch.setattr(_AuditFile, 'emit', blocked_write)
+    audit = SafetyAudit(tmp_path / 'model-safety.jsonl')
+    try:
+        audit.submit({'reason': 'sample_gap'})
+        assert entered.wait(2)
+        with pytest.raises(TimeoutError), audit.read_access():
+            pytest.fail('The writer still holds the file lock')
+    finally:
+        release.set()
+        audit.close()
+    with audit.read_access():
+        pass

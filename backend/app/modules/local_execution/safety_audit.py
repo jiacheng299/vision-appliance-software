@@ -1,4 +1,5 @@
 """Bounded background writer for local safety observations."""
+from contextlib import contextmanager
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -18,6 +19,7 @@ class SafetyAudit:
         self._stopped = Event()
         self._discard_pending = Event()
         self._drop_lock = Lock()
+        self._file_lock = Lock()
         self._dropped = 0
         self._worker = Thread(target=self._write, args=(path,), daemon=True, name='model-safety-audit')
         self._worker.start()
@@ -25,6 +27,16 @@ class SafetyAudit:
     @property
     def accepting(self) -> bool:
         return self._worker.is_alive() and not self._stopped.is_set()
+
+    @contextmanager
+    def read_access(self):
+        # Avoid opening an audit file while the writer is rotating it on Windows.
+        if not self._file_lock.acquire(timeout=.25):
+            raise TimeoutError('Audit file is busy')
+        try:
+            yield
+        finally:
+            self._file_lock.release()
 
     def submit(self, record: dict):
         if self._stopped.is_set():
@@ -60,7 +72,8 @@ class SafetyAudit:
                 if dropped:
                     record = {**record, 'dropped_since_write': dropped}
                 line = json.dumps(record, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
-                handler.handle(logging.makeLogRecord({'msg': line}))
+                with self._file_lock:
+                    handler.handle(logging.makeLogRecord({'msg': line}))
         except Exception:
             self._stopped.set()
             logging.getLogger(__name__).warning('Model safety audit disabled after a log write failure')

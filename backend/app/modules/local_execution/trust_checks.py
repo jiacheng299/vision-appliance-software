@@ -47,7 +47,7 @@ def read_trust_checks(var_root: Path, agent_id: str, source_id: str | None) -> l
     root = var_root.resolve()
     for suffix in ('', '.1', '.2'):
         for line in reversed(_read_tail(root, suffix).splitlines()):
-            if len(line) > 2048 or line in seen:
+            if not line or len(line) > 2048 or line in seen:
                 continue
             try:
                 row = json.loads(line)
