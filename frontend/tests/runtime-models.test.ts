@@ -37,4 +37,19 @@ describe('runtime model availability',()=>{
     try{await flushPromises();expect(wrapper.text()).toContain('尚未登记本地模型')}
     finally{wrapper.unmount()}
   })
+
+  it.each([
+    ['active', '已开启'], ['disabled', '已关闭'],
+    ['unavailable', '暂不可用'], ['write_failed', '写入异常'],
+  ])('shows trust check state %s separately from model readiness', async (status, label) => {
+    vi.spyOn(api, 'runtime').mockResolvedValue({ ...snapshot([]), trust_check_status: status } as any)
+    vi.spyOn(api, 'logs').mockResolvedValue({ items: [], next_cursor: null })
+    const wrapper = mount(RuntimePage)
+    try {
+      await flushPromises()
+      expect(wrapper.get('[aria-label="可信检查"]').text()).toContain(label)
+    } finally {
+      wrapper.unmount()
+    }
+  })
 })
