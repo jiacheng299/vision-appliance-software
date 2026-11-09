@@ -162,6 +162,29 @@ def test_safety_audit_links_failed_evidence_without_suppressing_alarms(runtime, 
     assert 'private' not in str(record)
 
 
+@pytest.mark.parametrize('runtime', [True], indirect=True)
+def test_safety_observer_error_disables_audit_without_failing_monitoring(runtime, monkeypatch):
+    from app.modules.local_execution.run_safety_audit import RunSafetyAudit
+
+    service, _, _, config = runtime
+    samples = []
+
+    def broken_observer(self, timestamp):
+        samples.append(timestamp)
+        raise RuntimeError('observer failure')
+
+    monkeypatch.setattr(RunSafetyAudit, 'check_time', broken_observer)
+    run = finish(service, service.submit(command(), 'actor', 'broken-safety-observer'))
+    assert run.state == 'completed'
+    event, = service.events('agent', 'actor', {'limit': 100}).items
+    assert event.event_type == 'person_absence' and event.end_media_ms == 30000
+    assert samples == [0.]
+    service.close()
+    path = config.var_root / 'logs' / 'model-safety.jsonl'
+    record = json.loads(path.read_text(encoding='utf-8'))
+    assert record['reason'] == 'observer_failed'
+
+
 def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):
     service, sessions, _, config = runtime
     op = service.submit(command(), 'actor', 'start-key')

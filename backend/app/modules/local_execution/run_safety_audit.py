@@ -22,6 +22,15 @@ class RunSafetyAudit:
         }
         self._next_report: dict[str, float] = {}
 
+    def inspect(self, check, *args, **kwargs):
+        if self._writer is None:
+            return
+        try:
+            check(*args, **kwargs)
+        except Exception:
+            self.report(SafetySignal('observer_failed'))
+            self._writer = None
+
     def check_time(self, timestamp: float):
         self.report(self._window.check_time(timestamp))
 
@@ -30,8 +39,6 @@ class RunSafetyAudit:
         self._window.reset()
 
     def check_detection(self, timestamp, count, boxes, *, threshold, required_count):
-        if self._writer is None:
-            return
         present = count >= required_count
         weak_support = False
         if present:

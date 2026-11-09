@@ -501,7 +501,7 @@ class LocalAgentServices(RegistryAgentServices):
                                             and timestamp < next_rule_timestamp-1e-6)
                             if not preview_only:
                                 if safety is not None:
-                                    safety.check_time(timestamp)
+                                    safety.inspect(safety.check_time, timestamp)
                                 observation = rule.observe(timestamp,boxes)
                                 # Keep a fixed business clock; frame quantization must not accumulate drift.
                                 if next_rule_timestamp is None:
@@ -522,7 +522,7 @@ class LocalAgentServices(RegistryAgentServices):
                                 region_boxes = boxes if isinstance(rule, PresenceRule) else (
                                     target.box for target in observation.targets if rule.contains_target(target)
                                 )
-                                safety.check_detection(timestamp, observation.count, region_boxes,
+                                safety.inspect(safety.check_detection, timestamp, observation.count, region_boxes,
                                     threshold=parameters['confidence'], required_count=parameters.get('min_count', 1))
                             stamp = now()
                             if channel.rule == 'absence':
@@ -552,7 +552,7 @@ class LocalAgentServices(RegistryAgentServices):
                             elif channel.rule == 'intrusion' and observation.alarm and not stop.is_set():
                                 event = self._record_intrusion_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
                             if safety is not None and event is not None:
-                                safety.check_event(event, binding)
+                                safety.inspect(safety.check_event, event, binding)
                     if stop.is_set(): break
                     if run.source_kind=='file':
                         if not observed or last_timestamp is None or (binding.end_media_ms is not None
@@ -566,7 +566,7 @@ class LocalAgentServices(RegistryAgentServices):
                     rule.mark_unavailable()
                     if stop.is_set(): break
                     if safety is not None:
-                        safety.interrupted()
+                        safety.inspect(safety.interrupted)
                     # Only live transport failures reconnect. Changed source/model configuration must be revalidated.
                     code = getattr(exc,'code','video_decode_failed')
                     retryable = code in {'camera_frame_timeout','dependency_unavailable','media_source_not_published','camera_probe_failed','source_not_ready'}
