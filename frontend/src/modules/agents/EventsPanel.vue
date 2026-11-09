@@ -39,6 +39,6 @@ function missedSaved(){missedOpen.value=false;void loadMissed()}
     <NButton v-if="nextCursor&&!compact" :loading="loading" @click="more">加载更早事件</NButton>
     <template v-if="MANUAL_REVIEW_AVAILABLE&&!compact"><div class="panel-title agent-section-title"><h2>人工漏报记录 <small>{{missedRows.length}} 条</small></h2><NButton v-if="canWrite" :disabled="!runs.some(r=>r.started_at)" @click="missedOpen=true">补录漏报</NButton></div><ErrorBanner :error="missedError" @retry="loadMissed"/><p v-if="!missedRows.length&&!missedError" class="muted">尚无人工漏报记录，人工记录不计为系统检出。</p><article v-for="record in missedRows" :key="record.id" class="agent-config-row"><h3>{{record.event_type}}</h3><p>{{record.description}}</p><small>{{record.start_media_ms!=null?`${record.start_media_ms/1000} – ${(record.end_media_ms??0)/1000} 秒`:formatDate(record.occurred_at??null)}} · 运行 {{record.run_id}} · 配置 {{record.revision_id}}</small><p class="muted">{{record.evidence_message}}</p></article></template>
   </section>
-  <EventDrawer v-if="selected" :agent-id="agentId" :event="selected" :can-write="canWrite" @close="selected=null" @changed="refresh"/>
+  <EventDrawer v-if="selected" :agent-id="agentId" :event-id="selected.id" :can-write="canWrite" @close="selected=null" @changed="refresh"/>
   <MissedDialog v-if="MANUAL_REVIEW_AVAILABLE&&missedOpen" :agent-id="agentId" :runs="runs" @close="missedOpen=false" @saved="missedSaved"/>
 </template>

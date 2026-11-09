@@ -64,7 +64,7 @@ describe('agent event labels and filters', () => {
   it('shows the mapped Chinese event name in the event drawer title', async () => {
     vi.spyOn(agentApi, 'event').mockResolvedValue({ ...event('person_absence'), evidence: [], feedback_history: [] } as any)
     const wrapper = mount(EventDrawer, {
-      props: { agentId: 'agent-1', event: event('person_absence'), canWrite: false },
+      props: { agentId: 'agent-1', eventId: 'person_absence', canWrite: false },
       global: { stubs: { RunPlayer: true, AgentStatus: true, ErrorBanner: true } },
     })
     await flushPromises()
