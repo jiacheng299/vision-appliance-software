@@ -135,7 +135,7 @@ class IntrusionRule:
         self.candidates = {}
         self.last_timestamp = None
 
-    def _inside(self, target):
+    def contains_target(self, target):
         box = target.box
         foot = box['x'] + box['width'] / 2, box['y'] + box['height']
         return any(contains(region, foot) for region in self.regions)
@@ -150,7 +150,7 @@ class IntrusionRule:
             raise ValueError('Invalid observation time')
         self.last_timestamp = float(timestamp)
         targets = self.tracker.update(float(timestamp), boxes)
-        inside = tuple(target for target in targets if self._inside(target))
+        inside = tuple(target for target in targets if self.contains_target(target))
         inside_ids = {target.id for target in inside}
         current_ids = {target.id for target in targets}
         count = len(inside)

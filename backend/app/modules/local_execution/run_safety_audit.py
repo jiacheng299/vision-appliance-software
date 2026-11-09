@@ -28,6 +28,20 @@ class RunSafetyAudit:
         self.report(SafetySignal('observation_interrupted', self._window.last_timestamp))
         self._window.reset()
 
+    def check_detection(self, timestamp, count, boxes, *, threshold, required_count):
+        if self._writer is None:
+            return
+        present = count >= required_count
+        weak_support = False
+        if present:
+            weak_count = 0
+            for box in boxes:
+                score = box.get('confidence')
+                if isinstance(score, (int, float)) and threshold <= score <= threshold + .05:
+                    weak_count += 1
+            weak_support = count - weak_count < required_count
+        self.report(self._window.check_detection(timestamp, present, weak_support=weak_support))
+
     def report(self, signal: SafetySignal | None, *, event_id: str | None = None):
         if self._writer is None or signal is None:
             return

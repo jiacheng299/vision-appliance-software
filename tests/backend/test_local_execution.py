@@ -121,6 +121,24 @@ def test_safety_observation_preserves_alarms_when_samples_are_interrupted(runtim
         assert not path.exists()
 
 
+@pytest.mark.parametrize('runtime', [True], indirect=True)
+@pytest.mark.parametrize('make_command,interval,frame_count', [(command, 15, 4), (intrusion_command, 1, 20)])
+def test_safety_observation_reports_weak_detection_flicker(runtime, make_command, interval, frame_count):
+    service, _, frames, config = runtime
+    weak = {**PERSON, 'confidence': .52}
+    frames.frames_to_read = [(float(i * interval), [weak] if i in (0, 2) else []) for i in range(frame_count)]
+    request = make_command()
+    run = finish(service, service.submit(request, 'actor', 'safety-flicker'))
+    assert run.state == 'completed'
+    assert not service.events(request.agent_id, 'actor', {'limit': 100}).items
+    service.close()
+    path = config.var_root / 'logs' / 'model-safety.jsonl'
+    record = json.loads(path.read_text(encoding='utf-8'))
+    assert record['reason'] == 'unstable_detection'
+    assert record['run_id'] == run.id
+    assert (record['start_seconds'], record['end_seconds']) == (0, 3 * interval)
+
+
 def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):
     service, sessions, _, config = runtime
     op = service.submit(command(), 'actor', 'start-key')

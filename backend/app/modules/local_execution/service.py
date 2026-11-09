@@ -518,6 +518,12 @@ class LocalAgentServices(RegistryAgentServices):
                                     logging.getLogger(__name__).warning('Detection preview encoding failed')
                                 # Preview samples never change the configured business-rule cadence.
                                 if preview_only: continue
+                            if safety is not None:
+                                region_boxes = boxes if isinstance(rule, PresenceRule) else (
+                                    target.box for target in observation.targets if rule.contains_target(target)
+                                )
+                                safety.check_detection(timestamp, observation.count, region_boxes,
+                                    threshold=parameters['confidence'], required_count=parameters.get('min_count', 1))
                             stamp = now()
                             if channel.rule == 'absence':
                                 message = f'区域内 {observation.count} 人；已连续缺岗 {observation.absent_seconds:.1f} 秒。'
