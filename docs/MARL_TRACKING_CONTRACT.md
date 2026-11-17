@@ -109,10 +109,10 @@ VISION_TRACKER_POLICY=my_marl_policy:MarlinAssociation
 | 写成 `marl-association`（注册表里的预留位，未安装） | `tracker_policy_not_installed` | 503 |
 | 完全未知的名字 | `tracker_policy_unknown` | 404 |
 
-`GET /api/v1/tracking/policies` 会返回注册表状态；外部策略装载后，界面上
-"关联策略"区块仍会显示当前使用的是启发式还是外部策略（该接口只反映内置注册表，
-外部策略的实际装载情况以任务启动日志与 `VISION_TRACKER_POLICY` 为准——这是一个
-已知的展示缺口，接入正式策略时需要补一条状态回写）。
+`GET /api/v1/tracking/policies` 会同时返回**目录**（`items`）与**实际装载结果**
+（`resolved`：spec / available / name / kind / external / detail / reason）；
+任务详情的"关联策略"区块显示"实际装载：<策略名>（外部策略）"，配置不可用时
+用红色写明原因。
 
 ## 五、训练环境建议（仓库外）
 
