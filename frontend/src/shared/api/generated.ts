@@ -1445,6 +1445,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sources/{source_id}/semantic-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Profile */
+        get: operations["read_profile_api_v1_sources__source_id__semantic_profile_get"];
+        /** Update Intrinsic */
+        put: operations["update_intrinsic_api_v1_sources__source_id__semantic_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sources/{source_id}/semantic-profile/attributes/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Attribute */
+        put: operations["upsert_attribute_api_v1_sources__source_id__semantic_profile_attributes__key__put"];
+        post?: never;
+        /** Delete Attribute */
+        delete: operations["delete_attribute_api_v1_sources__source_id__semantic_profile_attributes__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Observations */
+        get: operations["list_observations_api_v1_agents__agent_id__observations_get"];
+        put?: never;
+        /** Record Observation */
+        post: operations["record_observation_api_v1_agents__agent_id__observations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1728,6 +1782,76 @@ export interface components {
              * @enum {string}
              */
             data_origin: "real" | "mock";
+        };
+        /**
+         * AttributeInput
+         * @description 动态层：每一项都必须带来源、观测时刻与有效期。
+         */
+        AttributeInput: {
+            /** Value */
+            value: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "device" | "frame" | "language" | "probe";
+            /** Observed At */
+            observed_at?: number | null;
+            /** Source Frame Ts */
+            source_frame_ts?: number | null;
+            /** Roi */
+            roi?: number[][];
+            /**
+             * Confidence
+             * @default 0.5
+             */
+            confidence: number;
+            /** Tau Seconds */
+            tau_seconds?: number | null;
+            /** Hard Expiry At */
+            hard_expiry_at?: number | null;
+            /**
+             * Conflict
+             * @default false
+             */
+            conflict: boolean;
+        };
+        /** AttributeView */
+        AttributeView: {
+            /** Key */
+            key: string;
+            /** Value */
+            value: {
+                [key: string]: unknown;
+            };
+            /** Source Kind */
+            source_kind: string;
+            /** Source Frame Ts */
+            source_frame_ts?: number | null;
+            /** Roi */
+            roi?: number[][];
+            /** Observed At */
+            observed_at: number;
+            /** Confidence */
+            confidence: number;
+            /** Tau Seconds */
+            tau_seconds?: number | null;
+            /** Hard Expiry At */
+            hard_expiry_at?: number | null;
+            /** Stored State */
+            stored_state: string;
+            /** State */
+            state: string;
+            /** Strength */
+            strength: number;
+            /** Usable */
+            usable: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Version */
+            version: number;
         };
         /** CameraCreate */
         CameraCreate: {
@@ -2326,6 +2450,31 @@ export interface components {
              */
             data_origin: "real" | "mock";
         };
+        /** GateView */
+        GateView: {
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Value */
+            value?: number | null;
+            /** Threshold */
+            threshold?: number | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * IntrinsicInput
+         * @description 固有层：由设备信息给出，不随时间衰减。
+         */
+        IntrinsicInput: {
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            };
+            /** View Version */
+            view_version?: string | null;
+        };
         /** LogDTO */
         LogDTO: {
             /** Id */
@@ -2486,6 +2635,134 @@ export interface components {
         ModelVersionCommand: {
             /** Row Version */
             row_version: number;
+        };
+        /** ObservationInput */
+        ObservationInput: {
+            /** Source Id */
+            source_id: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Path Id */
+            path_id?: string | null;
+            /** Task Key */
+            task_key: string;
+            /** Roi */
+            roi?: number[][];
+            /** Window Start */
+            window_start: number;
+            /** Window End */
+            window_end: number;
+            /**
+             * Detection Count
+             * @default 0
+             */
+            detection_count: number;
+            /**
+             * Path Complete
+             * @default true
+             */
+            path_complete: boolean;
+            /** Nodes Completed */
+            nodes_completed?: string[];
+            metrics?: components["schemas"]["ObservationMetrics"];
+            thresholds?: components["schemas"]["ObservationThresholds"];
+            versions?: components["schemas"]["Versions"];
+            expected_versions?: components["schemas"]["Versions"] | null;
+        };
+        /** ObservationMetrics */
+        ObservationMetrics: {
+            /** Frame Count */
+            frame_count?: number | null;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Actual Fps */
+            actual_fps?: number | null;
+            /** Max Gap Seconds */
+            max_gap_seconds?: number | null;
+            /** Brightness */
+            brightness?: number | null;
+            /** Roi Visible Ratio */
+            roi_visible_ratio?: number | null;
+            /** Overexposure Ratio */
+            overexposure_ratio?: number | null;
+            /** Blur Score */
+            blur_score?: number | null;
+            /** Occlusion Ratio */
+            occlusion_ratio?: number | null;
+            /** Target Scale Px */
+            target_scale_px?: number | null;
+        };
+        /** ObservationPage */
+        ObservationPage: {
+            /** Items */
+            items: components["schemas"]["ObservationView"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Summary */
+            summary: {
+                [key: string]: number;
+            };
+        };
+        /** ObservationThresholds */
+        ObservationThresholds: {
+            /** Min Fps */
+            min_fps?: number | null;
+            /** Max Gap Seconds */
+            max_gap_seconds?: number | null;
+            /** Min Window Seconds */
+            min_window_seconds?: number | null;
+            /** Min Roi Visible Ratio */
+            min_roi_visible_ratio?: number | null;
+            /** Max Overexposure Ratio */
+            max_overexposure_ratio?: number | null;
+            /** Min Blur Score */
+            min_blur_score?: number | null;
+            /** Max Occlusion Ratio */
+            max_occlusion_ratio?: number | null;
+            /** Min Target Scale Px */
+            min_target_scale_px?: number | null;
+        };
+        /** ObservationView */
+        ObservationView: {
+            /** Id */
+            id: string;
+            /** Agent Id */
+            agent_id: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Task Key */
+            task_key: string;
+            /** Roi */
+            roi?: number[][];
+            /** Window Start */
+            window_start: number;
+            /** Window End */
+            window_end: number;
+            /** Route Version */
+            route_version?: string | null;
+            /** Profile Version */
+            profile_version?: number | null;
+            /** Model Version */
+            model_version?: string | null;
+            /** Path Id */
+            path_id?: string | null;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "detected" | "not_detected" | "insufficient";
+            /** Detection Count */
+            detection_count: number;
+            metrics: components["schemas"]["ObservationMetrics"];
+            thresholds: components["schemas"]["ObservationThresholds"];
+            /** Gates */
+            gates: components["schemas"]["GateView"][];
+            /** Reasons */
+            reasons: string[];
+            /** Created At */
+            created_at: string;
         };
         /** OperationDTO */
         OperationDTO: {
@@ -2704,6 +2981,29 @@ export interface components {
             playback_url: string;
             /** Expires At */
             expires_at: string;
+        };
+        /** ProfileView */
+        ProfileView: {
+            /** Source Id */
+            source_id: string;
+            /** View Version */
+            view_version: string;
+            /** Version */
+            version: number;
+            /** Intrinsic */
+            intrinsic: {
+                [key: string]: unknown;
+            };
+            /** Runtime */
+            runtime: {
+                [key: string]: unknown;
+            };
+            /** Attributes */
+            attributes: components["schemas"]["AttributeView"][];
+            /** Evaluated At */
+            evaluated_at: number;
+            /** Updated At */
+            updated_at: string;
         };
         /** ReferencePage */
         ReferencePage: {
@@ -3509,6 +3809,15 @@ export interface components {
         VersionCommand: {
             /** Row Version */
             row_version: number;
+        };
+        /** Versions */
+        Versions: {
+            /** Route Version */
+            route_version?: string | null;
+            /** Profile Version */
+            profile_version?: number | null;
+            /** Model Version */
+            model_version?: string | null;
         };
         /** WorkspaceDTO */
         WorkspaceDTO: {
@@ -14507,6 +14816,701 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    read_profile_api_v1_sources__source_id__semantic_profile_get: {
+        parameters: {
+            query?: {
+                at?: number | null;
+            };
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    update_intrinsic_api_v1_sources__source_id__semantic_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntrinsicInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    upsert_attribute_api_v1_sources__source_id__semantic_profile_attributes__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttributeInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    delete_attribute_api_v1_sources__source_id__semantic_profile_attributes__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    list_observations_api_v1_agents__agent_id__observations_get: {
+        parameters: {
+            query?: {
+                source_id?: string | null;
+                verdict?: string | null;
+                run_id?: string | null;
+                task_key?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    record_observation_api_v1_agents__agent_id__observations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObservationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservationView"];
+                };
             };
             /** @description Bad Request */
             400: {
