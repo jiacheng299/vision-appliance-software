@@ -71,15 +71,20 @@ it('reads real observation records only while the panel is open', async () => {
   try {
     await flushPromises()
     expect(request).not.toHaveBeenCalled()
-    const toggle = wrapper.get('button[aria-label="有效观察"]')
-    await toggle.trigger('click')
+    const observationTab = wrapper.get('button[aria-label="有效观察"]')
+    expect(wrapper.get('[role="tablist"]').text()).toContain('画面')
+    expect(wrapper.get('[role="tablist"]').text()).toContain('事件')
+    await observationTab.trigger('click')
     await flushPromises()
     expect(request).toHaveBeenCalled()
     expect(wrapper.text()).toContain('暂无有效观察记录')
-    await toggle.trigger('click')
+    // 切回画面页签后，观察面板应被卸载，不再持有数据
+    await wrapper.get('button[aria-label="画面"]').trigger('click')
     expect(wrapper.find('[aria-label="有效观察记录"]').exists()).toBe(false)
+    // 模拟数据源不显示交底书相关的两个页签
     await wrapper.setProps({ workspace: { ...workspace, data_origin: 'mock' } })
     expect(wrapper.find('button[aria-label="有效观察"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="路由候选"]').exists()).toBe(false)
   } finally { wrapper.unmount() }
 })
 
