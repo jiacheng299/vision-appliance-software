@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 22 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 24 个提交，全部只提交未 push。
 
 > 需要一页纸看"交底书哪一条落在哪段代码"时，直接看 [交底书对照表](PATENT_MAPPING.md)。
 
@@ -43,6 +43,17 @@
 | `a13807f` | `feat(ui): 路由页签内的版本时间线`：4 个文件，+166 / −20 |
 | `038ec6b` | `docs: 更新验收记录至第 10 轮（版本时间线）` |
 | `5c22fc2` | `feat(semantics,routing): 画像版本事件与画像/路由合并时间线`：18 个文件，+1189 / −116 |
+| `37afcc9` | `docs: 更新验收记录至第 11 轮（画像事件与合并时间线）` |
+| `ee74996` | `feat(semantics,ui): 单条观察记录接口与门禁逐项明细`：7 个文件，+431 / −5 |
+
+### 第 12 轮改动
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/semantics/service.py`、`routes.py` | 修改 | `GET /agents/{id}/observations/{observation_id}`（404 = `observation_not_found`） |
+| `frontend/src/modules/agents/ObservationPanel.vue` | 修改 | 每行"门禁"按钮 + 明细区：逐门禁表、实测指标、三类版本、路径；门禁与原因代码中文化 |
+| `frontend/tests/observation-panel.test.ts` | 修改 | 新增 1 项：打开明细、通过/未测定状态、未测定指标、版本行与关闭 |
+| `tests/backend/test_semantics_api.py` | 修改 | 新增 1 项：单条记录字段完整性 + 404 错误码 |
 
 ### 第 11 轮改动
 
@@ -695,6 +706,44 @@ route   baseline        route-v1  当前组合仍处于最短驻留时间（0/12
 把它放在赋值之后，测出来的 previous 永远是 null；新加的 `test_attribute_writes_keep_the_previous_label`
 就是为这个顺序问题准备的。
 
+### 第 12 轮（门禁逐项明细）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+491 passed in 269.26s        # 第 11 轮 490 项 + 本轮 1 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  37 passed (37)
+     Tests  184 passed (184)
+
+$ cd frontend && npm run build
+✓ built in 16.74s
+```
+
+真实应用取一条 `insufficient` 记录后的明细（界面与接口一致）：
+
+```
+结论: insufficient | 原因: 画面质量指标未测定，不足以支撑未检出结论。
+
+门禁                 结果        实测    门槛    说明
+actual_fps           pass        1.0     0.9
+max_gap_seconds      pass        1.1     1.5
+window_seconds       pass       30.0    20.0
+roi_visible_ratio    pass        1.0     0.9
+overexposure_ratio   pass       0.03     0.2
+blur_score           unverified           50.0   unverified_quality
+occlusion_ratio      pass        0.0     0.3
+target_scale_px      pass       48.0    24.0
+path_complete        pass          1       1
+version_consistency  pass
+
+版本: route=route-1  profile=8  model=smoke
+不存在的记录 → 404 observation_not_found
+```
+
+这一段就是"有效观察"最硬的证据：**同一窗口里 9 道门禁通过、1 道未测定，
+因此系统判观察不足而不是未检出**。答辩时可以直接指着这十行解释"为什么这窗不算数"。
+
 ## 八、自查方法
 
 ```powershell
@@ -757,9 +806,9 @@ cd frontend; npm test; npm run build; cd ..
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 12 轮）计划
+## 十、下一轮（第 13 轮）计划
 
-1. 观察详情页：点开一条 `insufficient` 可看到当时的组合成员、五道门禁逐项数值与阈值、以及当时的漂移，而不只是原因文本。
+1. 左侧七导航按 M1–M9 重新分组（画像/观察/路由/采集/管理），这是"网页框架"最后一块未对齐的部分；需要同步改路由与既有页面入口。
 2. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示（延续"不伪造绿色"的约定）。
 3. 观察记录详情页：点开一条 `insufficient` 可看到当时的组合成员、门禁逐项数值与当时的漂移，而不只是原因文本。
 4. 把"画像为空"的常见路径补上自动初始化：首次运行时按设备字段与首帧图像统计写入固有层与一项动态属性（仍需人工确认后才用于路由）。
