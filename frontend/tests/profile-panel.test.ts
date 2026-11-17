@@ -91,3 +91,24 @@ it('refuses an unsafe attribute name before calling the server', async () => {
     expect(upsert).not.toHaveBeenCalled()
   } finally { wrapper.unmount() }
 })
+
+it('can initialise the profile from the device record and reports what it did', async () => {
+  vi.spyOn(profileApi, 'read').mockResolvedValue(profile)
+  const bootstrap = vi.spyOn(profileApi, 'bootstrap').mockResolvedValue({
+    source_id: 'cam', created: ['固有层 resolution=960x540'], skipped: ['固有层已完整'],
+    notices: ['摄像头源不做首帧取图，动态层需由运行中的观察或人工写入。'],
+    profile, bootstrapped_at: '2026-11-17T00:00:00Z',
+  })
+  const wrapper = mount(ProfilePanel, { props: { sourceId: 'cam' } })
+  try {
+    await flushPromises()
+    const button = wrapper.findAll('button').find(item => item.text().includes('按设备记录初始化'))
+    expect(button).toBeTruthy()
+    await button!.trigger('click')
+    await flushPromises()
+    expect(bootstrap).toHaveBeenCalledWith('cam')
+    const result = wrapper.get('[aria-label="初始化结果"]')
+    expect(result.text()).toContain('固有层 resolution=960x540')
+    expect(result.text()).toContain('摄像头源不做首帧取图')
+  } finally { wrapper.unmount() }
+})

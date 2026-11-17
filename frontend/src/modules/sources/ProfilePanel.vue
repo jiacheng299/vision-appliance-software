@@ -10,6 +10,7 @@ const props = defineProps<{ sourceId: string }>()
 const { data, loading, error, refresh } = useResource(() => profileApi.read(props.sourceId))
 const busy = ref('')
 const actionError = ref('')
+const bootstrapNotices = ref<string[]>([])
 const intrinsic = reactive<Record<string, string>>({})
 
 watch(data, value => {
@@ -42,6 +43,18 @@ function expiry(row: ProfileAttribute) {
   if (row.hard_expiry_at == null) return '不过期'
   const seconds = row.hard_expiry_at - Number(data.value?.evaluated_at ?? 0)
   return seconds <= 0 ? '已过期' : `剩余 ${Math.round(seconds)} 秒`
+}
+
+async function bootstrapProfile() {
+  if (busy.value) return
+  busy.value = 'bootstrap'; actionError.value = ''
+  try {
+    const result = await profileApi.bootstrap(props.sourceId)
+    bootstrapNotices.value = [...result.created, ...result.skipped, ...result.notices]
+    await refresh()
+  } catch (problem) {
+    actionError.value = problem instanceof Error ? problem.message : '初始化画像失败'
+  } finally { busy.value = '' }
 }
 
 async function saveIntrinsic() {
@@ -92,6 +105,13 @@ async function removeAttribute(key: string) {
     <p class="muted">固有层不随时间变化；动态属性必须带来源、观测时刻与有效期，过期后只转为"未知"，不会被当作相反事实。</p>
     <ErrorBanner :error="actionError" :retryable="false"/>
     <ErrorBanner :error="error" @retry="refresh"/>
+    <div class="toolbar">
+      <NButton size="small" :loading="busy === 'bootstrap'" @click="bootstrapProfile">按设备记录初始化</NButton>
+      <small class="muted">只填缺项：固有层取设备字段，动态层仅在能从录像取到一帧时写入一项保守的亮度属性。</small>
+    </div>
+    <ul v-if="bootstrapNotices.length" class="profile-bootstrap" aria-label="初始化结果">
+      <li v-for="notice in bootstrapNotices" :key="notice">{{ notice }}</li>
+    </ul>
     <p v-if="loading && !data" class="muted" role="status">正在读取画像…</p>
     <template v-else-if="data">
       <h3>固有层</h3>
@@ -154,5 +174,6 @@ async function removeAttribute(key: string) {
 .profile-state.expired { color: #d03050; }
 .profile-state.conflict { color: #f0a020; }
 .toolbar { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+.profile-bootstrap { margin: 0 0 12px; padding-left: 18px; font-size: 12px; opacity: .85; }
 h3 { margin: 14px 0 6px; font-size: 13px; }
 </style>

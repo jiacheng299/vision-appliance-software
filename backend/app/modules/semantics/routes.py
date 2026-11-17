@@ -1,11 +1,12 @@
 """Read and maintain the semantic profile; judge observation windows."""
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Request
 
 from ...shared.db import get_db
+from ...shared.storage import controlled_path
 from ..agents.workspace import WORKSPACE_ACTOR_ID
-from . import service
-from .schemas import (AttributeInput, IntrinsicInput, ObservationInput, ObservationPage,
-                      ObservationView, ProfileView)
+from . import bootstrap as bootstrap_module, service
+from .schemas import (AttributeInput, BootstrapView, IntrinsicInput, ObservationInput,
+                      ObservationPage, ObservationView, ProfileView)
 
 router = APIRouter(tags=['semantics'])
 
@@ -50,3 +51,27 @@ def list_observations(agent_id: str,
     return service.list_observations(db, agent_id, WORKSPACE_ACTOR_ID, source_id=source_id,
                                      verdict=verdict, run_id=run_id, task_key=task_key,
                                      limit=limit, cursor=cursor)
+
+
+@router.post('/sources/{source_id}/semantic-profile/bootstrap', response_model=BootstrapView)
+def bootstrap_profile(source_id: str, request: Request,
+                      from_recording: bool = Query(True, description='是否从本地录像取一帧测亮度'),
+                      db=Depends(get_db)):
+    """First-run profile initialisation: fill only what is missing."""
+    from .. import sources as sources_module
+    frame = None
+    notices_extra = []
+    source = sources_module.get_source(db, source_id)
+    if from_recording and source.kind == 'file' and source.media_key:
+        try:
+            path = controlled_path(request.app.state.config, 'media', source.media_key)
+            frame = bootstrap_module.sample_frame(path)
+        except Exception:
+            frame = None
+        if frame is None:
+            notices_extra.append('录像取帧失败，动态层保持为空。')
+    elif source.kind != 'file':
+        notices_extra.append('摄像头源不做首帧取图，动态层需由运行中的观察或人工写入。')
+    result = bootstrap_module.bootstrap(db, source_id, frame=frame)
+    result['notices'] = notices_extra + result['notices']
+    return BootstrapView(**result)

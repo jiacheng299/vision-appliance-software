@@ -3,6 +3,7 @@ import type { components } from '../../shared/api/generated'
 
 export type SemanticProfile = components['schemas']['ProfileView']
 export type ProfileAttribute = components['schemas']['AttributeView']
+export type BootstrapResult = components['schemas']['BootstrapView']
 export type AttributeSource = 'frame' | 'language' | 'probe' | 'device'
 
 export const INTRINSIC_KEYS = ['resolution', 'lens', 'mount_position', 'field_of_view',
@@ -38,4 +39,6 @@ export const profileApi = {
   deleteAttribute: (sourceId: string, key: string) =>
     client.delete<SemanticProfile>(`${base(sourceId)}/attributes/${encodeURIComponent(key)}`)
       .then(response => response.data),
+  bootstrap: (sourceId: string) =>
+    client.post<BootstrapResult>(`${base(sourceId)}/bootstrap`, {}, json).then(response => response.data),
 }

@@ -172,3 +172,12 @@ class ObservationPage(DTO):
     items: list[ObservationView]
     next_cursor: str | None = None
     summary: dict[str, int]
+
+
+class BootstrapView(DTO):
+    source_id: str
+    created: list[str]
+    skipped: list[str]
+    notices: list[str]
+    profile: ProfileView
+    bootstrapped_at: str

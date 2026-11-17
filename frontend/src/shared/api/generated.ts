@@ -1499,6 +1499,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sources/{source_id}/semantic-profile/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bootstrap Profile
+         * @description First-run profile initialisation: fill only what is missing.
+         */
+        post: operations["bootstrap_profile_api_v1_sources__source_id__semantic_profile_bootstrap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sources/{source_id}/routes": {
         parameters: {
             query?: never;
@@ -1974,6 +1994,20 @@ export interface components {
             reason?: string | null;
             /** Version */
             version: number;
+        };
+        /** BootstrapView */
+        BootstrapView: {
+            /** Source Id */
+            source_id: string;
+            /** Created */
+            created: string[];
+            /** Skipped */
+            skipped: string[];
+            /** Notices */
+            notices: string[];
+            profile: components["schemas"]["ProfileView"];
+            /** Bootstrapped At */
+            bootstrapped_at: string;
         };
         /** CameraCreate */
         CameraCreate: {
@@ -15920,6 +15954,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ObservationView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    bootstrap_profile_api_v1_sources__source_id__semantic_profile_bootstrap_post: {
+        parameters: {
+            query?: {
+                /** @description 是否从本地录像取一帧测亮度 */
+                from_recording?: boolean;
+            };
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapView"];
                 };
             };
             /** @description Bad Request */

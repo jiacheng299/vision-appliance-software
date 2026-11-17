@@ -14812,6 +14812,151 @@
         }
       }
     },
+    "/api/v1/sources/{source_id}/semantic-profile/bootstrap": {
+      "post": {
+        "tags": [
+          "semantics"
+        ],
+        "summary": "Bootstrap Profile",
+        "description": "First-run profile initialisation: fill only what is missing.",
+        "operationId": "bootstrap_profile_api_v1_sources__source_id__semantic_profile_bootstrap_post",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "from_recording",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "是否从本地录像取一帧测亮度",
+              "default": true,
+              "title": "From Recording"
+            },
+            "description": "是否从本地录像取一帧测亮度"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapView"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/sources/{source_id}/routes": {
       "get": {
         "tags": [
@@ -16862,6 +17007,53 @@
           "version"
         ],
         "title": "AttributeView"
+      },
+      "BootstrapView": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "created": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Created"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped"
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ProfileView"
+          },
+          "bootstrapped_at": {
+            "type": "string",
+            "title": "Bootstrapped At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "created",
+          "skipped",
+          "notices",
+          "profile",
+          "bootstrapped_at"
+        ],
+        "title": "BootstrapView"
       },
       "CameraCreate": {
         "properties": {
