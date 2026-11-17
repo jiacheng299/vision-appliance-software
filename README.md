@@ -64,6 +64,8 @@
 
 具体验收步骤、运行记录与限制见 **[验收文档](docs/ACCEPTANCE.md)**。开发和另外两位成员接入请看 [开发交接](docs/DEVELOPMENT.md) 与 [API 约定](docs/FOUNDATION_API.md)。
 
+> **专利框架改造进行中。** 依据技术交底书新增 `semantics` 模块（时效语义画像、有效观察三态判定）。设计与不可实现清单见 [专利框架设计](docs/superpowers/specs/2026-11-17-patent-framework-design.md)，逐轮改动与验证证据见 [专利框架验收记录](docs/ACCEPTANCE_PATENT.md)。该模块当前只提供接口，尚未接入执行器。
+
 ## 开发
 
 ### 摄像头测试资源
