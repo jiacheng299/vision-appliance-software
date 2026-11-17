@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue'
 import { NButton } from 'naive-ui'
 import { agentApi, type RouteDecision, type RouteEvaluation, type RouteState } from './api'
-import { formatDate, useResource } from '../../shared/ui/resource'
+import { useResource } from '../../shared/ui/resource'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
+import RouteTimeline from './RouteTimeline.vue'
 
 const props = defineProps<{ sourceId: string; rule: string; durationSeconds?: number | null
   agentId?: string; channelId?: string; sourceLabel?: string }>()
@@ -28,13 +29,6 @@ const routeState = computed<RouteState | null>(() => {
 })
 const bucketLabel = computed(() => data.value?.scenario.bucket === 'default'
   ? '常规场景' : `场景分桶 ${data.value?.scenario.bucket ?? ''}`)
-const actionLabels: Record<string, string> = {
-  hold: '保持', enter: '进入候选', cancel: '取消候选', switch: '切换版本',
-}
-const kindLabels: Record<string, string> = {
-  baseline: '基线', refresh: '刷新', drift: '属性漂移', expiry: '属性过期',
-  blocked: '无可行组合', cancel: '人工取消', window: '观察窗口',
-}
 
 function number(value: number | null | undefined, digits = 3) {
   return value == null ? '—' : value.toFixed(digits)
@@ -115,17 +109,7 @@ async function cancel() {
         </li>
       </ul>
     </section>
-    <section v-if="decisions.data.value?.length" class="route-history" aria-label="最近路由决策">
-      <h3>最近路由决策</h3>
-      <ul>
-        <li v-for="item in decisions.data.value" :key="item.id">
-          <strong>{{ actionLabels[item.action] ?? item.action }}</strong>
-          <span class="route-history-kind">{{ kindLabels[item.kind] ?? item.kind }}</span>
-          <span>{{ item.reason }}</span>
-          <small>{{ formatDate(item.created_at) }}<template v-if="item.route_version"> · {{ item.route_version }}</template></small>
-        </li>
-      </ul>
-    </section>
+    <RouteTimeline v-if="decisions.data.value?.length" :decisions="decisions.data.value"/>
     <p v-if="loading && !data" class="muted" role="status">正在评估路由候选…</p>
     <template v-else-if="data">
       <ul v-if="data.notices.length" class="route-notices" aria-label="路由评估口径说明">

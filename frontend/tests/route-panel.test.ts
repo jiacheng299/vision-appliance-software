@@ -151,7 +151,7 @@ it('lists the recent routing decisions with their reason', async () => {
   })
   try {
     await flushPromises()
-    const history = wrapper.get('[aria-label="最近路由决策"]')
+    const history = wrapper.get('[aria-label="路由版本时间线"]')
     expect(history.text()).toContain('无可行组合')
     expect(history.text()).toContain('属性漂移')
     expect(history.text()).toContain('保持')
