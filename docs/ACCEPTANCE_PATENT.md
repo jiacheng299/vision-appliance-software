@@ -2,27 +2,49 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 3 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 4 个提交，全部只提交未 push。
 
 ## 一、总体路线与状态
 
 | 阶段 | 内容 | 对应交底书 | 状态 |
 | --- | --- | --- | --- |
 | 一 | 时效语义画像、画面指标、有效观察三态、持久化与接口 | F1/M3、F3/M8、式(1) | **已完成（第 1 轮）** |
-| 二 | 执行器影子接入，`RunDTO` 补版本字段，前端"有效观察"面板 | M2、M7、S6–S9 | 未开始 |
+| 二 | 执行器影子接入，`RunDTO` 补版本字段，前端"有效观察"面板 | M2、M7、S6–S9 | **已完成（第 2 轮）** |
 | 三 | 需求图、能力表扩展、组合求解 | F2/M4–M6、式(2) | 未开始 |
 | 四 | 漂移判定、局部重路由、影子运行与原子切换 | F4/F5/M9、式(3) | 未开始 |
 | 五 | 前端信息架构改造（画像/观察/路由） | M1–M9 | 未开始 |
 | 六 | 追踪策略接口（为多智能体强化学习预留）与验收汇总 | — | 未开始 |
 
-## 二、第 1 轮提交
+## 二、提交记录
 
 | 提交 | 说明 |
 | --- | --- |
 | `2cba084` | `docs: 新增专利框架落地设计与实施计划`：差距对照、方案选型、M1–M9 映射、7 项不可实现清单、六阶段排期 |
 | `b63ac67` | `feat(semantics): 落地时效语义画像与有效观察三态判定`：18 个文件，+6259 / −1963（其中 `contracts/openapi.json` 与 `generated.ts` 为重新生成） |
+| `4600070` | `docs: 新增专利框架验收记录并在 README 标注改造进度` |
+| `218d2ce` | `feat(semantics): 执行器影子接入有效观察，不改动报警行为`：17 个文件，+715 |
 
-## 三、新增文件
+### 第 2 轮新增/修改文件
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/semantics/window.py` | 新增 | 观察窗口聚合（帧率/最大间隔/最差画面质量/命中计数） |
+| `backend/app/modules/local_execution/service.py` | 修改 | 每帧入窗、采样点测质量、窗口闭合落盘、失败隔离 |
+| `backend/app/modules/semantics/metrics.py` | 修改 | `measure_regions` 与 `combine`（多区域取最差） |
+| `backend/app/modules/semantics/observe.py` | 修改 | `time_continuous` 门禁与"帧时间不连续"原因 |
+| `backend/app/modules/semantics/schemas.py` | 修改 | `ObservationMetrics.time_continuous` |
+| `backend/app/modules/semantics/service.py` | 修改 | 门槛默认值、`thresholds_for`、`profile_version_for` |
+| `backend/app/shared/config.py` | 修改 | `observation_records`、`observation_window_seconds` |
+| `backend/app/modules/agents/contracts.py` | 修改 | `RunDTO.profile_version`、`RunDTO.route_version` |
+| `frontend/src/modules/agents/ObservationPanel.vue` | 新增 | 有效观察面板（三态/窗口/帧率/过曝/原因/统计/筛选） |
+| `frontend/src/modules/agents/MonitorPanel.vue` | 修改 | "有效观察"入口，仅真实数据源可用 |
+| `frontend/src/modules/agents/api.ts` | 修改 | `observations()` 与相关类型 |
+| `frontend/tests/observation-panel.test.ts` | 新增 | 面板与入口的 3 项测试 |
+| `tests/backend/test_observation_window.py` | 新增 | 窗口聚合 8 项测试 |
+| `tests/backend/test_executor_observation.py` | 新增 | 真实执行器 4 项测试（含"报警不变""记录失败不打断监测"） |
+| `.env.example` | 修改 | 两个新增环境变量说明 |
+
+## 三、第 1 轮新增文件
 
 | 文件 | 行数 | 作用 |
 | --- | --- | --- |
@@ -149,6 +171,46 @@ camera: 模拟摄像头—夜间街道（录像循环） | task: 人员在岗监
 
 新增测试的 31 项覆盖：衰减公式与边界、未来时刻拒绝、非有限值、零置信度、冲突态、可用性筛选、变化检测；五道门禁逐项单独触发、未测定只阻止未检出、无解码帧无结论、执行路径与版本不一致、协议有效空集合法；接口层的版本自证防护（画像版本由服务端掌握，窗口不能自报）、游标防篡改、筛选与分页、未知视频源/任务返回 404 而不是新建。
 
+### 第 2 轮（执行器接入）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+406 passed in 191.48s        # 第 1 轮 394 项 + 本轮 12 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  33 passed (33)
+     Tests  161 passed (161)   # 第 1 轮 158 项 + 本轮 3 项
+
+$ cd frontend && npm run build
+✓ built in 9.77s               # vue-tsc 无错误
+```
+
+真实执行器验证（运行中的应用 + 真实 RTSP 摄像头，任务连续跑 75 秒）：
+
+```
+task: 人员在岗监测任务 | revision: v1 (published) | rule: absence
+start: 202 running
+observations: 200 items 20 summary {'detected': 8, 'insufficient': 9, 'not_detected': 4}
+  1108948.05-1108978.97s detected      route=local-r1 profile=8 fps=8.31 glare=0.0 frames=257 reasons=[]
+  1108947.84-1108978.04s detected      route=local-r1 profile=None fps=8.25 glare=0.0 frames=249 reasons=[]
+  1108917.95-1108948.05s detected      route=local-r1 profile=8 fps=9.17 glare=0.0 frames=276 reasons=[]
+profile runtime: {"observation":{"verdict":"detected","window_end":1108978.97,"reasons":[],"route_version":"local-r1"}}
+```
+
+要点：帧率、帧数、过曝比例全部来自实际解码帧；`profile=None` 的那一路视频源
+本身还没有画像，如实记录为无版本而不是借用另一路；画像运行层被回写为最近一次
+结论与路由版本。同一任务的两路视频源各写各的记录，互不干扰。
+
+执行器侧 4 项测试（`test_executor_observation.py`）用真实 `LocalAgentServices`
+与 numpy 帧验证：
+
+| 场景 | 期望 | 结果 |
+| --- | --- | --- |
+| 正常纹理帧 + 无人 | 每条记录 `not_detected`，缺岗事件照旧产生 | 通过 |
+| 检测到人 | 每条记录 `detected`，且记录下目标像素高度 | 通过 |
+| 全饱和白帧 | 每条记录 `insufficient` 且原因是过曝；报警逻辑不变 | 通过 |
+| 记录写入抛异常 | 监测仍 `completed`，事件照旧，不产生记录 | 通过 |
+
 ## 八、自查方法
 
 ```powershell
@@ -158,36 +220,43 @@ $env:PYTHONPATH="$PWD\backend;$PWD"
 # 1. 后端全量
 .\.venv\Scripts\python.exe -m pytest tests/backend -q
 
-# 2. 只跑本轮新增
+# 2. 只跑本轮相关
 .\.venv\Scripts\python.exe -m pytest tests/backend/test_semantic_profile.py `
-    tests/backend/test_observation_gate.py tests/backend/test_semantics_api.py -q
+    tests/backend/test_observation_gate.py tests/backend/test_semantics_api.py `
+    tests/backend/test_observation_window.py tests/backend/test_executor_observation.py -q
 
 # 3. 前端
 cd frontend; npm test; npm run build; cd ..
 
-# 4. 起应用后跑真实冒烟
+# 4. 起应用后跑真实冒烟（画像与三态接口）
 .\.venv\Scripts\python.exe deploy\scripts\semantics_smoke.py
 
-# 5. 看接口文档（浏览器）
+# 5. 验证执行器真的在写记录：起一个真实任务 ≥ 40 秒后查接口
+#    GET http://127.0.0.1:8000/api/v1/agents/<任务ID>/observations?limit=20
+
+# 6. 看接口文档（浏览器）
 #    http://127.0.0.1:8000/api/docs  → tags: semantics
+
+# 7. 界面：智能体管理 → 对应任务 → 查看画面与报警 → 有效观察
 ```
 
 ## 九、明确未做或做不了（写论文时必须如实标注）
 
-1. **执行器尚未接入**：观察记录目前由调用方提交，运行中的 YOLO 任务还不会自动产生记录。第 2 轮补上，且先以影子模式接入、不改报警。
+1. **执行器已接入，但只是"影子记录"**：观察结论目前**不影响**任何报警、事件或任务状态。这是刻意的：先用记录证明判定可靠，再谈用结论驱动路由。论文中不能写成"系统已按有效观察自动抑制误报"。
 2. **遮挡比例不可测**：单帧无法可靠判断遮挡，该指标保持"未测定"，只有外部传入（人工标注或未来的分割模型）时才参与门禁。论文中不能把遮挡当作已实现能力。
 3. **最小可辨目标尺度依赖检测框**：无目标时不可测，因此缺省只阻止"未检出"，不阻止"检测到"；若要用几何标定替代，需要额外的参考物标定流程，本轮未做。
 4. **设备报文推理服务**：本机没有真实设备平台，仅有规则（报文缺失不得作为连续未检出证据），未验收。
 5. **独立低频多模态探针**：未接入外部探针服务，用本地图像统计与设备状态替代，属弱探针。
-6. **组合求解、局部重路由、影子切换**：全部未实现。
-7. **多智能体强化学习追踪**：未实现，第 6 轮只做策略接口预留。
+6. **组合求解、局部重路由、影子切换**：全部未实现。当前"路由版本"只是 `local-r<修订号>` 的占位值，还没有真正的组合选择。
+7. **前端只加了观察面板**：七导航结构与页面骨架尚未按 M1–M9 重排，画像编辑界面也还没有。
+8. **多智能体强化学习追踪**：未实现，第 6 轮只做策略接口预留。
 
-另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的重排（FastAPI 的 schema 排序基于集合迭代顺序，新增任何 schema 都会整段重排）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
+另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 2 轮）计划
+## 十、下一轮（第 3 轮）计划
 
-1. 执行器在业务采样窗口结束时生成观察记录：影子模式，只写记录不改报警，失败降级为诊断。
-2. `metrics.py` 接入真实帧：过曝、亮度、清晰度在 ROI 掩膜上实测；帧率与最大间隔来自实际收到的帧。
-3. `RunDTO` 增 `profile_version`、`route_version`；运行状态页显示画像与观察就绪状态。
-4. 前端任务详情页新增"有效观察"面板：三态徽标、失效原因、门禁明细。
-5. 用一段真实录像做对照：人为遮挡/过曝时产生 `insufficient` 而不是 `not_detected`。
+1. `modules/routing/graph.py`：需求节点 + 串联/联合/替代/时序四类依赖边，以及属性→需求→模型反向索引。
+2. 能力表扩展：场景分桶质量、最低目标像素、亮度/模糊/遮挡容忍、所需帧率与时间窗，全部标注"已标定/未标定"。
+3. `modules/routing/solver.py`：可修复性过滤 + 式(2) 评分 + 预算约束贪心；用小型穷举做对照测试，验证贪心解不劣于穷举最优的设定比例。
+4. 求解结果作为真实 `route_version` 写入观察记录，替换现有 `local-r<修订号>` 占位。
+5. 验收：给定画质退化与目标尺度不足两种场景，求解器应选出不同组合，且评分与手算一致。
