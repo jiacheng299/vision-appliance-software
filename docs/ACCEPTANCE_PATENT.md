@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 6 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 8 个提交，全部只提交未 push。
 
 ## 一、总体路线与状态
 
@@ -11,7 +11,7 @@
 | 一 | 时效语义画像、画面指标、有效观察三态、持久化与接口 | F1/M3、F3/M8、式(1) | **已完成（第 1 轮）** |
 | 二 | 执行器影子接入，`RunDTO` 补版本字段，前端"有效观察"面板 | M2、M7、S6–S9 | **已完成（第 2 轮）** |
 | 三 | 需求图、能力表扩展、组合求解 | F2/M4–M6、式(2) | **已完成（第 3 轮）** |
-| 四 | 漂移判定、局部重路由、影子运行与原子切换 | F4/F5/M9、式(3) | 未开始 |
+| 四 | 漂移判定、局部重路由、式(3) 滞回与路由版本切换 | F4/F5/M9、式(3) | **已完成（第 4 轮）** |
 | 五 | 前端信息架构改造（画像/观察/路由） | M1–M9 | 未开始 |
 | 六 | 追踪策略接口（为多智能体强化学习预留）与验收汇总 | — | 未开始 |
 
@@ -25,6 +25,28 @@
 | `218d2ce` | `feat(semantics): 执行器影子接入有效观察，不改动报警行为`：17 个文件，+715 |
 | `25d386f` | `docs: 更新验收记录至第 2 轮（执行器影子接入）` |
 | `5ce3726` | `feat(routing): 需求图、能力表与式(2) 组合求解`：13 个文件 |
+| `9bf20a0` | `docs: 更新验收记录至第 3 轮（需求图与组合求解）` |
+| `cdd9137` | `feat(routing): 漂移判定、局部重路由、式(3) 滞回与路由版本切换`：19 个文件，+2843 / −37 |
+
+### 第 4 轮新增/修改文件
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/routing/drift.py` | 新增 | 漂移判定：只有游标之后的新证据 + 标签变化才算确认；过期只报 expired |
+| `backend/app/modules/routing/hysteresis.py` | 新增 | 式(3) 状态机：进入/取消阈值、最短驻留、有效窗口计数、硬失效旁路 |
+| `backend/app/modules/routing/models.py` | 新增 | `route_states`（当前组合与候选）与 `route_decisions`（决策审计） |
+| `backend/app/modules/routing/state.py` | 新增 | 把漂移、局部重路由、评价与滞回接成一条链，并落库审计 |
+| `backend/app/modules/routing/solver.py` | 修改 | 新增 `solve_local`：只重路由受影响子图，必要时退化为全图重算 |
+| `backend/app/modules/routing/routes.py` | 修改 | 路由状态、决策审计、提议与取消四个接口 |
+| `backend/app/modules/routing/schemas.py` | 修改 | `RouteStateView`、`RouteDecisionView`、`DriftView`、`ProposeInput`、`CancelInput` |
+| `backend/alembic/versions/0010_route_state.py` | 新增 | 纯新增迁移，回滚只删两张新表 |
+| `backend/app/modules/local_execution/service.py` | 修改 | 运行开始读路由版本、窗口按该版本盖章、每窗口喂状态机一步、失败隔离 |
+| `frontend/src/modules/agents/RoutePanel.vue` | 修改 | 路由状态区块：版本/成员/候选/窗口进度/漂移/受影响子图 + 提议与取消按钮 |
+| `frontend/src/modules/agents/api.ts` | 修改 | 路由状态、决策、提议、取消四个调用 |
+| `tests/backend/test_drift_hysteresis.py` | 新增 | 漂移与滞回 19 项测试 |
+| `tests/backend/test_routing_state.py` | 新增 | 状态机 12 项测试 |
+| `frontend/tests/route-panel.test.ts` | 修改 | 新增路由状态与提议 2 项测试 |
+| `contracts/openapi.json`、`generated.ts` | 重新生成 | 同步新接口 |
 
 ### 第 3 轮新增/修改文件
 
@@ -285,12 +307,76 @@ $ cd frontend && npm run build
 系统不是"随便选一个"，而是明确报告"没有可行组合"并列出每条原因——这正是交底书
 F3 与 M6 想要的行为：宁可不选，也不假装能看。
 
+### 第 4 轮（漂移与切换）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+461 passed in 199.73s        # 第 3 轮 431 项 + 本轮 30 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  34 passed (34)
+     Tests  166 passed (166)   # 第 3 轮 164 项 + 本轮 2 项
+
+$ cd frontend && npm run build
+✓ built in 9.72s
+```
+
+本轮的关键断言（全部在单元测试里，可逐条复核）：
+
+| 断言 | 测试 |
+| --- | --- |
+| 只有游标之后的新证据且标签变化才算确认漂移 | `test_new_evidence_with_a_different_label_confirms_drift` |
+| 旧证据不产生新闻 | `test_evidence_older_than_the_cursor_carries_no_news` |
+| 过期只报 expired，理由是"补充抽帧" | `test_expiry_is_reported_as_needing_new_frames_not_as_a_reversed_scene` |
+| 首次观测是基线不是漂移 | `test_first_observation_is_a_baseline_not_a_drift` |
+| 进入候选需同时满足增益与最短驻留 | `test_entry_needs_both_the_gain_threshold_and_the_dwell_time` |
+| 增益回落取消候选 | `test_a_falling_gain_cancels_the_candidate` |
+| 切换需累计规定数量的有效窗口 | `test_switching_requires_the_configured_number_of_valid_windows` |
+| 无效窗口不计数 | `test_an_insufficient_window_does_not_count_towards_the_switch` |
+| 硬失效绕过收益等待但仍等一个窗口 | `test_a_hard_failure_bypasses_the_gain_wait_but_still_waits_one_window` |
+| 光照漂移只重路由检测节点 | `test_lighting_drift_only_reroutes_the_detector` |
+| 遮挡漂移扩到检测+跟踪但保留区域规则 | `test_occlusion_drift_widens_to_detection_and_tracking_but_keeps_the_zone_rule` |
+| 单需求图退化为全图重算 | `test_a_single_requirement_graph_escalates_to_a_full_solve` |
+| 没有可行替代时保持原样并说明 | `test_a_hard_failure_without_an_alternative_stays_put_and_says_so` |
+
+真实应用验证（真实画像 + 真实观察记录，清空路由表后重放）：
+
+```
+--- 1) 建立基线 ---
+propose: 版本=route-v1 模式=stable 当前=['yolo11n-person'] 候选=None ΔJ=0.0
+   漂移 lighting: None -> daylight (baseline)
+
+--- 2) 同一场景再次提议（无漂移） ---
+propose: 版本=route-v1 模式=stable 当前=['yolo11n-person'] ΔJ=0.0
+
+--- 3) 新帧确认眩光 → 没有可行替代 ---
+propose: 版本=route-v1 模式=stable ΔJ=None
+   漂移 lighting: daylight -> strong_glare (confirmed)
+   说明：无法局部修复，已退化为全图重算：漂移覆盖全部需求
+
+--- 4) 恢复常规场景 ---
+propose: 版本=route-v1 模式=stable ΔJ=0.0
+   漂移 lighting: strong_glare -> daylight (confirmed)
+
+--- 5) 决策审计 ---
+   [drift   ] hold    当前组合仍处于最短驻留时间（0/120 秒）
+   [blocked ] hold    没有可行组合：当前组合失效时保持原状，观察记录输出观察不足
+   [refresh ] hold    当前组合仍处于最短驻留时间（0/120 秒）
+   [baseline] hold    当前组合仍处于最短驻留时间（0/120 秒）
+```
+
+要点：眩光被**确认为漂移**，但因为没有任何已安装的替代能力，系统记录 `blocked`
+并保持原组合——不制造虚假切换；恢复后确实记了一条 `drift`，却因最短驻留时间
+未到而 `hold`，这正是式(3) 的作用：不该动的就不动。
+
 ## 八、自查方法
 
 ```powershell
 cd C:\Users\陈宇鑫\Desktop\vision-appliance-software
 $env:PYTHONPATH="$PWD\backend;$PWD"
 
+# 1. 后端全量
+.\.venv\Scripts\python.exe -m pytest tests/backend -q
 # 1. 后端全量
 .\.venv\Scripts\python.exe -m pytest tests/backend -q
 
@@ -313,34 +399,42 @@ cd frontend; npm test; npm run build; cd ..
 
 # 7. 只跑本轮新增的路由测试
 .\.venv\Scripts\python.exe -m pytest tests/backend/test_requirement_graph.py `
-    tests/backend/test_route_solver.py tests/backend/test_routing_api.py -q
+    tests/backend/test_route_solver.py tests/backend/test_routing_api.py `
+    tests/backend/test_drift_hysteresis.py tests/backend/test_routing_state.py -q
 
-# 8. 看接口文档（浏览器）
+# 8. 看路由状态与决策审计（换 agent id）
+#    GET  http://127.0.0.1:8000/api/v1/agents/<任务ID>/routing
+#    GET  http://127.0.0.1:8000/api/v1/agents/<任务ID>/routing/decisions
+#    POST http://127.0.0.1:8000/api/v1/agents/<任务ID>/routing/propose
+#         {"channel_id":"...","source_id":"...","rule":"absence"}
+
+# 9. 看接口文档（浏览器）
 #    http://127.0.0.1:8000/api/docs  → tags: semantics / routing
 
-# 9. 界面：智能体管理 → 对应任务 → 查看画面与报警 → 有效观察 / 路由候选
+# 10. 界面：智能体管理 → 对应任务 → 查看画面与报警 → 有效观察 / 路由候选
 ```
 
 ## 九、明确未做或做不了（写论文时必须如实标注）
 
-1. **执行器已接入，但只是"影子记录"**：观察结论目前**不影响**任何报警、事件或任务状态。这是刻意的：先用记录证明判定可靠，再谈用结论驱动路由。论文中不能写成"系统已按有效观察自动抑制误报"。
-2. **组合求解只做评估，不驱动运行**：路由候选可以由人工查看，但系统还不会自动按评估结果切换模型；观察记录里的 `route_version` 仍是 `local-r<修订号>` 占位值。式(3) 滞回、影子运行与原子切换属于第 4 轮。
+1. **执行器已接入，但观察结论仍然"只记不用"**：观察结论目前**不影响**任何报警、事件或任务状态。这是刻意的：先用记录证明判定可靠，再谈用结论改变业务判定。论文中不能写成"系统已按有效观察自动抑制误报"。
+2. **路由版本会切换，但真正加载的模型不会变**：本轮实现了当前组合、候选验证、式(3) 滞回与 `route_version` 递增，执行器也会按当前版本给观察窗口盖章；但**执行器仍只加载任务配置里那一项能力**，不会因为路由切换而去预热或切换另一份 ONNX 会话。所谓"影子运行"目前是**对候选组合做重复评估**，不是让候选真的并行推理。这是与交底书 S14 最实质的差距，论文里必须明确写出。
 3. **质量表是示例值**：除跟踪器与区域规则外，所有能力质量都标注 `calibrated=false`，是保守示例值而非分桶验证结果。论文中必须声明这张表不是准确率，实验章节需要单独做分桶标定。
-4. **遮挡比例不可测**：单帧无法可靠判断遮挡，该指标保持"未测定"，只有外部传入（人工标注或未来的分割模型）时才参与门禁。论文中不能把遮挡当作已实现能力。
-5. **最小可辨目标尺度依赖检测框**：无目标时不可测，因此缺省只阻止"未检出"，不阻止"检测到"；若要用几何标定替代，需要额外的参考物标定流程，本轮未做。
-6. **设备报文推理服务**：本机没有真实设备平台，仅有规则（报文缺失不得作为连续未检出证据），未验收。
-7. **独立低频多模态探针**：未接入外部探针服务，用本地图像统计与设备状态替代，属弱探针。
-8. **预处理器只建模了"分桶修复"**：去眩光与裁剪在表里声明了修复关系与不可恢复饱和上限，但既未安装也未标定；裁剪带来的等效像素增益没有建模（需要真实标定才能写），因此目标尺度不足只能靠换模型解决。
-9. **前端只是加了两个面板**：七导航结构与页面骨架尚未按 M1–M9 重排，画像编辑界面也还没有。
-10. **多智能体强化学习追踪**：未实现，第 6 轮只做策略接口预留。
+4. **切换路径无法在实机重现**：本机只安装了 YOLO11n 一项检测能力，因此真实环境里只能观察到基线、漂移、阻塞与"未达驻留"四种结果；`switch` 分支由单元测试用"另一项已安装能力"的替代表覆盖，需要在论文中注明是构造场景。
+5. **遮挡比例不可测**：单帧无法可靠判断遮挡，该指标保持"未测定"，只有外部传入（人工标注或未来的分割模型）时才参与门禁。论文中不能把遮挡当作已实现能力。
+6. **最小可辨目标尺度依赖检测框**：无目标时不可测，因此缺省只阻止"未检出"，不阻止"检测到"；若要用几何标定替代，需要额外的参考物标定流程，本轮未做。
+7. **设备报文推理服务**：本机没有真实设备平台，仅有规则（报文缺失不得作为连续未检出证据），未验收。
+8. **独立低频多模态探针**：未接入外部探针服务，用本地图像统计与设备状态替代，属弱探针。
+9. **预处理器只建模了"分桶修复"**：去眩光与裁剪在表里声明了修复关系与不可恢复饱和上限，但既未安装也未标定；裁剪带来的等效像素增益没有建模（需要真实标定才能写），因此目标尺度不足只能靠换模型解决。
+10. **漂移只看属性层**：设备事件（PTZ 转动、断电、断流）目前只通过 `source_identity` 变化间接体现，没有进入 `drift.py`；视场版本切换也还没有自动触发。
+11. **前端只是加了三个面板**：七导航结构与页面骨架尚未按 M1–M9 重排，画像编辑界面也还没有。
+12. **多智能体强化学习追踪**：未实现，第 6 轮只做策略接口预留。
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 4 轮）计划
+## 十、下一轮（第 5 轮）计划
 
-1. `modules/routing/drift.py`：属性漂移判定——只有新帧证据确认的属性变化才算漂移，仅时间衰减转"未知"时不认定场景反向变化。
-2. 局部重路由：沿属性→需求→模型反向索引定位受影响子图，固定未受影响部分，只求解替换子图。
-3. 式(3) 滞回：进入/取消阈值 `ε_in`、`ε_out`，最短驻留时间，连续有效窗口计数 `L`。
-4. 影子运行与原子切换：候选组合预热、取得 L 个有效窗口后切换路由版本；切换前后结果按版本隔离，失败保持旧版本或进入观察不足。
-5. 把真实求解结果写进观察记录的 `route_version`，替换 `local-r<修订号>` 占位。
-6. 验收：人为改属性后验证只重路由受影响子图；切换期间不出现旧结果冒充新组合。
+1. 前端信息架构改造：把"画像 / 观察 / 路由"提升为任务详情的一级标签，并新增视频源画像编辑面板（固有层 + 动态属性增删改、时效可视化）。
+2. 运行状态页展示画像版本、观察就绪度与路由版本统计，未就绪项如实显示。
+3. 观察记录与路由决策互相跳转：从一条 `insufficient` 反查当时的组合与漂移。
+4. 把 `route_version` 与 `profle_version` 的变更做成时间线视图，便于答辩演示"一次漂移如何改变路由"。
+5. 若时间允许，补一层"候选组合真实预热"的可行性验证（同进程加载第二个 ONNX 会话的资源占用实测），为第 6 轮的 MARL 与模型切换打基础。
