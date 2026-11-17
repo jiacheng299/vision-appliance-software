@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 26 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 28 个提交，全部只提交未 push。
 
 > 需要一页纸看"交底书哪一条落在哪段代码"时，直接看 [交底书对照表](PATENT_MAPPING.md)。
 
@@ -15,7 +15,7 @@
 | 三 | 需求图、能力表扩展、组合求解 | F2/M4–M6、式(2) | **已完成（第 3 轮）** |
 | 四 | 漂移判定、局部重路由、式(3) 滞回与路由版本切换 | F4/F5/M9、式(3) | **已完成（第 4 轮）** |
 | 五 | 前端信息架构改造 | M1–M9 | **已完成（第 5、6、9、11、12、13 轮）**：侧栏按「采集 → 运行与观察 → 结果 → 管理与诊断」四组重排，任务详情四个页签、画像编辑、观察↔路由互跳、画像与路由合并时间线、门禁逐项明细全部上线 |
-| 六 | 追踪策略接口（为多智能体强化学习预留） | — | **接口与界面展示完成（第 5–6 轮）**；MARL 本体不在本仓库 |
+| 六 | 追踪策略接口（为多智能体强化学习预留） | — | **接口、界面展示与外部装载位完成（第 5–6、14 轮）**；MARL 本体与权重不在本仓库，接入方式见 [MARL 追踪接入契约](MARL_TRACKING_CONTRACT.md) |
 
 ## 二、提交记录
 
@@ -47,6 +47,20 @@
 | `ee74996` | `feat(semantics,ui): 单条观察记录接口与门禁逐项明细`：7 个文件，+431 / −5 |
 | `e3d63b8` | `docs: 更新验收记录至第 12 轮（门禁逐项明细）` |
 | `41e6e85` | `feat(ui): 左侧导航按交底书链路分组`：4 个文件，+89 / −9 |
+| `7109b8c` | `docs: 更新验收记录至第 13 轮（侧栏按链路分组）` |
+| `15dcd30` | `feat(tracking): 外部策略装载位与 MARL 接入契约文档`：7 个文件，+292 / −4 |
+
+### 第 14 轮改动
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/tracking/registry.py` | 修改 | `create()` 支持 `module:attribute` 外部装载；协议校验与四种失败错误码 |
+| `backend/app/shared/config.py` | 修改 | 新增 `tracker_policy`（默认 `heuristic-iou`） |
+| `backend/app/modules/local_execution/intrusion.py` | 修改 | `IntrusionRule` 增加 `policy_name`，默认值不变 |
+| `backend/app/modules/local_execution/service.py` | 修改 | 把配置里的策略名传给入侵规则 |
+| `docs/MARL_TRACKING_CONTRACT.md` | 新增 | 九节接入契约（边界、契约、示例、装载、训练建议、指标、验收、衔接、红线） |
+| `.env.example` | 修改 | 增加 `VISION_TRACKER_POLICY` |
+| `tests/backend/test_tracker_plugin.py` | 新增 | 7 项装载与协议校验测试 |
 
 ### 第 13 轮改动
 
@@ -780,6 +794,33 @@ $ cd frontend && npm run build
 **路径一律未改**，`permittedRoutes` 的正则一字未动，既有链接与书签继续可用；
 `navigation` 仍以扁平列表导出（由分组 flatMap 得到），因此既有测试无需改动。
 
+### 第 14 轮（外部策略装载位与 MARL 契约）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+498 passed in 264.15s        # 第 13 轮 491 项 + 本轮 7 项，既有追踪/入侵用例零回归
+```
+
+真实进程验证（临时模块放在 PYTHONPATH 上，模拟"训练工程产出的策略包"）：
+
+```
+$ .venv\Scripts\python.exe -c "from app.modules.tracking import registry; \
+    p = registry.create('demo_policy:Demo'); print('loaded:', p.name, p.describe())"
+loaded: demo-external {'name': 'demo-external'}
+```
+
+装载失败的情形都给出明确错误码，**不会静默回退到启发式**：
+
+| 情形 | 错误码 | HTTP |
+| --- | --- | --- |
+| 模块无法导入 / 缺属性 / 初始化抛错 | `tracker_policy_unavailable` | 503 |
+| 对象不满足 `TrackerPolicy` 协议 | `tracker_policy_incompatible` | 503 |
+| 注册表里的未安装槽位 `marl-association` | `tracker_policy_not_installed` | 503 |
+| 完全未知的名字 | `tracker_policy_unknown` | 404 |
+
+接入方式只有一行配置：`VISION_TRACKER_POLICY=module:attribute`；回滚同理
+（改回 `heuristic-iou` 即可）。完整约定见 [MARL 追踪接入契约](MARL_TRACKING_CONTRACT.md)。
+
 ## 八、自查方法
 
 ```powershell
@@ -842,9 +883,9 @@ cd frontend; npm test; npm run build; cd ..
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 14 轮）计划
+## 十、下一轮（第 15 轮）计划
 
-1. 侧栏"分组"只到文字层面：还可以让**当前所在分组**高亮，并在智能体管理页顶部显示"这条任务的可观察性摘要"（画像版本、最近结论分布、当前路由版本），把入口与状态连起来。
+1. 把 `GET /tracking/policies` 与实际装载状态打通：外部策略装载后，接口应回显"当前策略 + 是否外部 + 模块路径"，消除第 14 轮留下的展示缺口。
 2. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示（延续"不伪造绿色"的约定）。
 3. 观察记录详情页：点开一条 `insufficient` 可看到当时的组合成员、门禁逐项数值与当时的漂移，而不只是原因文本。
 4. 把"画像为空"的常见路径补上自动初始化：首次运行时按设备字段与首帧图像统计写入固有层与一项动态属性（仍需人工确认后才用于路由）。
