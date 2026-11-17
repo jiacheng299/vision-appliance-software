@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 8 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 10 个提交，全部只提交未 push。
 
 ## 一、总体路线与状态
 
@@ -12,8 +12,8 @@
 | 二 | 执行器影子接入，`RunDTO` 补版本字段，前端"有效观察"面板 | M2、M7、S6–S9 | **已完成（第 2 轮）** |
 | 三 | 需求图、能力表扩展、组合求解 | F2/M4–M6、式(2) | **已完成（第 3 轮）** |
 | 四 | 漂移判定、局部重路由、式(3) 滞回与路由版本切换 | F4/F5/M9、式(3) | **已完成（第 4 轮）** |
-| 五 | 前端信息架构改造（画像/观察/路由） | M1–M9 | 未开始 |
-| 六 | 追踪策略接口（为多智能体强化学习预留）与验收汇总 | — | 未开始 |
+| 五 | 前端信息架构改造 | M1–M9 | **部分完成（第 5 轮）**：画像编辑面板已上线；导航重排、版本时间线、观察↔路由互跳未做 |
+| 六 | 追踪策略接口（为多智能体强化学习预留） | — | **接口已完成（第 5 轮）**；MARL 本体不在本仓库 |
 
 ## 二、提交记录
 
@@ -27,6 +27,26 @@
 | `5ce3726` | `feat(routing): 需求图、能力表与式(2) 组合求解`：13 个文件 |
 | `9bf20a0` | `docs: 更新验收记录至第 3 轮（需求图与组合求解）` |
 | `cdd9137` | `feat(routing): 漂移判定、局部重路由、式(3) 滞回与路由版本切换`：19 个文件，+2843 / −37 |
+| `1d4c4c7` | `docs: 更新验收记录至第 4 轮（漂移与切换）` |
+| `5f04d21` | `feat(tracking): 抽出可替换的追踪策略接口，并预留多智能体强化学习位置`：21 个文件 |
+
+### 第 5 轮新增/修改文件
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/tracking/policy.py` | 新增 | 观测/动作/轨迹契约与 `TrackerPolicy` 协议 |
+| `backend/app/modules/tracking/runtime.py` | 新增 | `TrackerRuntime`：轨迹状态归框架，策略只提交 `Decision` |
+| `backend/app/modules/tracking/heuristic.py` | 新增 | 启发式关联策略（原规则内实现的搬出，作为学习型基线） |
+| `backend/app/modules/tracking/registry.py` | 新增 | 策略注册表：已安装/未安装如实标注，未安装不可创建 |
+| `backend/app/modules/tracking/routes.py` | 新增 | `GET /tracking/policies` |
+| `backend/app/modules/local_execution/intrusion.py` | 修改 | 规则改用 `TrackerRuntime` 适配器，状态机一行未改 |
+| `backend/app/main.py` | 修改 | 注册 tracking 路由 |
+| `frontend/src/modules/sources/profileApi.ts` | 新增 | 画像读写封装 |
+| `frontend/src/modules/sources/ProfilePanel.vue` | 新增 | 固有层编辑 + 动态属性表格 + 写入/删除 |
+| `frontend/src/modules/sources/SourcesPage.vue` | 修改 | 视频源详情下方挂载画像面板 |
+| `tests/backend/test_tracking_policy.py` | 新增 | 策略契约 8 项（含 120 步随机序列等价性） |
+| `frontend/tests/profile-panel.test.ts` | 新增 | 画像面板 5 项 |
+| `contracts/openapi.json`、`generated.ts` | 重新生成 | 同步 `/tracking/policies` |
 
 ### 第 4 轮新增/修改文件
 
@@ -369,6 +389,47 @@ propose: 版本=route-v1 模式=stable ΔJ=0.0
 并保持原组合——不制造虚假切换；恢复后确实记了一条 `drift`，却因最短驻留时间
 未到而 `hold`，这正是式(3) 的作用：不该动的就不动。
 
+### 第 5 轮（追踪接口与画像面板）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+469 passed in 198.17s        # 第 4 轮 461 项 + 本轮 8 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  35 passed (35)
+     Tests  171 passed (171)   # 第 4 轮 166 项 + 本轮 5 项
+
+$ cd frontend && npm run build
+✓ built in 9.58s
+```
+
+本轮最关键的一条证据：**把追踪器换成策略之后，规则行为零变化**。
+`test_the_policy_runtime_reproduces_the_previous_tracker_exactly` 在一个
+120 步随机序列上（随机帧间隔 0.2–6 秒、随机 0–3 个目标）逐帧比对旧实现与
+新运行时的输出（轨迹 id 与框），完全一致；既有 41 项入侵与执行器用例也全绿。
+
+其余断言：
+
+| 断言 | 测试 |
+| --- | --- |
+| 启发式策略满足 `TrackerPolicy` 协议 | `test_the_heuristic_policy_is_a_member_of_the_protocol` |
+| 未安装的 MARL 策略无法被创建（503） | `test_enrolment_of_a_learned_policy_is_refused_while_it_is_not_installed` |
+| 注册表如实列出"已声明未安装"及其前提 | `test_the_registry_states_plainly_what_is_missing` |
+| 非法检测在入口处被丢弃 | `test_the_observation_contract_drops_invalid_detections_at_the_boundary` |
+| 策略提交的非法关联被框架忽略 | `test_a_policy_only_proposes_and_the_framework_owns_the_tracks` |
+| 策略涂改视图不会污染框架状态 | `test_a_policy_cannot_mutate_its_way_into_the_track_table` |
+
+真实应用验证：
+
+```
+GET /api/v1/tracking/policies
+active=heuristic-iou
+name              kind       installed  calibrated
+heuristic-iou     heuristic     True       True
+marl-association  learned       False      False
+notice: 关联策略可替换；多智能体强化学习策略尚未安装，本机仍使用固定机位 IoU/中心距关联。
+```
+
 ## 八、自查方法
 
 ```powershell
@@ -426,15 +487,15 @@ cd frontend; npm test; npm run build; cd ..
 8. **独立低频多模态探针**：未接入外部探针服务，用本地图像统计与设备状态替代，属弱探针。
 9. **预处理器只建模了"分桶修复"**：去眩光与裁剪在表里声明了修复关系与不可恢复饱和上限，但既未安装也未标定；裁剪带来的等效像素增益没有建模（需要真实标定才能写），因此目标尺度不足只能靠换模型解决。
 10. **漂移只看属性层**：设备事件（PTZ 转动、断电、断流）目前只通过 `source_identity` 变化间接体现，没有进入 `drift.py`；视场版本切换也还没有自动触发。
-11. **前端只是加了三个面板**：七导航结构与页面骨架尚未按 M1–M9 重排，画像编辑界面也还没有。
-12. **多智能体强化学习追踪**：未实现，第 6 轮只做策略接口预留。
+11. **前端是"部分完成"**：画像编辑面板已经挂在视频源详情下，"有效观察"与"路由候选"是任务详情里的两个按钮；但七导航结构、页面骨架与版本时间线还没有按 M1–M9 重排。
+12. **多智能体强化学习追踪只有接口，没有能力**：`modules/tracking` 固定了观测（归一化检测框 + ROI + 可选画面指标）、动作（关联/入场/丢失）与轨迹状态归属，`marl-association` 在注册表里标记 `installed=False`、`calibrated=False`；**本仓库不含训练循环、仿真环境与策略权重**，创建它会直接 503。论文里只能说"预留了可插拔的策略接口"，不能说"已实现 MARL 追踪"。
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 5 轮）计划
+## 十、下一轮（第 6 轮）计划
 
-1. 前端信息架构改造：把"画像 / 观察 / 路由"提升为任务详情的一级标签，并新增视频源画像编辑面板（固有层 + 动态属性增删改、时效可视化）。
-2. 运行状态页展示画像版本、观察就绪度与路由版本统计，未就绪项如实显示。
-3. 观察记录与路由决策互相跳转：从一条 `insufficient` 反查当时的组合与漂移。
-4. 把 `route_version` 与 `profle_version` 的变更做成时间线视图，便于答辩演示"一次漂移如何改变路由"。
-5. 若时间允许，补一层"候选组合真实预热"的可行性验证（同进程加载第二个 ONNX 会话的资源占用实测），为第 6 轮的 MARL 与模型切换打基础。
+1. 前端信息架构收尾：任务详情改为"画面 / 观察 / 路由 / 事件"标签页，版本时间线把 `profile_version` 与 `route_version` 的变更画在一条轴上。
+2. 打通观察与路由的互相跳转：从一条 `insufficient` 记录直接看到当时的组合、漂移与门禁明细。
+3. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示。
+4. 追踪策略的可视化：在路由面板旁显示当前策略与其局限，为将来接入 MARL 留出展示位。
+5. 汇总验收：出一份面向答辩的一页式对照表（交底书 M1–M9 ↔ 代码位置 ↔ 测试 ↔ 未实现项）。
