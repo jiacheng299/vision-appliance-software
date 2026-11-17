@@ -127,6 +127,26 @@ class ProposeInput(DTO):
     duration_seconds: float | None = Field(default=None, gt=0, le=86400, allow_inf_nan=False)
 
 
+class PreheatView(DTO):
+    """影子运行要付出的资源：两个会话并存的实测代价。"""
+    available: bool
+    reason: str | None = None
+    model_path: str | None = None
+    frames: int
+    load_ms: float | None = None
+    baseline_ms: float | None = None
+    shadow_ms: float | None = None
+    latency_delta_ms: float | None = None
+    rss_before_mb: float | None = None
+    rss_first_mb: float | None = None
+    rss_after_mb: float | None = None
+    rss_delta_mb: float | None = None
+    rss_total_mb: float | None = None
+    notes: list[str] = Field(default_factory=list)
+    budget: dict[str, Any] = Field(default_factory=dict)
+    budgets: dict[str, float] = Field(default_factory=dict)
+
+
 class CancelInput(DTO):
     channel_id: str = Field(min_length=1, max_length=80)
     source_id: str = Field(min_length=1, max_length=80)

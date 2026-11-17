@@ -1584,6 +1584,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/routing/preheat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preheat
+         * @description Measure what a second inference session costs on this machine.
+         */
+        post: operations["preheat_api_v1_routing_preheat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tracking/policies": {
         parameters: {
             query?: never;
@@ -3177,6 +3197,48 @@ export interface components {
             requires?: string[];
             /** Limitations */
             limitations?: string[];
+        };
+        /**
+         * PreheatView
+         * @description 影子运行要付出的资源：两个会话并存的实测代价。
+         */
+        PreheatView: {
+            /** Available */
+            available: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Model Path */
+            model_path?: string | null;
+            /** Frames */
+            frames: number;
+            /** Load Ms */
+            load_ms?: number | null;
+            /** Baseline Ms */
+            baseline_ms?: number | null;
+            /** Shadow Ms */
+            shadow_ms?: number | null;
+            /** Latency Delta Ms */
+            latency_delta_ms?: number | null;
+            /** Rss Before Mb */
+            rss_before_mb?: number | null;
+            /** Rss First Mb */
+            rss_first_mb?: number | null;
+            /** Rss After Mb */
+            rss_after_mb?: number | null;
+            /** Rss Delta Mb */
+            rss_delta_mb?: number | null;
+            /** Rss Total Mb */
+            rss_total_mb?: number | null;
+            /** Notes */
+            notes?: string[];
+            /** Budget */
+            budget?: {
+                [key: string]: unknown;
+            };
+            /** Budgets */
+            budgets?: {
+                [key: string]: number;
+            };
         };
         /** PreviewDTO */
         PreviewDTO: {
@@ -16434,6 +16496,118 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RouteStateView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    preheat_api_v1_routing_preheat_post: {
+        parameters: {
+            query?: {
+                frames?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreheatView"];
                 };
             };
             /** @description Bad Request */

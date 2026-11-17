@@ -1,11 +1,11 @@
 """Routing state, decisions and the observation-driven switch."""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from ...shared.db import get_db
 from ..agents.workspace import WORKSPACE_ACTOR_ID
-from . import service, state
-from .schemas import (CancelInput, ProposeInput, RouteDecisionView, RouteStateView,
-                      RouteView)
+from . import preheat as preheat_module, service, solver, state
+from .schemas import (CancelInput, PreheatView, ProposeInput, RouteDecisionView,
+                      RouteStateView, RouteView)
 
 router = APIRouter(tags=['routing'])
 
@@ -48,3 +48,14 @@ def propose(agent_id: str, body: ProposeInput, db=Depends(get_db)):
 def cancel(agent_id: str, body: CancelInput, db=Depends(get_db)):
     return state.cancel_candidate(db, agent_id, WORKSPACE_ACTOR_ID,
                                  channel_id=body.channel_id, source_id=body.source_id)
+
+
+@router.post('/routing/preheat', response_model=PreheatView)
+def preheat(request: Request, frames: int = Query(5, ge=1, le=50), db=Depends(get_db)):
+    """Measure what a second inference session costs on this machine."""
+    path = request.app.state.config.var_root / 'models' / 'yolo11n' / 'yolo11n.onnx'
+    measurement = preheat_module.measure(path, frames=frames)
+    budgets = solver.Budgets()
+    check = preheat_module.budget_check(measurement, budgets_cpu_ms=budgets.cpu_ms,
+                                        budgets_memory_mb=budgets.memory_mb)
+    return PreheatView(**measurement.as_dict(), budget=check, budgets=budgets.as_dict())
