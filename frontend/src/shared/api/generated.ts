@@ -1499,6 +1499,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sources/{source_id}/routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Routes */
+        get: operations["read_routes_api_v1_sources__source_id__routes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1947,6 +1964,39 @@ export interface components {
             /** Template Version */
             template_version: string;
         };
+        /** CapabilityView */
+        CapabilityView: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Kind */
+            kind: string;
+            /** Target */
+            target: string;
+            /** Installed */
+            installed: boolean;
+            /** Calibrated */
+            calibrated: boolean;
+            /** Provides */
+            provides: string[];
+            /** Quality */
+            quality: {
+                [key: string]: number;
+            };
+            /** Bucket Quality */
+            bucket_quality: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Cpu Ms */
+            cpu_ms: number;
+            /** Memory Mb */
+            memory_mb: number;
+            /** Limitations */
+            limitations: string[];
+        };
         /** ChannelConfig */
         ChannelConfig: {
             /** Channel Id */
@@ -2168,6 +2218,33 @@ export interface components {
         /** EvaluateInput */
         EvaluateInput: {
             config: components["schemas"]["RevisionConfig"];
+        };
+        /** EvaluationView */
+        EvaluationView: {
+            /** Combination Id */
+            combination_id: string;
+            /** Label */
+            label: string;
+            /** Members */
+            members: string[];
+            /** Score */
+            score?: number | null;
+            /** Coverage */
+            coverage: number;
+            /** Dependency */
+            dependency: number;
+            /** Conflict */
+            conflict: number;
+            /** Cost */
+            cost: number;
+            /** Switch */
+            switch: number;
+            /** Feasible */
+            feasible: boolean;
+            /** Reasons */
+            reasons: string[];
+            /** Bucket */
+            bucket: string;
         };
         /** EventDTO */
         EventDTO: {
@@ -3096,6 +3173,39 @@ export interface components {
             /** Row Version */
             row_version: number;
         };
+        /** RouteView */
+        RouteView: {
+            /** Source Id */
+            source_id: string;
+            /** Rule */
+            rule: string;
+            /** Profile Version */
+            profile_version: number;
+            scenario: components["schemas"]["ScenarioView"];
+            /** Graph */
+            graph: {
+                [key: string]: unknown;
+            };
+            /** Capabilities */
+            capabilities: components["schemas"]["CapabilityView"][];
+            chosen?: components["schemas"]["EvaluationView"] | null;
+            /** Ranked */
+            ranked: components["schemas"]["EvaluationView"][];
+            /** Blocked */
+            blocked: components["schemas"]["EvaluationView"][];
+            /** Weights */
+            weights: {
+                [key: string]: number;
+            };
+            /** Budgets */
+            budgets: {
+                [key: string]: number;
+            };
+            /** Min Quality */
+            min_quality: number;
+            /** Notices */
+            notices: string[];
+        };
         /** RunDTO */
         RunDTO: {
             /** Id */
@@ -3265,6 +3375,21 @@ export interface components {
             memory_percent: number;
             /** Gpu Percent */
             gpu_percent: number | null;
+        };
+        /** ScenarioView */
+        ScenarioView: {
+            /** Bucket */
+            bucket: string;
+            /** Saturated Ratio */
+            saturated_ratio?: number | null;
+            /** Target Px */
+            target_px?: number | null;
+            /** Brightness */
+            brightness?: number | null;
+            /** Blur */
+            blur?: number | null;
+            /** Reasons */
+            reasons?: string[];
         };
         /** SelectDeployment */
         SelectDeployment: {
@@ -15516,6 +15641,122 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ObservationView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDTO"];
+                };
+            };
+        };
+    };
+    read_routes_api_v1_sources__source_id__routes_get: {
+        parameters: {
+            query?: {
+                rule?: string;
+                duration_seconds?: number | null;
+                min_quality?: number | null;
+            };
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RouteView"];
                 };
             };
             /** @description Bad Request */

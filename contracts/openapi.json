@@ -14811,6 +14811,185 @@
           }
         }
       }
+    },
+    "/api/v1/sources/{source_id}/routes": {
+      "get": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Read Routes",
+        "operationId": "read_routes_api_v1_sources__source_id__routes_get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          },
+          {
+            "name": "rule",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(absence|intrusion)$",
+              "default": "absence",
+              "title": "Rule"
+            }
+          },
+          {
+            "name": "duration_seconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 86400,
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Duration Seconds"
+            }
+          },
+          {
+            "name": "min_quality",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 1,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Quality"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteView"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -16109,6 +16288,90 @@
         ],
         "title": "CapabilityRef"
       },
+      "CapabilityView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "installed": {
+            "type": "boolean",
+            "title": "Installed"
+          },
+          "calibrated": {
+            "type": "boolean",
+            "title": "Calibrated"
+          },
+          "provides": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Provides"
+          },
+          "quality": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Quality"
+          },
+          "bucket_quality": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Bucket Quality"
+          },
+          "cpu_ms": {
+            "type": "number",
+            "title": "Cpu Ms"
+          },
+          "memory_mb": {
+            "type": "number",
+            "title": "Memory Mb"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "target",
+          "installed",
+          "calibrated",
+          "provides",
+          "quality",
+          "bucket_quality",
+          "cpu_ms",
+          "memory_mb",
+          "limitations"
+        ],
+        "title": "CapabilityView"
+      },
       "ChannelConfig": {
         "properties": {
           "channel_id": {
@@ -16767,6 +17030,87 @@
           "config"
         ],
         "title": "EvaluateInput"
+      },
+      "EvaluationView": {
+        "properties": {
+          "combination_id": {
+            "type": "string",
+            "title": "Combination Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "coverage": {
+            "type": "number",
+            "title": "Coverage"
+          },
+          "dependency": {
+            "type": "number",
+            "title": "Dependency"
+          },
+          "conflict": {
+            "type": "number",
+            "title": "Conflict"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost"
+          },
+          "switch": {
+            "type": "number",
+            "title": "Switch"
+          },
+          "feasible": {
+            "type": "boolean",
+            "title": "Feasible"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "bucket": {
+            "type": "string",
+            "title": "Bucket"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "combination_id",
+          "label",
+          "members",
+          "coverage",
+          "dependency",
+          "conflict",
+          "cost",
+          "switch",
+          "feasible",
+          "reasons",
+          "bucket"
+        ],
+        "title": "EvaluationView"
       },
       "EventDTO": {
         "properties": {
@@ -19558,6 +19902,103 @@
         ],
         "title": "RevisionPatch"
       },
+      "RouteView": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "profile_version": {
+            "type": "integer",
+            "title": "Profile Version"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/ScenarioView"
+          },
+          "graph": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Graph"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityView"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "chosen": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ranked": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationView"
+            },
+            "type": "array",
+            "title": "Ranked"
+          },
+          "blocked": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationView"
+            },
+            "type": "array",
+            "title": "Blocked"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Weights"
+          },
+          "budgets": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Budgets"
+          },
+          "min_quality": {
+            "type": "number",
+            "title": "Min Quality"
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "rule",
+          "profile_version",
+          "scenario",
+          "graph",
+          "capabilities",
+          "ranked",
+          "blocked",
+          "weights",
+          "budgets",
+          "min_quality",
+          "notices"
+        ],
+        "title": "RouteView"
+      },
       "RunDTO": {
         "properties": {
           "id": {
@@ -20030,6 +20471,71 @@
           "gpu_percent"
         ],
         "title": "RuntimeSample"
+      },
+      "ScenarioView": {
+        "properties": {
+          "bucket": {
+            "type": "string",
+            "title": "Bucket"
+          },
+          "saturated_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saturated Ratio"
+          },
+          "target_px": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Px"
+          },
+          "brightness": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brightness"
+          },
+          "blur": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blur"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bucket"
+        ],
+        "title": "ScenarioView"
       },
       "SelectDeployment": {
         "properties": {

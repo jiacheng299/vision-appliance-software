@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -26,6 +26,7 @@ from .modules.local_execution import routes as local_execution
 from .modules.local_execution.service import LocalAgentServices
 from .modules.models.yolo_services import YoloModelServices
 from .modules.semantics import routes as semantics
+from .modules.routing import routes as routing
 
 async def sample_runtime(app):
     while True:
@@ -106,7 +107,7 @@ def create_app(var_root=None,testing=False,agent_services=None,model_services=No
     @app.exception_handler(HTTPException)
     async def http_error(request,exc):
         return error_response(request,exc.status_code,'not_found' if exc.status_code==404 else 'http_error','请求资源不存在。' if exc.status_code==404 else '请求无法完成。')
-    for module in (sources,settings,runtime,realtime,models,agent_workflow,agents,agent_templates,local_execution,semantics):
+    for module in (sources,settings,runtime,realtime,models,agent_workflow,agents,agent_templates,local_execution,semantics,routing):
         app.include_router(module.router,prefix='/api/v1',responses={code:{'model':ErrorDTO} for code in (400,401,403,404,409,413,422,429,500,503)})
     @app.get('/{path:path}',include_in_schema=False)
     def frontend(path:str):

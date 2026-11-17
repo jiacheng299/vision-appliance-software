@@ -13,6 +13,7 @@ import RunPlayer from './RunPlayer.vue'
 import EventsPanel from './EventsPanel.vue'
 import TrustChecksPanel from './TrustChecksPanel.vue'
 import ObservationPanel from './ObservationPanel.vue'
+import RoutePanel from './RoutePanel.vue'
 import VideoWall from './VideoWall.vue'
 import { channelSources, sourceCount, wallGroups } from './channelSources'
 const props=defineProps<{agentId:string;workspace:Workspace|null;revision:Revision;sources:Source[];canWrite:boolean;focusRunId?:string}>()
@@ -20,6 +21,15 @@ const emit=defineEmits<{operation:[value:Operation];retry:[value:Run]}>()
 const selectedRunId=ref<string|null>(null),stopping=ref(''),error=ref('')
 const trustChecksOpen = ref(false)
 const observationsOpen = ref(false)
+const routesOpen = ref(false)
+const routeTarget = computed(() => {
+  const channel = props.revision.config.channels?.[0]
+  const binding = channel ? channelSources(channel)[0] : undefined
+  const source = binding ? props.sources.find(item => item.id === binding.source_id) : undefined
+  return channel && source
+    ? { sourceId: source.id, rule: channel.rule, duration: channel.duration_seconds ?? null }
+    : null
+})
 const runs=computed(()=>props.workspace?.runs??[]),currentRuns=computed(()=>actualRuns(runs.value))
 const selected=computed(()=>runs.value.find(r=>r.id===selectedRunId.value)??currentRuns.value[0])
 const fallbackSource=computed(()=>{const c=props.revision.config.channels?.[0];return c?props.sources.find(s=>s.id===channelSources(c)[0]?.source_id):undefined})
@@ -50,7 +60,11 @@ async function stop(run:Run){
       :type="trustChecksOpen?'primary':'default'" @click="trustChecksOpen=!trustChecksOpen">模型防护</NButton>
     <NButton v-if="workspace?.data_origin==='real'" aria-label="有效观察" :aria-expanded="observationsOpen"
       :type="observationsOpen?'primary':'default'" @click="observationsOpen=!observationsOpen">有效观察</NButton>
+    <NButton v-if="workspace?.data_origin==='real' && routeTarget" aria-label="路由候选" :aria-expanded="routesOpen"
+      :type="routesOpen?'primary':'default'" @click="routesOpen=!routesOpen">路由候选</NButton>
   </div>
+  <RoutePanel v-if="routesOpen && workspace?.data_origin==='real' && routeTarget" :key="`${routeTarget.sourceId}:${routeTarget.rule}`"
+    :source-id="routeTarget.sourceId" :rule="routeTarget.rule" :duration-seconds="routeTarget.duration"/>
   <ObservationPanel v-if="observationsOpen && workspace?.data_origin==='real'" :key="agentId"
     :agent-id="agentId" :runs="runs" :sources="sources"/>
   <TrustChecksPanel v-if="trustChecksOpen && workspace?.data_origin==='real'" :key="agentId"
