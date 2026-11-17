@@ -104,10 +104,17 @@ async function cancel() {
         <li v-for="policy in policies.data.value.items" :key="policy.name">
           <strong>{{ policy.label }}</strong>
           <span class="route-history-kind">{{ policy.installed ? '已安装' : '未安装' }}</span>
-          <span v-if="policy.name === policies.data.value.active">当前使用</span>
+          <span v-if="policy.name === policies.data.value.resolved.name && policies.data.value.resolved.available">当前使用</span>
           <small>{{ (policy.limitations ?? []).join('；') }}</small>
         </li>
       </ul>
+      <p class="route-active" :class="policies.data.value.resolved.available ? 'ok' : 'blocked'"
+        aria-label="实际装载的策略">
+        实际装载：{{ policies.data.value.resolved.available
+          ? `${policies.data.value.resolved.name}（${policies.data.value.resolved.external ? '外部策略' : '内置策略'}）`
+          : `不可用 —— ${policies.data.value.resolved.reason}` }}
+        <small>配置项 {{ policies.data.value.active }}</small>
+      </p>
     </section>
     <RouteTimeline v-if="timeline.data.value?.length" :entries="timeline.data.value"/>
     <p v-if="loading && !data" class="muted" role="status">正在评估路由候选…</p>
@@ -176,5 +183,8 @@ async function cancel() {
 .route-policies ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .route-policies li { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; font-size: 12px; }
 .route-policies small { opacity: .7; }
+.route-active { margin: 8px 0 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+.route-active.ok { color: #18a058; }
+.route-active.blocked { color: #d03050; }
 h3 { margin: 12px 0 6px; font-size: 13px; }
 </style>

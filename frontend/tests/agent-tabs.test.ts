@@ -30,6 +30,8 @@ function mountPanel(props: Partial<{ workspace: Workspace }> = {}) {
   vi.spyOn(agentApi, 'routeStates').mockResolvedValue([])
   vi.spyOn(agentApi, 'routeDecisions').mockResolvedValue([])
   vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({ items: [], active: 'heuristic-iou',
+    resolved: { spec: 'heuristic-iou', available: true, name: 'heuristic-iou',
+      label: '固定机位 IoU/中心距关联', kind: 'heuristic', external: false, detail: {} },
     notice: '' })
   return mount(MonitorPanel, {
     props: { agentId: 'task', sources, canWrite: false, revision,

@@ -16459,6 +16459,69 @@
   },
   "components": {
     "schemas": {
+      "ActivePolicyView": {
+        "properties": {
+          "spec": {
+            "type": "string",
+            "title": "Spec"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "external": {
+            "type": "boolean",
+            "title": "External"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "spec",
+          "available",
+          "name",
+          "label",
+          "kind",
+          "external"
+        ],
+        "title": "ActivePolicyView",
+        "description": "配置里写的策略，与它实际装载出来的结果。"
+      },
       "AgentCreate": {
         "properties": {
           "name": {
@@ -21134,6 +21197,9 @@
             "type": "string",
             "title": "Active"
           },
+          "resolved": {
+            "$ref": "#/components/schemas/ActivePolicyView"
+          },
           "notice": {
             "type": "string",
             "title": "Notice"
@@ -21144,6 +21210,7 @@
         "required": [
           "items",
           "active",
+          "resolved",
           "notice"
         ],
         "title": "PolicyPage"

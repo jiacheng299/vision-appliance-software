@@ -158,6 +158,7 @@ it('shows the tracker policy registry so the missing MARL slot is visible', asyn
   vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
   vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({
     active: 'heuristic-iou',
+    resolved: { spec: 'heuristic-iou', available: true, name: 'heuristic-iou', label: '固定机位 IoU/中心距关联', kind: 'heuristic', external: false, detail: {} },
     notice: '关联策略可替换；多智能体强化学习策略尚未安装，本机仍使用固定机位 IoU/中心距关联。',
     items: [
       { name: 'heuristic-iou', label: '固定机位 IoU/中心距关联', kind: 'heuristic',
@@ -176,5 +177,25 @@ it('shows the tracker policy registry so the missing MARL slot is visible', asyn
     expect(panel.text()).toContain('多智能体强化学习关联策略（预留）')
     expect(panel.text()).toContain('当前使用')
     expect(panel.text()).toContain('本仓库没有训练循环与策略权重')
+  } finally { wrapper.unmount() }
+})
+it('states what policy is actually loaded, including when the configured one is missing', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
+  vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({
+    items: [{ name: 'marl-association', label: '多智能体强化学习关联策略（预留）', kind: 'learned',
+      installed: false, calibrated: false, requires: [], limitations: [] }],
+    active: 'marl-association',
+    resolved: { spec: 'marl-association', available: false, name: 'marl-association',
+      label: '多智能体强化学习关联策略（预留）', kind: 'learned', external: false,
+      reason: '追踪策略「多智能体强化学习关联策略（预留）」尚未安装，不能用于运行。' },
+    notice: '配置的策略 marl-association 当前不可用：尚未安装。',
+  })
+  const wrapper = mount(RoutePanel, { props: { sourceId: 'one', rule: 'absence' } })
+  try {
+    await flushPromises()
+    const line = wrapper.get('[aria-label="实际装载的策略"]')
+    expect(line.text()).toContain('不可用')
+    expect(line.text()).toContain('尚未安装')
+    expect(line.text()).toContain('配置项 marl-association')
   } finally { wrapper.unmount() }
 })

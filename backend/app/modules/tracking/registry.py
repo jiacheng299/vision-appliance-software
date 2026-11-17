@@ -100,3 +100,44 @@ def create(name='heuristic-iou', **kwargs):
     if name == 'heuristic-iou':
         return HeuristicIoUTracker()
     raise Error(503, 'tracker_policy_not_installed', '追踪策略实现缺失。')
+
+
+_DESCRIBED = {}
+
+
+def describe_active(spec):
+    """What the configured policy actually resolves to, cached for the process.
+
+    Used by the read-only status endpoint: it answers "what is running now"
+    rather than "what does the catalogue contain". An external policy is
+    instantiated once here (that is the only way to describe it), so a heavy
+    policy costs one construction per process, not one per request.
+    """
+    if spec in _DESCRIBED:
+        return _DESCRIBED[spec]
+    entry = BUILTIN.get(spec) or RESERVED.get(spec)
+    result = {'spec': spec, 'available': False, 'name': spec, 'kind': entry.kind if entry else 'external',
+              'label': entry.label if entry else spec, 'external': bool(entry is None),
+              'detail': None, 'reason': None}
+    try:
+        policy = create(spec)
+    except Error as error:
+        result['reason'] = error.message
+        _DESCRIBED[spec] = result
+        return result
+    result['available'] = True
+    result['name'] = getattr(policy, 'name', spec)
+    try:
+        result['detail'] = policy.describe()
+    except Exception:  # 描述失败不影响"策略确实已装载"这一事实
+        result['detail'] = None
+    _DESCRIBED[spec] = result
+    return result
+
+
+def forget(spec=None):
+    """Drop cached descriptions (tests and configuration reloads)."""
+    if spec is None:
+        _DESCRIBED.clear()
+    else:
+        _DESCRIBED.pop(spec, None)

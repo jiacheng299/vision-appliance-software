@@ -1696,6 +1696,30 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActivePolicyView
+         * @description 配置里写的策略，与它实际装载出来的结果。
+         */
+        ActivePolicyView: {
+            /** Spec */
+            spec: string;
+            /** Available */
+            available: boolean;
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Kind */
+            kind: string;
+            /** External */
+            external: boolean;
+            /** Detail */
+            detail?: {
+                [key: string]: unknown;
+            } | null;
+            /** Reason */
+            reason?: string | null;
+        };
         /** AgentCreate */
         AgentCreate: {
             /** Name */
@@ -3263,6 +3287,7 @@ export interface components {
             items: components["schemas"]["PolicyView"][];
             /** Active */
             active: string;
+            resolved: components["schemas"]["ActivePolicyView"];
             /** Notice */
             notice: string;
         };
