@@ -5,7 +5,7 @@ from ...shared.db import get_db
 from ..agents.workspace import WORKSPACE_ACTOR_ID
 from . import preheat as preheat_module, service, solver, state
 from .schemas import (CancelInput, PreheatView, ProposeInput, RouteDecisionView,
-                      RouteStateView, RouteView)
+                      RouteStateView, RouteView, TimelineEntryView)
 
 router = APIRouter(tags=['routing'])
 
@@ -59,3 +59,12 @@ def preheat(request: Request, frames: int = Query(5, ge=1, le=50), db=Depends(ge
     check = preheat_module.budget_check(measurement, budgets_cpu_ms=budgets.cpu_ms,
                                         budgets_memory_mb=budgets.memory_mb)
     return PreheatView(**measurement.as_dict(), budget=check, budgets=budgets.as_dict())
+
+@router.get('/agents/{agent_id}/routing/timeline', response_model=list[TimelineEntryView])
+def read_timeline(agent_id: str,
+                  channel_id: str = Query(..., min_length=1, max_length=80),
+                  source_id: str = Query(..., min_length=1, max_length=80),
+                  limit: int = Query(40, ge=1, le=200),
+                  db=Depends(get_db)):
+    return state.timeline(db, agent_id, WORKSPACE_ACTOR_ID, channel_id=channel_id,
+                          source_id=source_id, limit=limit)

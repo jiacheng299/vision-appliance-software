@@ -16,11 +16,11 @@ from ...shared.errors import Error
 from ...shared.models import now, uid
 from .. import sources as sources_module
 from ..agents.service import get_agent
-from .models import ObservationRecord, ProfileAttribute, SemanticProfile
+from .models import ObservationRecord, ProfileAttribute, ProfileEvent, SemanticProfile
 from .profile import STATE_CONFLICT, STATE_VALID, attribute_strength
 from .schemas import (AttributeInput, AttributeView, IntrinsicInput, ObservationInput,
                       ObservationMetrics, ObservationPage, ObservationThresholds,
-                      ObservationView, ProfileView, Versions)
+                      ObservationView, ProfileEventView, ProfileView, Versions)
 from . import observe
 
 DEFAULT_VIEW_VERSION = 'v1'
@@ -103,12 +103,25 @@ def read_profile(db, source_id, at=None):
                        evaluated_at=evaluated_at, updated_at=row.updated_at)
 
 
+def _append_event(db, profile, *, kind, summary, attribute=None, previous=None,
+                  current=None, actor='workspace'):
+    """One append-only line per version bump; the shared timeline reads these."""
+    db.add(ProfileEvent(id=uid(), source_id=profile.source_id, profile_id=profile.id,
+                        version=profile.version, kind=kind, attribute=attribute,
+                        previous=previous, current=current, summary=summary, actor=actor,
+                        created_at=now()))
+
+
 def update_intrinsic(db, source_id, body: IntrinsicInput):
     sources_module.get_source(db, source_id)
     row = _profile(db, source_id, body.view_version, create=True)
+    before = dict(row.intrinsic or {})
     if body.values:
         row.intrinsic = {**row.intrinsic, **body.values}
     _touch(row)
+    changed = sorted({key for key in body.values if before.get(key) != body.values[key]})
+    summary = ('更新固有层：' + '、'.join(changed)) if changed else '固有层无实际变化'
+    _append_event(db, row, kind='intrinsic', summary=summary)
     db.flush()
     return read_profile(db, source_id)
 
@@ -122,6 +135,7 @@ def upsert_attribute(db, source_id, key, body: AttributeInput):
         raise Error(422, 'attribute_expiry_invalid', '硬失效时刻必须晚于观测时刻。')
     row = db.scalars(select(ProfileAttribute).where(ProfileAttribute.profile_id == profile.id,
                                                    ProfileAttribute.key == key)).first()
+    previous_label = _label_of(row.value or {}) if row is not None else None
     state = STATE_CONFLICT if body.conflict else STATE_VALID
     if row is None:
         row = ProfileAttribute(id=uid(), profile_id=profile.id, key=key, version=1)
@@ -139,17 +153,31 @@ def upsert_attribute(db, source_id, key, body: AttributeInput):
     row.state = state
     row.updated_at = now()
     _touch(profile)
+    _append_event(db, profile, kind='attribute_write',
+                  summary=f'写入动态属性 {key}',
+                  attribute=key, previous=previous_label,
+                  current=_label_of(body.value or {}))
     db.flush()
     return read_profile(db, source_id)
+
+
+def _label_of(value):
+    label = value.get('label') if isinstance(value, dict) else None
+    return None if label is None else str(label)
 
 
 def delete_attribute(db, source_id, key):
     _check_key(key)
     row = _profile(db, source_id)
     if row is not None:
+        removed = db.scalars(select(ProfileAttribute).where(ProfileAttribute.profile_id == row.id,
+                                                           ProfileAttribute.key == key)).first()
         db.execute(delete(ProfileAttribute).where(ProfileAttribute.profile_id == row.id,
                                                   ProfileAttribute.key == key))
         _touch(row)
+        if removed is not None:
+            _append_event(db, row, kind='attribute_delete', summary=f'删除动态属性 {key}',
+                          attribute=key, previous=_label_of(removed.value or {}))
         db.flush()
     return read_profile(db, source_id)
 
@@ -265,3 +293,14 @@ def list_observations(db, agent_id, actor_id, *, source_id=None, verdict=None, r
                            next_cursor=_cursor(agent_id, actor_id, filters, items[-1].sequence)
                            if len(rows) > limit else None,
                            summary={key: int(value) for key, value in counts.items()})
+
+
+def list_events(db, source_id, *, limit=50):
+    """Newest-first profile version events for one source."""
+    sources_module.get_source(db, source_id)
+    rows = db.scalars(select(ProfileEvent).where(ProfileEvent.source_id == source_id)
+                      .order_by(ProfileEvent.sequence.desc()).limit(min(max(limit, 1), 200))).all()
+    return [ProfileEventView(id=row.id, source_id=row.source_id, version=row.version,
+                             kind=row.kind, attribute=row.attribute, previous=row.previous,
+                             current=row.current, summary=row.summary, actor=row.actor,
+                             created_at=row.created_at) for row in rows]

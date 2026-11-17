@@ -133,18 +133,15 @@ it('can propose a candidate from the panel', async () => {
       rule: 'absence', duration_seconds: 30 })
   } finally { wrapper.unmount() }
 })
-it('lists the recent routing decisions with their reason', async () => {
+it('plots the merged profile and routing timeline', async () => {
   vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
   vi.spyOn(agentApi, 'routeStates').mockResolvedValue([routeState])
-  vi.spyOn(agentApi, 'routeDecisions').mockResolvedValue([
-    { id: 'd1', kind: 'blocked', action: 'hold',
-      reason: '没有可行组合：当前组合失效时保持原状，观察记录输出观察不足',
-      delta_j: null, route_version: 'route-v1', source_id: 'one', channel_id: 'channel',
-      created_at: '2026-11-17T00:00:00Z', payload: {} },
-    { id: 'd2', kind: 'drift', action: 'hold',
-      reason: '评分增益未达到进入阈值（ΔJ=0.000）', delta_j: 0,
-      route_version: 'route-v1', source_id: 'one', channel_id: 'channel',
-      created_at: '2026-11-17T00:00:00Z', payload: {} },
+  vi.spyOn(agentApi, 'routeTimeline').mockResolvedValue([
+    { id: 't2', at: '2026-11-17T00:02:00Z', origin: 'route', kind: 'window', version: 'route-v2',
+      summary: '候选已取得 2 个有效观察窗口，满足切换要求', action: 'switch', delta_j: 0.12 },
+    { id: 't1', at: '2026-11-17T00:00:00Z', origin: 'profile', kind: 'attribute_write',
+      version: 'v2', summary: '写入动态属性 lighting', attribute: 'lighting',
+      previous: 'daylight', current: 'strong_glare' },
   ])
   const wrapper = mount(RoutePanel, {
     props: { sourceId: 'one', rule: 'absence', agentId: 'task', channelId: 'channel' },
@@ -152,9 +149,9 @@ it('lists the recent routing decisions with their reason', async () => {
   try {
     await flushPromises()
     const history = wrapper.get('[aria-label="路由版本时间线"]')
-    expect(history.text()).toContain('无可行组合')
-    expect(history.text()).toContain('属性漂移')
-    expect(history.text()).toContain('保持')
+    expect(history.text()).toContain('lighting：daylight → strong_glare')
+    expect(history.text()).toContain('切换版本')
+    expect(history.text()).toContain('ΔJ 0.120')
   } finally { wrapper.unmount() }
 })
 it('shows the tracker policy registry so the missing MARL slot is visible', async () => {

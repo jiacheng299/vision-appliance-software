@@ -298,3 +298,28 @@ def _next_version(version):
     except (IndexError, ValueError):
         number = 1
     return f'route-v{number + 1}'
+
+
+def timeline(db, agent_id, actor_id, *, channel_id, source_id, limit=40):
+    """Merge profile version bumps and routing decisions into one ordered axis."""
+    from ..semantics.service import list_events
+    from .schemas import TimelineEntryView
+    limit = min(max(limit, 1), 200)
+    entries = []
+    for event in list_events(db, source_id, limit=limit):
+        entries.append(TimelineEntryView(
+            id=event.id, at=event.created_at, origin='profile', kind=event.kind,
+            version=f'v{event.version}', summary=event.summary, attribute=event.attribute,
+            previous=event.previous, current=event.current))
+    rows = db.scalars(select(RouteDecision)
+                      .where(RouteDecision.agent_id == agent_id,
+                             RouteDecision.channel_id == channel_id,
+                             RouteDecision.source_id == source_id)
+                      .order_by(RouteDecision.sequence.desc()).limit(limit)).all()
+    for row in rows:
+        entries.append(TimelineEntryView(
+            id=row.id, at=row.created_at, origin='route', kind=row.kind,
+            version=row.route_version or '—', summary=row.reason, action=row.action,
+            delta_j=row.delta_j))
+    entries.sort(key=lambda item: item.at, reverse=True)
+    return entries[:limit]

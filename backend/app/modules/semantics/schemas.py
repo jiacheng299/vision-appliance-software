@@ -181,3 +181,16 @@ class BootstrapView(DTO):
     notices: list[str]
     profile: ProfileView
     bootstrapped_at: str
+
+
+class ProfileEventView(DTO):
+    id: str
+    source_id: str
+    version: int
+    kind: str
+    attribute: str | None = None
+    previous: str | None = None
+    current: str | None = None
+    summary: str
+    actor: str
+    created_at: str

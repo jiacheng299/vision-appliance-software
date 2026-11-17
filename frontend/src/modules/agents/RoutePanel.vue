@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { NButton } from 'naive-ui'
-import { agentApi, type RouteDecision, type RouteEvaluation, type RouteState } from './api'
+import { agentApi, type RouteEvaluation, type RouteState, type TimelineEntry } from './api'
 import { useResource } from '../../shared/ui/resource'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import RouteTimeline from './RouteTimeline.vue'
@@ -14,9 +14,9 @@ const { data, loading, error, refresh } = useResource(() => agentApi.routes(prop
 }))
 const states = useResource(() => props.agentId
   ? agentApi.routeStates(props.agentId) : Promise.resolve([] as RouteState[]))
-const decisions = useResource(() => props.agentId
-  ? agentApi.routeDecisions(props.agentId, { channel_id: props.channelId, source_id: props.sourceId,
-      limit: 8 }) : Promise.resolve([] as RouteDecision[]))
+const timeline = useResource(() => props.agentId && props.channelId
+  ? agentApi.routeTimeline(props.agentId, { channel_id: props.channelId,
+      source_id: props.sourceId, limit: 12 }) : Promise.resolve([] as TimelineEntry[]))
 const policies = useResource(() => agentApi.trackerPolicies())
 const acting = ref('')
 const actionError = ref('')
@@ -43,7 +43,7 @@ async function propose() {
     await agentApi.proposeRoute(props.agentId, { channel_id: props.channelId,
       source_id: props.sourceId, rule: props.rule,
       duration_seconds: props.durationSeconds ?? undefined })
-    await Promise.all([states.refresh(), refresh(), decisions.refresh()])
+    await Promise.all([states.refresh(), refresh(), timeline.refresh()])
   } catch (problem) {
     actionError.value = problem instanceof Error ? problem.message : '路由提议失败'
   } finally { acting.value = '' }
@@ -109,7 +109,7 @@ async function cancel() {
         </li>
       </ul>
     </section>
-    <RouteTimeline v-if="decisions.data.value?.length" :decisions="decisions.data.value"/>
+    <RouteTimeline v-if="timeline.data.value?.length" :entries="timeline.data.value"/>
     <p v-if="loading && !data" class="muted" role="status">正在评估路由候选…</p>
     <template v-else-if="data">
       <ul v-if="data.notices.length" class="route-notices" aria-label="路由评估口径说明">

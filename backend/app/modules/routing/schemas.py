@@ -127,6 +127,21 @@ class ProposeInput(DTO):
     duration_seconds: float | None = Field(default=None, gt=0, le=86400, allow_inf_nan=False)
 
 
+class TimelineEntryView(DTO):
+    """Shared timeline: profile version bumps and routing decisions on one axis."""
+    id: str
+    at: str
+    origin: str            # 'profile' | 'route'
+    kind: str
+    version: str
+    summary: str
+    attribute: str | None = None
+    previous: str | None = None
+    current: str | None = None
+    action: str | None = None
+    delta_j: float | None = None
+
+
 class PreheatView(DTO):
     """影子运行要付出的资源：两个会话并存的实测代价。"""
     available: bool

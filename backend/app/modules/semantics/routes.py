@@ -6,7 +6,7 @@ from ...shared.storage import controlled_path
 from ..agents.workspace import WORKSPACE_ACTOR_ID
 from . import bootstrap as bootstrap_module, service
 from .schemas import (AttributeInput, BootstrapView, IntrinsicInput, ObservationInput,
-                      ObservationPage, ObservationView, ProfileView)
+                      ObservationPage, ObservationView, ProfileEventView, ProfileView)
 
 router = APIRouter(tags=['semantics'])
 
@@ -75,3 +75,9 @@ def bootstrap_profile(source_id: str, request: Request,
     result = bootstrap_module.bootstrap(db, source_id, frame=frame)
     result['notices'] = notices_extra + result['notices']
     return BootstrapView(**result)
+
+@router.get('/sources/{source_id}/semantic-profile/events', response_model=list[ProfileEventView])
+def list_profile_events(source_id: str,
+                        limit: int = Query(50, ge=1, le=200),
+                        db=Depends(get_db)):
+    return service.list_events(db, source_id, limit=limit)

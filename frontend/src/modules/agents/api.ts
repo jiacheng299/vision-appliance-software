@@ -42,6 +42,7 @@ export type RouteView = components['schemas']['RouteView']
 export type RouteEvaluation = components['schemas']['EvaluationView']
 export type RouteState = components['schemas']['RouteStateView']
 export type RouteDecision = components['schemas']['RouteDecisionView']
+export type TimelineEntry = components['schemas']['TimelineEntryView']
 export type TrackerPolicyPage = components['schemas']['PolicyPage']
 export type Playback = components['schemas']['PlaybackDTO']
 export type Missed = components['schemas']['MissedDTO']
@@ -68,6 +69,7 @@ export const agentApi = {
   workspace: (id: string) => client.get<Workspace>(`${base(id)}/workspace`).then(r => r.data),
   trustChecks: (id: string, source_id?: string) => client.get<TrustCheck[]>(`${base(id)}/trust-checks`, {params:{source_id}}).then(r => r.data),
   observations: (id: string, filters: { source_id?: string; verdict?: ObservationVerdict; run_id?: string } = {}, cursor?: string) => client.get<ObservationPage>(`${base(id)}/observations`, {params:{...filters, cursor, limit:30}}).then(r => r.data),
+  routeTimeline: (id: string, params: { channel_id: string; source_id: string; limit?: number }) => client.get<TimelineEntry[]>(`${base(id)}/routing/timeline`, {params}).then(r => r.data),
   routes: (sourceId: string, params: { rule: string; duration_seconds?: number }) => client.get<RouteView>(`/sources/${encodeURIComponent(sourceId)}/routes`, {params}).then(r => r.data),
   routeStates: (id: string) => client.get<RouteState[]>(`${base(id)}/routing`).then(r => r.data),
   routeDecisions: (id: string, params: { channel_id?: string; source_id?: string; limit?: number } = {}) => client.get<RouteDecision[]>(`${base(id)}/routing/decisions`, {params}).then(r => r.data),

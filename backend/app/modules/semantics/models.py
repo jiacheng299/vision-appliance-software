@@ -38,6 +38,23 @@ class ProfileAttribute(Base):
     updated_at: Mapped[str] = mapped_column(String, default=now)
 
 
+class ProfileEvent(Base):
+    """Append-only record of every profile version bump, for the shared timeline."""
+    __tablename__ = 'profile_events'
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    source_id: Mapped[str] = mapped_column(String, index=True)
+    profile_id: Mapped[str] = mapped_column(String, index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String)
+    attribute: Mapped[str | None] = mapped_column(String, nullable=True)
+    previous: Mapped[str | None] = mapped_column(String, nullable=True)
+    current: Mapped[str | None] = mapped_column(String, nullable=True)
+    summary: Mapped[str] = mapped_column(String)
+    actor: Mapped[str] = mapped_column(String, default='workspace')
+    created_at: Mapped[str] = mapped_column(String, default=now)
+
+
 class ObservationRecord(Base):
     """A window-level verdict bound to task, ROI, route version and model version."""
     __tablename__ = 'observation_records'
