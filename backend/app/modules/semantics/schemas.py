@@ -85,6 +85,7 @@ class ProfileView(DTO):
 
 class ObservationMetrics(DTO):
     frame_count: int | None = Field(default=None, ge=0, strict=True)
+    time_continuous: bool | None = None
     duration_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     actual_fps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     max_gap_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)

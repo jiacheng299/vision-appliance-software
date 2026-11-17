@@ -26,6 +26,7 @@ REASONS = {
     'occluded': '监测区域遮挡比例超过门槛。',
     'target_too_small': '最小可辨目标尺度低于门槛。',
     'frame_unmapped': '帧时间无法映射到统一时钟。',
+    'frame_time_discontinuous': '窗口内帧时间回退或不可用，观察不连续。',
     'path_incomplete': '执行路径未完整执行或输出协议不可解析。',
     'version_mismatch': '路由、画像或模型版本与当前不一致。',
     'unverified_scale': '目标尺度未测定，不足以支撑未检出结论。',
@@ -67,6 +68,8 @@ def _maximum(name, value, threshold, fail_reason, missing_reason):
 def frame_time_gate(metrics, thresholds):
     if not metrics.frame_count:
         return (Gate('frame_count', FAIL, metrics.frame_count, None, 'frame_absent'),)
+    if getattr(metrics, 'time_continuous', None) is False:
+        return (Gate('time_continuous', FAIL, 0, 1, 'frame_time_discontinuous'),)
     gates = [_minimum('actual_fps', metrics.actual_fps, thresholds.min_fps,
                       'frame_rate_low', 'unverified_frame'),
              _maximum('max_gap_seconds', metrics.max_gap_seconds, thresholds.max_gap_seconds,

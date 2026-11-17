@@ -2673,6 +2673,8 @@ export interface components {
         ObservationMetrics: {
             /** Frame Count */
             frame_count?: number | null;
+            /** Time Continuous */
+            time_continuous?: boolean | null;
             /** Duration Seconds */
             duration_seconds?: number | null;
             /** Actual Fps */
@@ -3160,6 +3162,10 @@ export interface components {
             alert_state: "normal" | "absence";
             /** Alert Started At */
             alert_started_at?: string | null;
+            /** Profile Version */
+            profile_version?: number | null;
+            /** Route Version */
+            route_version?: string | null;
             /**
              * Data Origin
              * @default real

@@ -29,6 +29,13 @@ from .presence import PresenceRule
 from .preview import DetectionFrames
 from .run_safety_audit import RunSafetyAudit
 from .safety_audit import SafetyAudit
+from ..semantics import service as semantics
+from ..semantics.metrics import FrameMetrics, measure_regions
+from ..semantics.schemas import ObservationInput, ObservationMetrics, Versions
+from ..semantics.window import ObservationWindow
+
+UNMEASURED_FRAME = FrameMetrics(width=0, height=0, brightness=None, overexposure_ratio=None,
+                                roi_visible_ratio=None, blur_score=None)
 
 COMMON_PARAMETERS = {'target','rule','duration_seconds','confidence_threshold','sample_interval_seconds'}
 RULE_PARAMETERS = {
@@ -471,6 +478,17 @@ class LocalAgentServices(RegistryAgentServices):
             if self.safety_audit is not None:
                 max_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
                 safety = RunSafetyAudit(self.safety_audit, run, max_gap_seconds=max_gap)
+            window, thresholds, profile_version = None, None, None
+            if self.config.observation_records:
+                window_seconds = self.config.observation_window_seconds
+                gate_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
+                thresholds = semantics.thresholds_for(window_seconds=window_seconds,
+                                                      max_gap_seconds=gate_gap)
+                window = ObservationWindow(window_seconds)
+                # The version the run actually started under; a later change must
+                # invalidate the window instead of silently inheriting the new one.
+                with self.sessions() as db:
+                    profile_version = semantics.profile_version_for(db, run.source_id)
             with self.writing() as db:
                 row = db.get(LocalRun,identifier)
                 if row.state not in ACTIVE_STATES: return
@@ -495,6 +513,8 @@ class LocalAgentServices(RegistryAgentServices):
                                 with self.sessions() as db: self._checked_source(db,run.source_snapshot,source_identity)
                                 last_source_check = time.monotonic()
                             detected = detector.detect(frame)
+                            if window is not None:
+                                window.add_frame(timestamp)
                             boxes = rule.targets_in_regions(detected) if channel.rule == 'absence' else detected
                             if stop.is_set(): break
                             preview_only = (run.source_kind=='camera' and next_rule_timestamp is not None
@@ -503,6 +523,8 @@ class LocalAgentServices(RegistryAgentServices):
                                 if safety is not None:
                                     safety.inspect(safety.check_time, timestamp)
                                 observation = rule.observe(timestamp,boxes)
+                                if window is not None:
+                                    window.add_sample(*self._sample_evidence(frame,boxes,observation,rule,binding))
                                 # Keep a fixed business clock; frame quantization must not accumulate drift.
                                 if next_rule_timestamp is None:
                                     next_rule_timestamp = timestamp+interval
@@ -545,6 +567,16 @@ class LocalAgentServices(RegistryAgentServices):
                                 row.observation = {'source_identity':source_identity,'observed_at':stamp,'timestamp':timestamp,'count':observation.count,
                                     'targets':targets}
                                 self._refresh_operations(db)
+                                if window is not None and window.due(timestamp):
+                                    try:
+                                        self._close_observation_window(db, run, channel, binding, window,
+                                                                       timestamp, row.actor_id, thresholds,
+                                                                       profile_version)
+                                    except Exception:
+                                        # Evidence recording must never stop monitoring.
+                                        logging.getLogger(__name__).warning('Observation record failed')
+                                    finally:
+                                        window.reset(timestamp)
                             observed, failures, last_timestamp = True, 0, timestamp
                             event = None
                             if channel.rule == 'absence' and (observation.transition or observation.alarm) and not stop.is_set():
@@ -596,6 +628,39 @@ class LocalAgentServices(RegistryAgentServices):
                     'dependency_unavailable':'本地视频解码工具不可用，请检查 FFmpeg 配置。'}.get(code,
                     '视频读取或人员检测失败，请检查视频源与模型后重试。')
                 self._finish(identifier,'failed',message,code if code in allowed else 'local_inference_failed')
+
+    def _sample_evidence(self, frame, boxes, observation, rule, binding):
+        """Measure only what this frame can actually tell us; never guess the rest."""
+        try:
+            measurement = measure_regions(frame, [region.points for region in binding.regions])
+            height = float(getattr(frame, 'shape', (0,))[0] or 0)
+        except Exception:
+            return UNMEASURED_FRAME, int(observation.count), None
+        targets = boxes if isinstance(rule, PresenceRule) else [
+            target.box for target in observation.targets if rule.contains_target(target)]
+        heights = [box['height'] * height for box in targets if box.get('height')]
+        scale = max(heights) if heights and height else None
+        return measurement, int(observation.count), scale
+
+    def _close_observation_window(self, db, run, channel, binding, window, timestamp,
+                                  actor_id, thresholds, profile_version):
+        """Judge one closed window and persist the verdict. Alarms are untouched."""
+        roi = [list(point) for point in binding.regions[0].points] if binding.regions else []
+        versions = Versions(route_version=f'local-r{run.revision_no}',
+                            profile_version=profile_version,
+                            model_version=getattr(channel.capability_ref, 'model_version', None))
+        body = ObservationInput(source_id=run.source_id, run_id=run.id, path_id=channel.channel_id,
+                                task_key=f'{channel.target}/{channel.rule}', roi=roi,
+                                window_start=(window.started_at if window.started_at is not None
+                                              else timestamp),
+                                window_end=timestamp, detection_count=window.detections,
+                                path_complete=True, metrics=ObservationMetrics(**window.metrics()),
+                                thresholds=thresholds, versions=versions, expected_versions=versions)
+        view = semantics.record_observation(db, run.agent_id, actor_id, body)
+        semantics.set_runtime(db, run.source_id, {'observation': {
+            'verdict': view.verdict, 'window_end': view.window_end,
+            'reasons': list(view.reasons), 'route_version': versions.route_version}})
+        return view
 
     def _save_evidence(self, run, frame, boxes, binding, count, event_type):
         import cv2

@@ -126,3 +126,34 @@ def sequence_metrics(timestamps) -> tuple[float | None, float | None, float | No
     if span <= 0:
         return None, max(gaps) if gaps else None, 0.0
     return len(values) / span, max(gaps), span
+
+
+def combine(measurements) -> FrameMetrics:
+    """Worst case over several regions: the task is only as observable as its
+    least observable zone, so overexposure takes the maximum and every other
+    quality figure the minimum."""
+    items = list(measurements)
+    if not items:
+        raise ValueError('at least one measurement is required')
+    first = items[0]
+
+    def worst(attribute, pick):
+        values = [getattr(item, attribute) for item in items]
+        values = [value for value in values if value is not None]
+        return pick(values) if values else None
+
+    return FrameMetrics(width=first.width, height=first.height,
+                        brightness=worst('brightness', min),
+                        overexposure_ratio=worst('overexposure_ratio', max),
+                        roi_visible_ratio=worst('roi_visible_ratio', min),
+                        blur_score=worst('blur_score', min))
+
+
+def measure_regions(frame, regions) -> FrameMetrics:
+    """Measure the same frame over every monitoring region of one task."""
+    polygons = [region for region in (regions or []) if region and len(region) >= 3]
+    if not polygons:
+        return measure_frame(frame)
+    if len(polygons) == 1:
+        return measure_frame(frame, polygons[0])
+    return combine(measure_frame(frame, polygon) for polygon in polygons)

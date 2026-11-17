@@ -90,6 +90,9 @@ class RunDTO(DTO):
     baseline_run_id: str | None = None
     alert_state: Literal['normal', 'absence'] = 'normal'
     alert_started_at: str | None = None
+    # Patent M7: a run records the profile and route version it actually used.
+    profile_version: int | None = None
+    route_version: str | None = None
     data_origin: Origin = 'real'
 
 

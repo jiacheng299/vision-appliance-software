@@ -26,6 +26,19 @@ from . import observe
 DEFAULT_VIEW_VERSION = 'v1'
 KEY_PATTERN = re.compile(r'^[A-Za-z0-9_.-]{1,64}$')
 CURSOR_LIMIT = 200
+# Conservative floors for a window to count as an observation. Occlusion and
+# target scale stay unmeasured because neither can be verified from one frame,
+# and an unmeasured gate is only allowed to block absence, never a detection.
+DEFAULT_THRESHOLDS = dict(min_fps=1.0, min_roi_visible_ratio=0.9,
+                          max_overexposure_ratio=0.2, min_blur_score=20.0,
+                          max_occlusion_ratio=None, min_target_scale_px=None)
+
+
+def thresholds_for(*, window_seconds, max_gap_seconds=None, **overrides):
+    values = dict(DEFAULT_THRESHOLDS, **overrides)
+    values['max_gap_seconds'] = max_gap_seconds
+    values['min_window_seconds'] = window_seconds * 0.9
+    return ObservationThresholds(**values)
 
 
 def epoch() -> float:
@@ -154,6 +167,11 @@ def set_runtime(db, source_id, values):
 def _current_profile_version(db, source_id):
     row = _profile(db, source_id)
     return None if row is None else row.version
+
+
+def profile_version_for(db, source_id):
+    """Public: the executor stamps windows with the version it actually ran under."""
+    return _current_profile_version(db, source_id)
 
 
 def record_observation(db, agent_id, actor_id, body: ObservationInput):

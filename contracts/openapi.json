@@ -18234,6 +18234,17 @@
             ],
             "title": "Frame Count"
           },
+          "time_continuous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Continuous"
+          },
           "duration_seconds": {
             "anyOf": [
               {
@@ -19752,6 +19763,28 @@
               }
             ],
             "title": "Alert Started At"
+          },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
+          "route_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Version"
           },
           "data_origin": {
             "type": "string",
