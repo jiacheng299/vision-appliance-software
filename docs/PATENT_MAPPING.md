@@ -31,7 +31,7 @@
 | S1 | 接收任务与摄像头信息 | `/agents/{id}/run-groups` + 自然语言匹配 | 完成 |
 | S2 | 初始抽帧、建立分层画像 | `POST .../semantic-profile/bootstrap`：固有层取设备字段，录像源从影片前 1/10 取一帧写入保守的 `lighting`；其余动态属性由运行中的观察或人工写入 | 完成（摄像头源不做首帧取图，已说明） |
 | S3 | 生成任务需求图 | `routing.graph.build(rule, duration_seconds)` | 完成 |
-| S4 | 过滤并求解组合 | `solver.evaluate / solve`（硬过滤 + 式(2)） | 完成 |
+| S4 | 过滤并求解组合 | `solver.evaluate / solve`（硬过滤 + 式(2)）；场景条件由 `evidence` 标明来自哪一观察窗口、该窗是否有效 | 完成 |
 | S5 | 发布带版本的组合配置 | `route_states.active_version` + 观察记录按版本盖章 | 部分：不向执行器下发组合 |
 | S6 | 运行并采集观察指标 | `local_execution/service.py` + `semantics/window.py` | 完成 |
 | S7 | 判定有效观察 | `semantics/observe.evaluate`（五门禁） | 完成 |

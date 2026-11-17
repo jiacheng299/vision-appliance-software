@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 35 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 37 个提交，全部只提交未 push。
 
 > 需要一页纸看"交底书哪一条落在哪段代码"时，直接看 [交底书对照表](PATENT_MAPPING.md)；
 > 需要直接写进论文的成稿章节时，看 [系统实现（章节初稿）](THESIS_IMPLEMENTATION.md)。
@@ -57,6 +57,19 @@
 | `2bfb0ba` | `feat(ui): 侧栏当前分组高亮与任务可观察性摘要`：7 个文件，+194 / −8 |
 | `7ea78da` | `docs: 更新验收记录至第 16 轮（分组高亮与可观察性摘要）` |
 | `6557fef` | `docs: 新增《系统实现》章节初稿，供毕业材料直接引用`：3 个文件，+238 / −2 |
+| `11ab175` | `docs: 更新验收记录至第 17 轮（章节初稿）` |
+| `364152d` | `feat(routing): 路由评估标明场景证据来自哪一窗、该窗是否有效`：8 个文件，+189 / −6 |
+
+### 第 18 轮改动
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/routing/service.py` | 修改 | `_latest_metrics` 返回记录本身；输出 `evidence`；无效窗口追加口径提示 |
+| `backend/app/modules/routing/schemas.py` | 修改 | 新增 `EvidenceView`、`RouteView.evidence` |
+| `backend/app/modules/routing/state.py` | 修改 | 适配新的返回签名（修复解包错误） |
+| `frontend/src/modules/agents/RoutePanel.vue` | 修改 | 新增"场景证据来源"一行（有效/无效/无记录三种状态） |
+| `tests/backend/test_routing_api.py` | 修改 | 新增 3 项证据来源测试 |
+| `frontend/tests/route-panel.test.ts` | 修改 | 新增 2 项 |
 
 ### 第 17 轮改动
 
@@ -931,6 +944,38 @@ $ cd frontend && npm run build
 
 文档之间已互链：对照表与验收记录顶部都指向这份初稿，避免出现"三份文档各说一套"。
 
+### 第 18 轮（场景证据来源）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+507 passed in 270.03s        # 第 17 轮 504 项 + 本轮 3 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  39 passed (39)
+     Tests  196 passed (196)
+
+$ cd frontend && npm run build
+✓ built in 14.31s
+```
+
+真实应用（两路摄像头，各自指向自己最近的窗口）：
+
+```
+[夜间街道] 证据=detected usable=True 窗口=1108948.0–1108979.0 目标尺度=83.1
+[行人广场] 证据=detected usable=True 窗口=1108947.8–1108978.0 目标尺度=132.4
+```
+
+三态在界面上分别是：绿色"场景证据来自有效观察窗口 x–y 秒"、
+红色"场景证据来自观察不足窗口 …（只能作为提示，不能当作已成立的场景条件）"、
+灰色"该视频源还没有观察记录，场景条件按未测定处理"。
+
+这一改动把 F3（有效观察）与 M6（组合求解）真正连起来：**用于选模型的场景条件，
+现在必须说明它来自哪一窗、那一窗算不算数**。
+
+实现过程中出现一次回归：`_latest_metrics` 改成返回二元组后，`routing/state.py`
+的 `_scenario` 仍在按字典使用返回值，导致 12 项路由状态用例失败。定位后改为解包，
+路由状态机 21 项用例全绿——这也是为什么每次改动都要跑全量回归。
+
 ## 八、自查方法
 
 ```powershell
@@ -993,9 +1038,9 @@ cd frontend; npm test; npm run build; cd ..
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 18 轮）计划
+## 十、下一轮（第 19 轮）计划
 
-1. 等用户提供第二份已标定 ONNX 后做跨模型对照，把 5.4 节的"同产物确定性"升级为"跨模型质量对比"，并回填能力表分桶质量。
+1. 定义"无有效证据时的保守取值"：目前观察不足窗口的指标仍参与分桶与质量读取，只是被标注；下一步可让无效窗口完全退出计算，改用固有层与保守默认值，并给出显式提示。
 2. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示（延续"不伪造绿色"的约定）。
 3. 观察记录详情页：点开一条 `insufficient` 可看到当时的组合成员、门禁逐项数值与当时的漂移，而不只是原因文本。
 4. 把"画像为空"的常见路径补上自动初始化：首次运行时按设备字段与首帧图像统计写入固有层与一项动态属性（仍需人工确认后才用于路由）。
