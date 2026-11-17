@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 30 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 33 个提交，全部只提交未 push。
 
 > 需要一页纸看"交底书哪一条落在哪段代码"时，直接看 [交底书对照表](PATENT_MAPPING.md)。
 
@@ -51,6 +51,20 @@
 | `15dcd30` | `feat(tracking): 外部策略装载位与 MARL 接入契约文档`：7 个文件，+292 / −4 |
 | `0804c53` | `docs: 更新验收记录至第 14 轮（外部策略装载与 MARL 契约）` |
 | `1eedb60` | `feat(tracking): 策略状态接口回显"实际装载的是什么"`：8 个文件，+302 / −7 |
+| `cfa9d18` | `docs: 更新验收记录至第 15 轮（策略状态回显）` |
+| `93f3d95` | `docs(tracking): 契约文档同步策略状态接口的 resolved 字段` |
+| `2bfb0ba` | `feat(ui): 侧栏当前分组高亮与任务可观察性摘要`：7 个文件，+194 / −8 |
+
+### 第 16 轮改动
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `frontend/src/app/navigation.ts` | 修改 | 新增 `activeGroupLabel(path)`：按最长前缀匹配分组 |
+| `frontend/src/app/App.vue`、`style.css` | 修改 | 侧栏组标题按当前路由高亮 |
+| `frontend/src/modules/agents/TaskSummaryStrip.vue` | 新增 | 画像版本 / 三态计数 / 当前路由版本与模式的摘要条 |
+| `frontend/src/modules/agents/MonitorPanel.vue` | 修改 | 在页签上方挂载摘要条 |
+| `frontend/tests/task-summary.test.ts` | 新增 | 4 项：摘要内容、取不到数据、模拟源不请求、前缀匹配 |
+| `frontend/tests/observation-panel.test.ts` | 修改 | 断言改为"页签未开时列表不渲染、打开后请求数增加" |
 
 ### 第 15 轮改动
 
@@ -865,6 +879,32 @@ notice: 关联策略可替换；多智能体强化学习策略尚未安装，本
 外部策略的描述在**每个进程内只构造一次**（有测试用计数替身验证第二次请求
 不再调用装载逻辑），避免每次打开面板都重新加载一遍权重。
 
+### 第 16 轮（分组高亮与可观察性摘要）补充证据
+
+```
+$ cd frontend && npm test
+Test Files  39 passed (39)
+     Tests  194 passed (194)   # 第 15 轮 190 项 + 本轮 4 项
+
+$ cd frontend && npm run build
+✓ built in 16.98s
+```
+
+摘要条显示三段内容，全部来自既有接口，且**取不到就说未知**：
+
+| 段 | 数据来源 | 取不到时 |
+| --- | --- | --- |
+| 画像版本 | `GET /sources/{id}/semantic-profile` | 「未知」 |
+| 最近观察 | `GET /agents/{id}/observations` 的 `summary` | 「未知」，不显示 0 |
+| 当前路由 | `GET /agents/{id}/routing` | 「尚未建立」 |
+
+侧栏分组按**最长前缀**匹配，因此 `/dashboard/events` 归到「结果」而不是
+「运行与观察」，`/agents/task/live` 归到「运行与观察」——这两条都有测试钉住。
+
+一处既有断言的更新值得记录：原用例断言"打开页签前不发生任何观察请求"，
+但摘要条按设计会在挂载时取一次结论分布。契约变了，断言随之改成
+"页签未打开时观察列表不渲染、打开后请求数增加"，而不是放宽或删除断言。
+
 ## 八、自查方法
 
 ```powershell
@@ -927,9 +967,9 @@ cd frontend; npm test; npm run build; cd ..
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 16 轮）计划
+## 十、下一轮（第 17 轮）计划
 
-1. 侧栏当前分组高亮 + 任务顶部的"可观察性摘要"（画像版本、最近三态分布、当前路由版本），把入口与状态连起来；这是纯展示层的小改动。
+1. 把 `docs/PATENT_MAPPING.md` 扩写成毕业材料可直接引用的"系统实现"章节初稿（含模块职责、关键设计取舍、实测数据与未实现清单）。
 2. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示（延续"不伪造绿色"的约定）。
 3. 观察记录详情页：点开一条 `insufficient` 可看到当时的组合成员、门禁逐项数值与当时的漂移，而不只是原因文本。
 4. 把"画像为空"的常见路径补上自动初始化：首次运行时按设备字段与首帧图像统计写入固有层与一项动态属性（仍需人工确认后才用于路由）。
