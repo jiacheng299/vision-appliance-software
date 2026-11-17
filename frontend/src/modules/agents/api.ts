@@ -42,6 +42,7 @@ export type RouteView = components['schemas']['RouteView']
 export type RouteEvaluation = components['schemas']['EvaluationView']
 export type RouteState = components['schemas']['RouteStateView']
 export type RouteDecision = components['schemas']['RouteDecisionView']
+export type TrackerPolicyPage = components['schemas']['PolicyPage']
 export type Playback = components['schemas']['PlaybackDTO']
 export type Missed = components['schemas']['MissedDTO']
 export type ExportJob = components['schemas']['ExportDTO']
@@ -72,6 +73,7 @@ export const agentApi = {
   routeDecisions: (id: string, params: { channel_id?: string; source_id?: string; limit?: number } = {}) => client.get<RouteDecision[]>(`${base(id)}/routing/decisions`, {params}).then(r => r.data),
   proposeRoute: (id: string, body: { channel_id: string; source_id: string; rule: string; duration_seconds?: number }) => client.post<RouteState>(`${base(id)}/routing/propose`, body, jsonOptions).then(r => r.data),
   cancelRoute: (id: string, body: { channel_id: string; source_id: string }) => client.post<RouteState>(`${base(id)}/routing/cancel`, body, jsonOptions).then(r => r.data),
+  trackerPolicies: () => client.get<TrackerPolicyPage>('/tracking/policies').then(r => r.data),
   submit: (id: string, kind: 'start'|'apply', body: components['schemas']['StartInput'], key: string) => client.post<Operation>(`${base(id)}/${kind === 'start' ? 'run-groups' : 'revision-applications'}`, body, keyOptions(key)).then(r => r.data),
   stop: (id: string, runId: string, key: string) => client.post<Operation>(`${base(id)}/runs/${encodeURIComponent(runId)}/stop`, {}, keyOptions(key)).then(r => r.data),
   stopChannel: (id:string, channelId:string, key:string) => client.post<Operation>(`${base(id)}/channels/${encodeURIComponent(channelId)}/stop`,{},keyOptions(key)).then(r=>r.data),

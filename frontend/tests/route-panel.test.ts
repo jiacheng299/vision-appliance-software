@@ -133,3 +133,51 @@ it('can propose a candidate from the panel', async () => {
       rule: 'absence', duration_seconds: 30 })
   } finally { wrapper.unmount() }
 })
+it('lists the recent routing decisions with their reason', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
+  vi.spyOn(agentApi, 'routeStates').mockResolvedValue([routeState])
+  vi.spyOn(agentApi, 'routeDecisions').mockResolvedValue([
+    { id: 'd1', kind: 'blocked', action: 'hold',
+      reason: '没有可行组合：当前组合失效时保持原状，观察记录输出观察不足',
+      delta_j: null, route_version: 'route-v1', source_id: 'one', channel_id: 'channel',
+      created_at: '2026-11-17T00:00:00Z', payload: {} },
+    { id: 'd2', kind: 'drift', action: 'hold',
+      reason: '评分增益未达到进入阈值（ΔJ=0.000）', delta_j: 0,
+      route_version: 'route-v1', source_id: 'one', channel_id: 'channel',
+      created_at: '2026-11-17T00:00:00Z', payload: {} },
+  ])
+  const wrapper = mount(RoutePanel, {
+    props: { sourceId: 'one', rule: 'absence', agentId: 'task', channelId: 'channel' },
+  })
+  try {
+    await flushPromises()
+    const history = wrapper.get('[aria-label="最近路由决策"]')
+    expect(history.text()).toContain('无可行组合')
+    expect(history.text()).toContain('属性漂移')
+    expect(history.text()).toContain('保持')
+  } finally { wrapper.unmount() }
+})
+it('shows the tracker policy registry so the missing MARL slot is visible', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
+  vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({
+    active: 'heuristic-iou',
+    notice: '关联策略可替换；多智能体强化学习策略尚未安装，本机仍使用固定机位 IoU/中心距关联。',
+    items: [
+      { name: 'heuristic-iou', label: '固定机位 IoU/中心距关联', kind: 'heuristic',
+        installed: true, calibrated: true, requires: [], limitations: ['不做身份识别'] },
+      { name: 'marl-association', label: '多智能体强化学习关联策略（预留）', kind: 'learned',
+        installed: false, calibrated: false,
+        requires: ['训练环境与策略权重（不在本仓库）'],
+        limitations: ['本仓库没有训练循环与策略权重'] },
+    ],
+  })
+  const wrapper = mount(RoutePanel, { props: { sourceId: 'one', rule: 'absence' } })
+  try {
+    await flushPromises()
+    const panel = wrapper.get('[aria-label="关联策略"]')
+    expect(panel.text()).toContain('尚未安装')
+    expect(panel.text()).toContain('多智能体强化学习关联策略（预留）')
+    expect(panel.text()).toContain('当前使用')
+    expect(panel.text()).toContain('本仓库没有训练循环与策略权重')
+  } finally { wrapper.unmount() }
+})

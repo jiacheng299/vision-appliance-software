@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { NButton } from 'naive-ui'
-import { agentApi, type RouteEvaluation, type RouteState } from './api'
-import { useResource } from '../../shared/ui/resource'
+import { agentApi, type RouteDecision, type RouteEvaluation, type RouteState } from './api'
+import { formatDate, useResource } from '../../shared/ui/resource'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 
 const props = defineProps<{ sourceId: string; rule: string; durationSeconds?: number | null
-  agentId?: string; channelId?: string }>()
+  agentId?: string; channelId?: string; sourceLabel?: string }>()
 
 const { data, loading, error, refresh } = useResource(() => agentApi.routes(props.sourceId, {
   rule: props.rule, duration_seconds: props.durationSeconds ?? undefined,
 }))
 const states = useResource(() => props.agentId
   ? agentApi.routeStates(props.agentId) : Promise.resolve([] as RouteState[]))
+const decisions = useResource(() => props.agentId
+  ? agentApi.routeDecisions(props.agentId, { channel_id: props.channelId, source_id: props.sourceId,
+      limit: 8 }) : Promise.resolve([] as RouteDecision[]))
+const policies = useResource(() => agentApi.trackerPolicies())
 const acting = ref('')
 const actionError = ref('')
 
@@ -24,6 +28,13 @@ const routeState = computed<RouteState | null>(() => {
 })
 const bucketLabel = computed(() => data.value?.scenario.bucket === 'default'
   ? '常规场景' : `场景分桶 ${data.value?.scenario.bucket ?? ''}`)
+const actionLabels: Record<string, string> = {
+  hold: '保持', enter: '进入候选', cancel: '取消候选', switch: '切换版本',
+}
+const kindLabels: Record<string, string> = {
+  baseline: '基线', refresh: '刷新', drift: '属性漂移', expiry: '属性过期',
+  blocked: '无可行组合', cancel: '人工取消', window: '观察窗口',
+}
 
 function number(value: number | null | undefined, digits = 3) {
   return value == null ? '—' : value.toFixed(digits)
@@ -38,7 +49,7 @@ async function propose() {
     await agentApi.proposeRoute(props.agentId, { channel_id: props.channelId,
       source_id: props.sourceId, rule: props.rule,
       duration_seconds: props.durationSeconds ?? undefined })
-    await Promise.all([states.refresh(), refresh()])
+    await Promise.all([states.refresh(), refresh(), decisions.refresh()])
   } catch (problem) {
     actionError.value = problem instanceof Error ? problem.message : '路由提议失败'
   } finally { acting.value = '' }
@@ -58,7 +69,7 @@ async function cancel() {
 
 <template>
   <section class="panel route-panel" aria-label="路由候选">
-    <div class="panel-title"><h2>路由候选</h2><small>{{ bucketLabel }}</small></div>
+    <div class="panel-title"><h2>路由候选</h2><small>{{ sourceLabel ? sourceLabel + ' · ' : '' }}{{ bucketLabel }}</small></div>
     <p class="muted">按需求覆盖、依赖完整性、冲突、资源和切换代价评估模型执行组合。人工提议只登记候选，切换需要候选取得足够多的有效观察窗口。</p>
     <div class="toolbar route-toolbar">
       <NButton size="small" :loading="loading" @click="refresh">刷新路由评估</NButton>
@@ -91,6 +102,29 @@ async function cancel() {
           v-if="routeState.escalated">；已退化为全图重算（{{ routeState.escalation_reason }}）</span>
       </p>
       <ul v-if="routeState.notices?.length" class="route-notices"><li v-for="notice in routeState.notices ?? []" :key="notice">{{ notice }}</li></ul>
+    </section>
+    <section v-if="policies.data.value" class="route-policies" aria-label="关联策略">
+      <h3>关联策略</h3>
+      <p class="muted">{{ policies.data.value.notice }}</p>
+      <ul>
+        <li v-for="policy in policies.data.value.items" :key="policy.name">
+          <strong>{{ policy.label }}</strong>
+          <span class="route-history-kind">{{ policy.installed ? '已安装' : '未安装' }}</span>
+          <span v-if="policy.name === policies.data.value.active">当前使用</span>
+          <small>{{ (policy.limitations ?? []).join('；') }}</small>
+        </li>
+      </ul>
+    </section>
+    <section v-if="decisions.data.value?.length" class="route-history" aria-label="最近路由决策">
+      <h3>最近路由决策</h3>
+      <ul>
+        <li v-for="item in decisions.data.value" :key="item.id">
+          <strong>{{ actionLabels[item.action] ?? item.action }}</strong>
+          <span class="route-history-kind">{{ kindLabels[item.kind] ?? item.kind }}</span>
+          <span>{{ item.reason }}</span>
+          <small>{{ formatDate(item.created_at) }}<template v-if="item.route_version"> · {{ item.route_version }}</template></small>
+        </li>
+      </ul>
     </section>
     <p v-if="loading && !data" class="muted" role="status">正在评估路由候选…</p>
     <template v-else-if="data">
@@ -149,5 +183,14 @@ async function cancel() {
 .route-state-line { display: flex; gap: 12px; flex-wrap: wrap; align-items: baseline; font-size: 13px; }
 .route-mode { font-size: 12px; opacity: .8; }
 .route-drift { margin: 0; padding-left: 18px; font-size: 12px; opacity: .9; }
+.route-history { margin-bottom: 12px; }
+.route-history ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-history li { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; font-size: 12px; border-bottom: 1px solid rgba(128,128,128,.18); padding-bottom: 4px; }
+.route-history-kind { border: 1px solid rgba(128,128,128,.35); border-radius: 10px; padding: 0 6px; font-size: 11px; }
+.route-history small { opacity: .7; }
+.route-policies { margin-bottom: 12px; }
+.route-policies ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-policies li { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; font-size: 12px; }
+.route-policies small { opacity: .7; }
 h3 { margin: 12px 0 6px; font-size: 13px; }
 </style>

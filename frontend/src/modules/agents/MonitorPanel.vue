@@ -66,9 +66,10 @@ async function stop(run:Run){
   </div>
   <RoutePanel v-if="routesOpen && workspace?.data_origin==='real' && routeTarget" :key="`${routeTarget.sourceId}:${routeTarget.rule}`"
     :agent-id="agentId" :channel-id="routeTarget.channelId"
+    :source-label="sources.find(item => item.id === routeTarget?.sourceId)?.name"
     :source-id="routeTarget.sourceId" :rule="routeTarget.rule" :duration-seconds="routeTarget.duration"/>
   <ObservationPanel v-if="observationsOpen && workspace?.data_origin==='real'" :key="agentId"
-    :agent-id="agentId" :runs="runs" :sources="sources"/>
+    :agent-id="agentId" :runs="runs" :sources="sources" @open-route="routesOpen = true"/>
   <TrustChecksPanel v-if="trustChecksOpen && workspace?.data_origin==='real'" :key="agentId"
     :agent-id="agentId" :runs="runs" :sources="sources"/>
   <div v-if="groups.length" class="run-channel-grid"><article v-for="group in groups" :key="group.id" class="panel run-channel-card"><strong>{{group.name}}</strong><p>{{group.tiles.length}} 路视频 · {{groupRuns(group.id).filter(r=>activeStates.has(r.state)).length}} 路活动 · {{groupRuns(group.id).filter(r=>r.state==='failed').length}} 路异常</p><small>共享规则，按整个通道启停；请核对每个画面的实际版本与状态。</small><div class="agent-actions"><NButton v-if="canWrite&&groupRuns(group.id).some(r=>activeStates.has(r.state))" size="small" :disabled="!workspace?.runtime_available||!!stopping" :loading="groupRuns(group.id).some(r=>r.id===stopping)" @click="stop(groupRuns(group.id).find(r=>activeStates.has(r.state))!)">停止整个通道</NButton></div></article></div>

@@ -82,3 +82,16 @@ it('reads real observation records only while the panel is open', async () => {
     expect(wrapper.find('button[aria-label="有效观察"]').exists()).toBe(false)
   } finally { wrapper.unmount() }
 })
+
+it('shows the route version of each window and can jump to routing', async () => {
+  vi.spyOn(agentApi, 'observations').mockResolvedValue(page([empty]))
+  const wrapper = mount(ObservationPanel, {
+    props: { agentId: 'task', sources, runs: sources.map(source => ({ source_id: source.id })) },
+  })
+  try {
+    await flushPromises()
+    expect(wrapper.text()).toContain('local-r1')
+    await wrapper.get('[aria-label="查看该视频源的路由"]').trigger('click')
+    expect(wrapper.emitted('openRoute')?.[0]).toEqual(['one'])
+  } finally { wrapper.unmount() }
+})

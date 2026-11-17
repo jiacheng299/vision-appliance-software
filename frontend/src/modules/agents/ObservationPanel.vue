@@ -7,6 +7,7 @@ import { formatDate, useResource } from '../../shared/ui/resource'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 
 const props = defineProps<{ agentId: string; runs: Pick<Run, 'source_id'>[]; sources: Pick<Source, 'id' | 'name'>[] }>()
+const emit = defineEmits<{ openRoute: [sourceId: string] }>()
 const sourceId = ref<string | null>(null)
 const verdict = ref<ObservationVerdict | null>(null)
 const names = computed(() => new Map(props.sources.map(source => [source.id, source.name])))
@@ -64,14 +65,17 @@ function reasons(row: Observation) {
     <p v-else-if="!error && !data?.items.length" class="muted" role="status">暂无有效观察记录</p>
     <div v-else-if="!error && data?.items.length" class="table-wrap">
       <table>
-        <thead><tr><th>视频源</th><th>结论</th><th>帧窗口</th><th>实际帧率</th><th>过曝</th><th>说明</th></tr></thead>
+        <thead><tr><th>视频源</th><th>结论</th><th>帧窗口</th><th>实际帧率</th><th>过曝</th><th>路由版本</th><th>说明</th><th></th></tr></thead>
         <tbody><tr v-for="row in data.items" :key="row.id">
           <td class="wrap">{{ names.get(row.source_id) ?? row.source_id }}</td>
           <td><span :class="['observation-verdict', row.verdict]">{{ labels[row.verdict] }}</span></td>
           <td>{{ window(row) }}</td>
           <td>{{ rate(row) }}</td>
           <td>{{ glare(row) }}</td>
+          <td>{{ row.route_version ?? '—' }}</td>
           <td class="wrap">{{ reasons(row) }}</td>
+          <td><NButton text type="primary" size="small" aria-label="查看该视频源的路由"
+            @click="emit('openRoute', row.source_id)">路由</NButton></td>
         </tr></tbody>
       </table>
       <p class="muted">最近一条记录时间 {{ formatDate(data.items[0]?.created_at ?? null) }}</p>
