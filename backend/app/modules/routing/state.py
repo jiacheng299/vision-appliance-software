@@ -65,7 +65,7 @@ def _ensure(db, agent_id, actor_id, channel_id, source_id, rule, baseline):
 def _scenario(db, source_id, rule):
     profile = semantics.read_profile(db, source_id)
     from .service import _latest_metrics, _labels  # 复用同一套口径
-    metrics = _latest_metrics(db, source_id, f'person/{rule}')
+    metrics, _evidence = _latest_metrics(db, source_id, f'person/{rule}')
     return capabilities.scenario_from(labels=_labels(profile.attributes),
                                       target_px=metrics.get('target_scale_px'),
                                       brightness=metrics.get('brightness'),

@@ -19099,6 +19099,41 @@
         ],
         "title": "EvidenceDTO"
       },
+      "EvidenceView": {
+        "properties": {
+          "observation_id": {
+            "type": "string",
+            "title": "Observation Id"
+          },
+          "verdict": {
+            "type": "string",
+            "title": "Verdict"
+          },
+          "window_start": {
+            "type": "number",
+            "title": "Window Start"
+          },
+          "window_end": {
+            "type": "number",
+            "title": "Window End"
+          },
+          "usable": {
+            "type": "boolean",
+            "title": "Usable"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observation_id",
+          "verdict",
+          "window_start",
+          "window_end",
+          "usable"
+        ],
+        "title": "EvidenceView",
+        "description": "路由评估采用的场景证据来自哪一条观察窗口。"
+      },
       "ExecutionPlanRef": {
         "properties": {
           "plan_id": {
@@ -22208,6 +22243,16 @@
           "min_quality": {
             "type": "number",
             "title": "Min Quality"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "notices": {
             "items": {

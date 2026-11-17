@@ -2601,6 +2601,22 @@ export interface components {
              */
             message: string;
         };
+        /**
+         * EvidenceView
+         * @description 路由评估采用的场景证据来自哪一条观察窗口。
+         */
+        EvidenceView: {
+            /** Observation Id */
+            observation_id: string;
+            /** Verdict */
+            verdict: string;
+            /** Window Start */
+            window_start: number;
+            /** Window End */
+            window_end: number;
+            /** Usable */
+            usable: boolean;
+        };
         /** ExecutionPlanRef */
         ExecutionPlanRef: {
             /** Plan Id */
@@ -3615,6 +3631,7 @@ export interface components {
             };
             /** Min Quality */
             min_quality: number;
+            evidence?: components["schemas"]["EvidenceView"] | null;
             /** Notices */
             notices: string[];
         };

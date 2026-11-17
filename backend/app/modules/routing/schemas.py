@@ -59,6 +59,15 @@ class ScenarioView(DTO):
     reasons: list[str] = Field(default_factory=list)
 
 
+class EvidenceView(DTO):
+    """路由评估采用的场景证据来自哪一条观察窗口。"""
+    observation_id: str
+    verdict: str
+    window_start: float
+    window_end: float
+    usable: bool
+
+
 class RouteView(DTO):
     source_id: str
     rule: str
@@ -72,6 +81,7 @@ class RouteView(DTO):
     weights: dict[str, float]
     budgets: dict[str, float]
     min_quality: float
+    evidence: EvidenceView | None = None
     notices: list[str]
 
 

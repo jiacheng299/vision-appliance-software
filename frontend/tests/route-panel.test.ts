@@ -199,3 +199,26 @@ it('states what policy is actually loaded, including when the configured one is 
     expect(line.text()).toContain('配置项 marl-association')
   } finally { wrapper.unmount() }
 })
+it('says which window the scenario evidence came from, and flags a weak one', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue({ ...view,
+    evidence: { observation_id: 'obs-9', verdict: 'insufficient', window_start: 90,
+      window_end: 120, usable: false } })
+  const wrapper = mount(RoutePanel, { props: { sourceId: 'one', rule: 'absence' } })
+  try {
+    await flushPromises()
+    const line = wrapper.get('[aria-label="场景证据来源"]')
+    expect(line.text()).toContain('观察不足')
+    expect(line.text()).toContain('90.0–120.0 秒')
+    expect(line.text()).toContain('只能作为提示')
+    expect(line.classes()).toContain('blocked')
+  } finally { wrapper.unmount() }
+})
+
+it('states that no observation exists yet when there is none', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue({ ...view, evidence: null })
+  const wrapper = mount(RoutePanel, { props: { sourceId: 'one', rule: 'absence' } })
+  try {
+    await flushPromises()
+    expect(wrapper.get('[aria-label="场景证据来源"]').text()).toContain('还没有观察记录')
+  } finally { wrapper.unmount() }
+})

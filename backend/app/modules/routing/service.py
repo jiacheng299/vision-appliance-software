@@ -8,7 +8,7 @@ from ..semantics import service as semantics
 from . import capability as capabilities
 from . import graph as graphs
 from . import solver
-from .schemas import (CapabilityView, EdgeView, EvaluationView, RequirementView,
+from .schemas import (CapabilityView, EdgeView, EvaluationView, EvidenceView, RequirementView,
                       RouteView, ScenarioView)
 
 
@@ -32,7 +32,9 @@ def _latest_metrics(db, source_id, task_key):
                      .where(ObservationRecord.source_id == source_id,
                             ObservationRecord.task_key == task_key)
                      .order_by(ObservationRecord.sequence.desc()).limit(1)).first()
-    return dict(row.metrics) if row else {}
+    if row is None:
+        return {}, None
+    return dict(row.metrics), row
 
 
 def _capability_views(table):
@@ -60,7 +62,7 @@ def _evaluation_view(item):
                           reasons=list(item.reasons), bucket=item.bucket)
 
 
-def _notices(table, scenario, metrics):
+def _notices(table, scenario, metrics, evidence=None):
     notices = []
     uncalibrated = [capability.label for capability in table.values() if not capability.calibrated]
     if uncalibrated:
@@ -68,6 +70,9 @@ def _notices(table, scenario, metrics):
                        + '、'.join(uncalibrated))
     if not metrics:
         notices.append('该视频源还没有观察记录，目标尺度按未测定处理。')
+    elif evidence is not None and evidence.verdict == 'insufficient':
+        notices.append('最近一次窗口是"观察不足"，它给出的目标尺度与画质只能作为提示，'
+                       '不能当作已成立的场景条件。')
     if scenario.saturated_ratio is None:
         notices.append('不可恢复饱和像素比例未测定，去眩光类预处理能否修复当前画面无法确认。')
     if scenario.bucket != capabilities.DEFAULT_BUCKET:
@@ -84,7 +89,7 @@ def evaluate_route(db, source_id, rule, *, duration_seconds=None, table=None,
     except graphs.GraphError as error:
         raise Error(422, 'route_rule_invalid', str(error)) from None
     profile = semantics.read_profile(db, source_id)
-    metrics = _latest_metrics(db, source_id, f'person/{rule}')
+    metrics, evidence = _latest_metrics(db, source_id, f'person/{rule}')
     scenario = capabilities.scenario_from(labels=_labels(profile.attributes),
                                           target_px=metrics.get('target_scale_px'),
                                           brightness=metrics.get('brightness'),
@@ -117,4 +122,14 @@ def evaluate_route(db, source_id, rule, *, duration_seconds=None, table=None,
                      blocked=[_evaluation_view(item) for item in solution.blocked],
                      weights=solution.weights.as_dict(), budgets=solution.budgets.as_dict(),
                      min_quality=min_quality,
-                     notices=_notices(table, scenario, metrics))
+                     evidence=_evidence_view(evidence),
+                     notices=_notices(table, scenario, metrics, evidence))
+
+
+def _evidence_view(row):
+    """哪一条观察记录在为本次路由提供场景证据。"""
+    if row is None:
+        return None
+    return EvidenceView(observation_id=row.id, verdict=row.verdict,
+                        window_start=row.window_start, window_end=row.window_end,
+                        usable=row.verdict != 'insufficient')

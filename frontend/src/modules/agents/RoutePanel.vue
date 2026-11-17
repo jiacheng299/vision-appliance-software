@@ -119,6 +119,15 @@ async function cancel() {
     <RouteTimeline v-if="timeline.data.value?.length" :entries="timeline.data.value"/>
     <p v-if="loading && !data" class="muted" role="status">正在评估路由候选…</p>
     <template v-else-if="data">
+      <p v-if="data.evidence" class="route-evidence" :class="data.evidence.usable ? 'ok' : 'blocked'"
+        aria-label="场景证据来源">
+        场景证据来自{{ data.evidence.usable ? '有效观察' : '观察不足' }}窗口
+        {{ data.evidence.window_start.toFixed(1) }}–{{ data.evidence.window_end.toFixed(1) }} 秒
+        <span v-if="!data.evidence.usable">（只能作为提示，不能当作已成立的场景条件）</span>
+      </p>
+      <p v-else class="route-evidence muted" aria-label="场景证据来源">
+        该视频源还没有观察记录，场景条件按未测定处理。
+      </p>
       <ul v-if="data.notices.length" class="route-notices" aria-label="路由评估口径说明">
         <li v-for="notice in data.notices" :key="notice">{{ notice }}</li>
       </ul>
@@ -183,6 +192,9 @@ async function cancel() {
 .route-policies ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .route-policies li { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; font-size: 12px; }
 .route-policies small { opacity: .7; }
+.route-evidence { margin: 0 0 8px; font-size: 12px; }
+.route-evidence.ok { color: #18a058; }
+.route-evidence.blocked { color: #d03050; }
 .route-active { margin: 8px 0 0; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
 .route-active.ok { color: #18a058; }
 .route-active.blocked { color: #d03050; }

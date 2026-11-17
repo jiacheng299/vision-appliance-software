@@ -77,3 +77,64 @@ def test_unknown_source_and_invalid_rule_are_rejected(client, seeded):
                       params={'rule': 'crowd_density'}).status_code == 422
     assert client.get('/api/v1/sources/cam/routes',
                       params={'rule': 'absence', 'min_quality': 2}).status_code == 422
+
+
+def test_route_evidence_points_at_the_window_it_used(client, seeded):
+    """有观察记录时，路由评估应指出场景证据来自哪一窗、那一窗是否有效。"""
+    payload = dict(source_id='cam', task_key='person/absence',
+                   roi=[[0, 0], [1, 0], [1, 1], [0, 1]], window_start=0.0, window_end=30.0,
+                   detection_count=0, path_complete=True,
+                   metrics=dict(frame_count=30, duration_seconds=30.0, actual_fps=1.0,
+                                max_gap_seconds=1.1, roi_visible_ratio=1.0,
+                                overexposure_ratio=0.05, blur_score=120.0,
+                                occlusion_ratio=0.0, target_scale_px=64.0),
+                   thresholds=dict(min_fps=0.9, max_gap_seconds=1.5, min_window_seconds=20.0,
+                                   min_roi_visible_ratio=0.9, max_overexposure_ratio=0.2,
+                                   min_blur_score=50.0, max_occlusion_ratio=0.3,
+                                   min_target_scale_px=24.0),
+                   versions={'route_version': 'route-1', 'model_version': 'yolo11n'})
+    with seeded.state.sessions() as db:
+        from app.modules.agents.models import Agent
+        db.add(Agent(id='agent', name='任务', description='', owner_id='workspace'))
+        db.commit()
+    created = client.post('/api/v1/agents/agent/observations', json=payload)
+    assert created.status_code == 201
+    observation_id = created.json()['id']
+
+    body = routes(client, rule='absence')
+    assert body['evidence']['observation_id'] == observation_id
+    assert body['evidence']['verdict'] == 'not_detected'
+    assert body['evidence']['usable'] is True
+    assert body['scenario']['target_px'] == 64.0
+    assert not any('观察不足' in notice and '只能作为提示' in notice for notice in body['notices'])
+
+
+def test_an_insufficient_window_is_flagged_as_a_hint_not_evidence(client, seeded):
+    payload = dict(source_id='cam', task_key='person/absence', roi=[], window_start=0.0,
+                   window_end=30.0, detection_count=0, path_complete=True,
+                   metrics=dict(frame_count=30, duration_seconds=30.0, actual_fps=1.0,
+                                max_gap_seconds=1.1, roi_visible_ratio=1.0,
+                                overexposure_ratio=0.62, blur_score=120.0,
+                                occlusion_ratio=0.0, target_scale_px=64.0),
+                   thresholds=dict(min_fps=0.9, max_gap_seconds=1.5, min_window_seconds=20.0,
+                                   min_roi_visible_ratio=0.9, max_overexposure_ratio=0.2,
+                                   min_blur_score=50.0, max_occlusion_ratio=0.3,
+                                   min_target_scale_px=24.0),
+                   versions={'route_version': 'route-1', 'model_version': 'yolo11n'})
+    with seeded.state.sessions() as db:
+        from app.modules.agents.models import Agent
+        db.add(Agent(id='agent', name='任务', description='', owner_id='workspace'))
+        db.commit()
+    created = client.post('/api/v1/agents/agent/observations', json=payload)
+    assert created.json()['verdict'] == 'insufficient'
+
+    body = routes(client, rule='absence')
+    assert body['evidence']['verdict'] == 'insufficient'
+    assert body['evidence']['usable'] is False
+    assert any('只能作为提示' in notice for notice in body['notices'])
+
+
+def test_without_any_observation_the_route_says_so(client, seeded):
+    body = routes(client, rule='absence')
+    assert body['evidence'] is None
+    assert any('还没有观察记录' in notice for notice in body['notices'])
