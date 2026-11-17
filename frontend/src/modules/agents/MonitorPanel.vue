@@ -14,6 +14,7 @@ import EventsPanel from './EventsPanel.vue'
 import TrustChecksPanel from './TrustChecksPanel.vue'
 import ObservationPanel from './ObservationPanel.vue'
 import RoutePanel from './RoutePanel.vue'
+import TaskSummaryStrip from './TaskSummaryStrip.vue'
 import VideoWall from './VideoWall.vue'
 import { channelSources, sourceCount, wallGroups } from './channelSources'
 const props=defineProps<{agentId:string;workspace:Workspace|null;revision:Revision;sources:Source[];canWrite:boolean;focusRunId?:string}>()
@@ -66,6 +67,8 @@ async function stop(run:Run){
 <template>
   <ErrorBanner :error="error" :retryable="false"/>
   <p v-if="workspace&&!workspace.runtime_available" class="error-banner" role="alert">{{workspace.runtime_error}} 保留已读取的历史状态，但当前状态待确认，控制操作暂不可用。</p>
+  <TaskSummaryStrip :agent-id="agentId" :channel-id="routeTarget?.channelId ?? null"
+    :source-id="routeTarget?.sourceId ?? null" :real="real"/>
   <div class="agent-actions agent-tabs" role="tablist" aria-label="任务视图">
     <NButton v-for="item in tabs.filter(entry => entry.enabled)" :key="item.value" size="small"
       :aria-label="item.label" :aria-selected="tab===item.value" :aria-pressed="tab===item.value"

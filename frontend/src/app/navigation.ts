@@ -42,6 +42,25 @@ export const navigationGroups: NavGroup[] = [
 /** 扁平列表：保持既有调用方与测试不用改。 */
 export const navigation: NavEntry[] = navigationGroups.flatMap(group => group.items)
 
+/**
+ * Which group the current path belongs to. Longest prefix wins, so
+ * `/dashboard/events` highlights 结果 rather than 运行与观察.
+ */
+export function activeGroupLabel(path: string): string | null {
+  let best: string | null = null
+  let bestLength = -1
+  for (const group of navigationGroups) {
+    for (const item of group.items) {
+      const matches = path === item.path || path.startsWith(item.path + '/')
+      if (matches && item.path.length > bestLength) {
+        best = group.label
+        bestLength = item.path.length
+      }
+    }
+  }
+  return best
+}
+
 export function permittedRoutes(path: string): boolean {
   return /^\/(dashboard(?:\/events)?|runtime|create|models(?:\/[^/]+)?|agents(?:\/[^/]+(?:\/(?:live|config|history|events|reports))?)?|sources(?:\/[^/]+)?|settings(?:\/(general|storage|resources|security|diagnostics))?)$/.test(path)
 }

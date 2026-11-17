@@ -70,13 +70,15 @@ it('reads real observation records only while the panel is open', async () => {
   })
   try {
     await flushPromises()
-    expect(request).not.toHaveBeenCalled()
+    // 顶部摘要条确实会取一次结论分布，但观察列表本身在打开页签前不渲染
+    expect(wrapper.find('[aria-label="有效观察记录"]').exists()).toBe(false)
+    const before = request.mock.calls.length
     const observationTab = wrapper.get('button[aria-label="有效观察"]')
     expect(wrapper.get('[role="tablist"]').text()).toContain('画面')
     expect(wrapper.get('[role="tablist"]').text()).toContain('事件')
     await observationTab.trigger('click')
     await flushPromises()
-    expect(request).toHaveBeenCalled()
+    expect(request.mock.calls.length).toBeGreaterThan(before)
     expect(wrapper.text()).toContain('暂无有效观察记录')
     // 切回画面页签后，观察面板应被卸载，不再持有数据
     await wrapper.get('button[aria-label="画面"]').trigger('click')
