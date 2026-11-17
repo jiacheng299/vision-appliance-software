@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 28 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 30 个提交，全部只提交未 push。
 
 > 需要一页纸看"交底书哪一条落在哪段代码"时，直接看 [交底书对照表](PATENT_MAPPING.md)。
 
@@ -49,6 +49,18 @@
 | `41e6e85` | `feat(ui): 左侧导航按交底书链路分组`：4 个文件，+89 / −9 |
 | `7109b8c` | `docs: 更新验收记录至第 13 轮（侧栏按链路分组）` |
 | `15dcd30` | `feat(tracking): 外部策略装载位与 MARL 接入契约文档`：7 个文件，+292 / −4 |
+| `0804c53` | `docs: 更新验收记录至第 14 轮（外部策略装载与 MARL 契约）` |
+| `1eedb60` | `feat(tracking): 策略状态接口回显"实际装载的是什么"`：8 个文件，+302 / −7 |
+
+### 第 15 轮改动
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/tracking/registry.py` | 修改 | `describe_active(spec)`：解析结果缓存、外部策略只构造一次；`forget()` 供测试与重载 |
+| `backend/app/modules/tracking/routes.py` | 修改 | `/tracking/policies` 增加 `resolved`（spec/available/name/kind/external/detail/reason），notice 分三种情况 |
+| `frontend/src/modules/agents/RoutePanel.vue` | 修改 | 关联策略区块新增"实际装载"一行（可用/不可用两种样式）+ 配置项原文 |
+| `tests/backend/test_tracking_status.py` | 新增 | 6 项：默认内置、目录完整、未安装槽位、外部策略、坏 spec、缓存不重复构造 |
+| `frontend/tests/route-panel.test.ts`、`agent-tabs.test.ts` | 修改 | 新增 1 项不可用场景；补 `resolved` 字段 |
 
 ### 第 14 轮改动
 
@@ -821,6 +833,38 @@ loaded: demo-external {'name': 'demo-external'}
 接入方式只有一行配置：`VISION_TRACKER_POLICY=module:attribute`；回滚同理
 （改回 `heuristic-iou` 即可）。完整约定见 [MARL 追踪接入契约](MARL_TRACKING_CONTRACT.md)。
 
+### 第 15 轮（策略状态回显）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+504 passed in 276.55s        # 第 14 轮 498 项 + 本轮 6 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  38 passed (38)
+     Tests  190 passed (190)
+
+$ cd frontend && npm run build
+✓ built in 14.86s
+```
+
+真实应用（默认配置）：
+
+```
+active=heuristic-iou  available=True  name=heuristic-iou  external=False
+notice: 关联策略可替换；多智能体强化学习策略尚未安装，本机仍使用内置策略 heuristic-iou。
+```
+
+`resolved` 字段把"配置写的"与"实际装载的"分开，三种情况各有明确输出：
+
+| 配置 | resolved | 界面表现 |
+| --- | --- | --- |
+| `heuristic-iou`（默认） | available=true，external=false | 绿色"实际装载：heuristic-iou（内置策略）" |
+| `module:attribute`（已装载） | available=true，external=true，带策略 describe | 绿色"实际装载：<策略名>（外部策略）" |
+| `marl-association` 或坏 spec | available=false，带原因 | 红色"实际装载：不可用 —— <原因>" |
+
+外部策略的描述在**每个进程内只构造一次**（有测试用计数替身验证第二次请求
+不再调用装载逻辑），避免每次打开面板都重新加载一遍权重。
+
 ## 八、自查方法
 
 ```powershell
@@ -883,9 +927,9 @@ cd frontend; npm test; npm run build; cd ..
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 15 轮）计划
+## 十、下一轮（第 16 轮）计划
 
-1. 把 `GET /tracking/policies` 与实际装载状态打通：外部策略装载后，接口应回显"当前策略 + 是否外部 + 模块路径"，消除第 14 轮留下的展示缺口。
+1. 侧栏当前分组高亮 + 任务顶部的"可观察性摘要"（画像版本、最近三态分布、当前路由版本），把入口与状态连起来；这是纯展示层的小改动。
 2. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示（延续"不伪造绿色"的约定）。
 3. 观察记录详情页：点开一条 `insufficient` 可看到当时的组合成员、门禁逐项数值与当时的漂移，而不只是原因文本。
 4. 把"画像为空"的常见路径补上自动初始化：首次运行时按设备字段与首帧图像统计写入固有层与一项动态属性（仍需人工确认后才用于路由）。
