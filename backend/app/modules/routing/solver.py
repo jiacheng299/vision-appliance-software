@@ -209,15 +209,23 @@ def evaluate(combination, *, graph, scenario, weights=None, budgets=None, curren
                       bucket=bucket)
 
 
-def build_combinations(graph, table=None, *, include_uninstalled=True, max_members=4):
-    """Enumerate every way to cover the requirements, plus optional preprocessors."""
+def providers_for(graph, table=None, *, include_uninstalled=True):
+    """Requirement key → capabilities that can satisfy it."""
+    pool = (table or capability_table.table()).values()
     providers = {}
     for key in graph.keys:
-        providers[key] = sorted(capability.id for capability in (table or capability_table.table()).values()
+        providers[key] = sorted(capability.id for capability in pool
                                 if key in capability.provides
                                 and (include_uninstalled or capability.installed))
         if not providers[key]:
             raise ValueError(f'没有能力可以满足需求：{key}')
+    return providers
+
+
+def build_combinations(graph, table=None, *, include_uninstalled=True, max_members=4,
+                       providers=None):
+    """Enumerate every way to cover the requirements, plus optional preprocessors."""
+    providers = providers or providers_for(graph, table, include_uninstalled=include_uninstalled)
     prefixes = [capability.id for capability in (table or capability_table.table()).values()
                 if capability.kind == 'preprocess'
                 and (include_uninstalled or capability.installed)]
@@ -289,6 +297,44 @@ class Solution:
                 'ranked': [_evaluation_dict(item) for item in self.ranked],
                 'blocked': [_evaluation_dict(item) for item in self.blocked],
                 'weights': self.weights.as_dict(), 'budgets': self.budgets.as_dict()}
+
+
+def solve_local(*, graph, scenario, drifted_keys=(), current_members=(), table=None,
+                weights=None, budgets=None, min_quality=MIN_QUALITY):
+    """Re-route only the affected subgraph and keep the validated rest in place.
+
+    Falls back to a full solve when the drift index covers the whole graph or when
+    an unaffected requirement has no current provider to keep.
+    """
+    from .graph import affected_requirements
+    pool = table or capability_table.table()
+    affected = set(affected_requirements(tuple(drifted_keys))) & set(graph.keys)
+    report = {'affected': sorted(affected), 'fixed': [], 'escalated': False,
+              'escalation_reason': None}
+    if not affected or affected >= set(graph.keys) or not current_members:
+        report['escalated'] = True
+        report['escalation_reason'] = ('漂移覆盖全部需求' if affected else '没有可定位的受影响子图')
+        return solve(graph=graph, scenario=scenario, weights=weights, budgets=budgets,
+                     table=table, min_quality=min_quality), report
+    providers = providers_for(graph, table)
+    fixed = {}
+    for key in graph.keys:
+        if key in affected:
+            continue
+        keeping = [member for member in current_members if key in _get(table, member).provides]
+        if not keeping:
+            report['escalated'] = True
+            report['escalation_reason'] = f'未受影响的需求 {key} 当前没有可保留的成员'
+            return solve(graph=graph, scenario=scenario, weights=weights, budgets=budgets,
+                         table=table, min_quality=min_quality), report
+        fixed[key] = sorted(set(keeping))
+        report['fixed'].append(key)
+    restricted = {key: (providers[key] if key in affected else fixed[key]) for key in graph.keys}
+    combos = build_combinations(graph, table, providers=restricted)
+    current = Combination(id='current', label='当前组合', members=tuple(current_members)) if current_members else None
+    return solve(graph=graph, scenario=scenario, weights=weights, budgets=budgets,
+                 current=current, table=table, min_quality=min_quality,
+                 candidates=combos), report
 
 
 def _evaluation_dict(item):

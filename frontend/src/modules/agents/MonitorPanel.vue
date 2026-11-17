@@ -27,7 +27,8 @@ const routeTarget = computed(() => {
   const binding = channel ? channelSources(channel)[0] : undefined
   const source = binding ? props.sources.find(item => item.id === binding.source_id) : undefined
   return channel && source
-    ? { sourceId: source.id, rule: channel.rule, duration: channel.duration_seconds ?? null }
+    ? { sourceId: source.id, channelId: channel.channel_id, rule: channel.rule,
+        duration: channel.duration_seconds ?? null }
     : null
 })
 const runs=computed(()=>props.workspace?.runs??[]),currentRuns=computed(()=>actualRuns(runs.value))
@@ -64,6 +65,7 @@ async function stop(run:Run){
       :type="routesOpen?'primary':'default'" @click="routesOpen=!routesOpen">路由候选</NButton>
   </div>
   <RoutePanel v-if="routesOpen && workspace?.data_origin==='real' && routeTarget" :key="`${routeTarget.sourceId}:${routeTarget.rule}`"
+    :agent-id="agentId" :channel-id="routeTarget.channelId"
     :source-id="routeTarget.sourceId" :rule="routeTarget.rule" :duration-seconds="routeTarget.duration"/>
   <ObservationPanel v-if="observationsOpen && workspace?.data_origin==='real'" :key="agentId"
     :agent-id="agentId" :runs="runs" :sources="sources"/>

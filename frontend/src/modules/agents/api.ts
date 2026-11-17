@@ -40,6 +40,8 @@ export type ObservationPage = components['schemas']['ObservationPage']
 export type ObservationVerdict = Observation['verdict']
 export type RouteView = components['schemas']['RouteView']
 export type RouteEvaluation = components['schemas']['EvaluationView']
+export type RouteState = components['schemas']['RouteStateView']
+export type RouteDecision = components['schemas']['RouteDecisionView']
 export type Playback = components['schemas']['PlaybackDTO']
 export type Missed = components['schemas']['MissedDTO']
 export type ExportJob = components['schemas']['ExportDTO']
@@ -66,6 +68,10 @@ export const agentApi = {
   trustChecks: (id: string, source_id?: string) => client.get<TrustCheck[]>(`${base(id)}/trust-checks`, {params:{source_id}}).then(r => r.data),
   observations: (id: string, filters: { source_id?: string; verdict?: ObservationVerdict; run_id?: string } = {}, cursor?: string) => client.get<ObservationPage>(`${base(id)}/observations`, {params:{...filters, cursor, limit:30}}).then(r => r.data),
   routes: (sourceId: string, params: { rule: string; duration_seconds?: number }) => client.get<RouteView>(`/sources/${encodeURIComponent(sourceId)}/routes`, {params}).then(r => r.data),
+  routeStates: (id: string) => client.get<RouteState[]>(`${base(id)}/routing`).then(r => r.data),
+  routeDecisions: (id: string, params: { channel_id?: string; source_id?: string; limit?: number } = {}) => client.get<RouteDecision[]>(`${base(id)}/routing/decisions`, {params}).then(r => r.data),
+  proposeRoute: (id: string, body: { channel_id: string; source_id: string; rule: string; duration_seconds?: number }) => client.post<RouteState>(`${base(id)}/routing/propose`, body, jsonOptions).then(r => r.data),
+  cancelRoute: (id: string, body: { channel_id: string; source_id: string }) => client.post<RouteState>(`${base(id)}/routing/cancel`, body, jsonOptions).then(r => r.data),
   submit: (id: string, kind: 'start'|'apply', body: components['schemas']['StartInput'], key: string) => client.post<Operation>(`${base(id)}/${kind === 'start' ? 'run-groups' : 'revision-applications'}`, body, keyOptions(key)).then(r => r.data),
   stop: (id: string, runId: string, key: string) => client.post<Operation>(`${base(id)}/runs/${encodeURIComponent(runId)}/stop`, {}, keyOptions(key)).then(r => r.data),
   stopChannel: (id:string, channelId:string, key:string) => client.post<Operation>(`${base(id)}/channels/${encodeURIComponent(channelId)}/stop`,{},keyOptions(key)).then(r=>r.data),

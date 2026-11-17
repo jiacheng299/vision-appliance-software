@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
-import { agentApi, type Revision, type RouteEvaluation, type RouteView, type Workspace } from '../src/modules/agents/api'
+import { agentApi, type Revision, type RouteEvaluation, type RouteState, type RouteView, type Workspace } from '../src/modules/agents/api'
 import type { Source } from '../src/shared/api/types'
 import RoutePanel from '../src/modules/agents/RoutePanel.vue'
 import MonitorPanel from '../src/modules/agents/MonitorPanel.vue'
@@ -36,7 +36,7 @@ it('shows the chosen combination with its score breakdown and the blocked ones',
   try {
     await flushPromises()
     expect(request).toHaveBeenCalledWith('one', { rule: 'absence', duration_seconds: undefined })
-    expect(wrapper.text()).toContain('当前选择：YOLO11n COCO 人员检测')
+    expect(wrapper.text()).toContain('评估首选：YOLO11n COCO 人员检测')
     expect(wrapper.text()).toContain('综合评分 1.623')
     expect(wrapper.text()).toContain('常规场景')
     expect(wrapper.text()).toContain('未做分桶验证')
@@ -81,5 +81,55 @@ it('opens route evaluation from the task monitor only for a real bound channel',
     await flushPromises()
     expect(request).toHaveBeenCalledWith('one', { rule: 'absence', duration_seconds: 30 })
     expect(wrapper.find('[aria-label="路由候选"]').exists()).toBe(true)
+  } finally { wrapper.unmount() }
+})
+
+const routeState: RouteState = {
+  agent_id: 'task', channel_id: 'channel', source_id: 'one', rule: 'absence',
+  active_members: ['yolo11n-person'], active_version: 'route-v1', active_since: 1,
+  mode: 'candidate', candidate_members: ['yolo11s-person'], candidate_score: 1.71,
+  valid_windows: 1, hard_failure: false, delta_j: 0.09,
+  drift: [{ attribute: 'lighting', kind: 'confirmed', previous: 'daylight',
+    current: 'strong_glare', reason: '新帧或设备证据确认属性发生变化' }],
+  affected: ['person_detect'], fixed: [], escalated: true,
+  escalation_reason: '漂移覆盖全部需求', chosen: { ...chosen, combination_id: 'combo:yolo11s-person',
+    members: ['yolo11s-person'], label: 'YOLO11s 人员检测' },
+  notices: ['无法局部修复，已退化为全图重算：漂移覆盖全部需求'], updated_at: '2026-11-17T00:00:00Z',
+}
+
+it('shows the active route version, the pending candidate and the drift that caused it', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
+  const states = vi.spyOn(agentApi, 'routeStates').mockResolvedValue([routeState])
+  const wrapper = mount(RoutePanel, {
+    props: { sourceId: 'one', rule: 'absence', agentId: 'task', channelId: 'channel' },
+  })
+  try {
+    await flushPromises()
+    expect(states).toHaveBeenCalledWith('task')
+    expect(wrapper.get('[aria-label="路由状态"]').text()).toContain('当前路由 route-v1')
+    expect(wrapper.text()).toContain('候选验证中')
+    expect(wrapper.text()).toContain('候选：yolo11s-person')
+    expect(wrapper.text()).toContain('有效窗口 1')
+    expect(wrapper.text()).toContain('lighting：daylight → strong_glare')
+    expect(wrapper.text()).toContain('已退化为全图重算')
+  } finally { wrapper.unmount() }
+})
+
+it('can propose a candidate from the panel', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
+  vi.spyOn(agentApi, 'routeStates').mockResolvedValue([])
+  const propose = vi.spyOn(agentApi, 'proposeRoute').mockResolvedValue(routeState)
+  const wrapper = mount(RoutePanel, {
+    props: { sourceId: 'one', rule: 'absence', durationSeconds: 30, agentId: 'task', channelId: 'channel' },
+  })
+  try {
+    await flushPromises()
+    const buttons = wrapper.findAll('button')
+    const proposeButton = buttons.find(button => button.text().includes('评估并提议'))
+    expect(proposeButton).toBeTruthy()
+    await proposeButton!.trigger('click')
+    await flushPromises()
+    expect(propose).toHaveBeenCalledWith('task', { channel_id: 'channel', source_id: 'one',
+      rule: 'absence', duration_seconds: 30 })
   } finally { wrapper.unmount() }
 })

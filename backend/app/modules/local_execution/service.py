@@ -33,6 +33,7 @@ from ..semantics import service as semantics
 from ..semantics.metrics import FrameMetrics, measure_regions
 from ..semantics.schemas import ObservationInput, ObservationMetrics, Versions
 from ..semantics.window import ObservationWindow
+from ..routing import state as route_state
 
 UNMEASURED_FRAME = FrameMetrics(width=0, height=0, brightness=None, overexposure_ratio=None,
                                 roi_visible_ratio=None, blur_score=None)
@@ -441,6 +442,7 @@ class LocalAgentServices(RegistryAgentServices):
                 row = db.get(LocalRun,identifier)
                 run = RunDTO.model_validate(row.payload)
                 predecessors = list(row.predecessors)
+                actor_id = row.actor_id
                 source_identity = row.observation.get('source_identity')
             deadline = time.monotonic()+20
             while predecessors and not stop.is_set():
@@ -478,7 +480,7 @@ class LocalAgentServices(RegistryAgentServices):
             if self.safety_audit is not None:
                 max_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
                 safety = RunSafetyAudit(self.safety_audit, run, max_gap_seconds=max_gap)
-            window, thresholds, profile_version = None, None, None
+            window, thresholds, profile_version, route_version = None, None, None, None
             if self.config.observation_records:
                 window_seconds = self.config.observation_window_seconds
                 gate_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
@@ -489,6 +491,9 @@ class LocalAgentServices(RegistryAgentServices):
                 # invalidate the window instead of silently inheriting the new one.
                 with self.sessions() as db:
                     profile_version = semantics.profile_version_for(db, run.source_id)
+                    route_version, _members = route_state.active_route(
+                        db, run.agent_id, actor_id, run.channel_id, run.source_id,
+                        revision_no=run.revision_no)
             with self.writing() as db:
                 row = db.get(LocalRun,identifier)
                 if row.state not in ACTIVE_STATES: return
@@ -571,7 +576,7 @@ class LocalAgentServices(RegistryAgentServices):
                                     try:
                                         self._close_observation_window(db, run, channel, binding, window,
                                                                        timestamp, row.actor_id, thresholds,
-                                                                       profile_version)
+                                                                       profile_version, route_version)
                                     except Exception:
                                         # Evidence recording must never stop monitoring.
                                         logging.getLogger(__name__).warning('Observation record failed')
@@ -643,10 +648,10 @@ class LocalAgentServices(RegistryAgentServices):
         return measurement, int(observation.count), scale
 
     def _close_observation_window(self, db, run, channel, binding, window, timestamp,
-                                  actor_id, thresholds, profile_version):
+                                  actor_id, thresholds, profile_version, route_version=None):
         """Judge one closed window and persist the verdict. Alarms are untouched."""
         roi = [list(point) for point in binding.regions[0].points] if binding.regions else []
-        versions = Versions(route_version=f'local-r{run.revision_no}',
+        versions = Versions(route_version=route_version or f'local-r{run.revision_no}',
                             profile_version=profile_version,
                             model_version=getattr(channel.capability_ref, 'model_version', None))
         body = ObservationInput(source_id=run.source_id, run_id=run.id, path_id=channel.channel_id,
@@ -660,6 +665,14 @@ class LocalAgentServices(RegistryAgentServices):
         semantics.set_runtime(db, run.source_id, {'observation': {
             'verdict': view.verdict, 'window_end': view.window_end,
             'reasons': list(view.reasons), 'route_version': versions.route_version}})
+        try:
+            route_state.advance_window(db, run.agent_id, actor_id, channel_id=run.channel_id,
+                                       source_id=run.source_id, rule=channel.rule,
+                                       duration_seconds=channel.duration_seconds,
+                                       verdict=view.verdict)
+        except Exception:
+            # Routing feedback is advisory; a failure must not affect the window record.
+            logging.getLogger(__name__).warning('Route window advance failed')
         return view
 
     def _save_evidence(self, run, frame, boxes, binding, count, event_type):
