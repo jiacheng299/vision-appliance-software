@@ -100,3 +100,41 @@ it('shows the route version of each window and can jump to routing', async () =>
     expect(wrapper.emitted('openRoute')?.[0]).toEqual(['one'])
   } finally { wrapper.unmount() }
 })
+const withGates: Observation = {
+  ...blocked,
+  gates: [
+    { name: 'actual_fps', status: 'pass', value: 1.0, threshold: 0.9, reason: null },
+    { name: 'overexposure_ratio', status: 'pass', value: 0.03, threshold: 0.2, reason: null },
+    { name: 'blur_score', status: 'unverified', value: null, threshold: 50, reason: 'unverified_quality' },
+    { name: 'path_complete', status: 'pass', value: 1, threshold: 1, reason: null },
+    { name: 'version_consistency', status: 'pass', value: null, threshold: null, reason: null },
+  ],
+  metrics: { frame_count: 30, actual_fps: 1.02, max_gap_seconds: 1.1, roi_visible_ratio: 1,
+    overexposure_ratio: 0.05, blur_score: null, occlusion_ratio: null, target_scale_px: 48 },
+}
+
+it('opens the gate-by-gate detail of one window and admits what was never measured', async () => {
+  vi.spyOn(agentApi, 'observations').mockResolvedValue(page([withGates]))
+  const wrapper = mount(ObservationPanel, {
+    props: { agentId: 'task', sources, runs: sources.map(source => ({ source_id: source.id })) },
+  })
+  try {
+    await flushPromises()
+    expect(wrapper.find('[aria-label="观察门禁明细"]').exists()).toBe(false)
+    await wrapper.get('[aria-label="查看该条观察的门禁明细"]').trigger('click')
+    const detail = wrapper.get('[aria-label="观察门禁明细"]')
+    expect(detail.text()).toContain('观察不足')
+    expect(detail.text()).toContain('实际帧率')
+    expect(detail.text()).toContain('通过')
+    expect(detail.text()).toContain('画面清晰度')
+    expect(detail.text()).toContain('未测定')
+    expect(detail.text()).toContain('画面质量指标未测定')
+    const metrics = wrapper.get('[aria-label="实测指标"]')
+    expect(metrics.text()).toContain('画面清晰度：未测定')
+    expect(metrics.text()).toContain('遮挡比例：未测定')
+    expect(metrics.text()).toContain('可辨目标尺度：48 像素')
+    expect(detail.text()).toContain('路由版本 local-r1')
+    await wrapper.findAll('button').find(button => button.text() === '关闭')!.trigger('click')
+    expect(wrapper.find('[aria-label="观察门禁明细"]').exists()).toBe(false)
+  } finally { wrapper.unmount() }
+})

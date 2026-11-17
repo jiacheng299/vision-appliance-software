@@ -81,3 +81,7 @@ def list_profile_events(source_id: str,
                         limit: int = Query(50, ge=1, le=200),
                         db=Depends(get_db)):
     return service.list_events(db, source_id, limit=limit)
+
+@router.get('/agents/{agent_id}/observations/{observation_id}', response_model=ObservationView)
+def read_observation(agent_id: str, observation_id: str, db=Depends(get_db)):
+    return service.observation(db, agent_id, WORKSPACE_ACTOR_ID, observation_id)

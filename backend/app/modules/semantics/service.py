@@ -304,3 +304,14 @@ def list_events(db, source_id, *, limit=50):
                              kind=row.kind, attribute=row.attribute, previous=row.previous,
                              current=row.current, summary=row.summary, actor=row.actor,
                              created_at=row.created_at) for row in rows]
+
+def observation(db, agent_id, actor_id, observation_id):
+    """One window-level record, including its gate-by-gate detail."""
+    get_agent(db, agent_id)
+    row = db.scalars(select(ObservationRecord)
+                     .where(ObservationRecord.id == observation_id,
+                            ObservationRecord.agent_id == agent_id,
+                            ObservationRecord.actor_id == actor_id)).first()
+    if row is None:
+        raise Error(404, 'observation_not_found', '观察记录不存在。')
+    return _observation_view(row)

@@ -42,6 +42,48 @@ function glare(row: Observation) {
 function reasons(row: Observation) {
   return row.reasons.length ? row.reasons.join('；') : '观察条件全部满足'
 }
+
+// 门禁逐项明细：这是"观察不足"与"未检出"分界线的具体依据
+const selected = ref<Observation | null>(null)
+const gateLabels: Record<string, string> = {
+  frame_count: '成功解码帧数', time_continuous: '帧时间连续', actual_fps: '实际帧率',
+  max_gap_seconds: '最大帧间隔', window_seconds: '观察窗口',
+  roi_visible_ratio: '区域可见比例', overexposure_ratio: '过曝比例',
+  blur_score: '画面清晰度', occlusion_ratio: '遮挡比例', target_scale_px: '可辨目标尺度',
+  path_complete: '执行路径完整', version_consistency: '版本一致',
+}
+const statusLabels: Record<string, string> = {
+  pass: '通过', fail: '不通过', unverified: '未测定', not_applicable: '不适用',
+}
+const gateReasons: Record<string, string> = {
+  frame_absent: '窗口内没有任何成功解码的帧',
+  frame_rate_low: '实际帧率低于门槛', frame_gap_large: '帧间隔超过允许值',
+  window_short: '观察窗口短于要求', frame_time_discontinuous: '窗口内帧时间回退或不可用',
+  roi_not_visible: '区域可见比例不足', overexposed: '过曝比例超过门槛',
+  blurred: '清晰度低于门槛', occluded: '遮挡比例超过门槛',
+  target_too_small: '可辨目标尺度不足', path_incomplete: '执行路径不完整或输出不可解析',
+  version_mismatch: '路由、画像或模型版本不一致',
+  unverified_frame: '帧时间指标未测定', unverified_roi: '区域可见比例未测定',
+  unverified_quality: '画面质量指标未测定', unverified_scale: '目标尺度未测定',
+}
+function gateValue(value: number | null | undefined) {
+  if (value == null) return '未测定'
+  return Number.isInteger(value) ? String(value) : value.toFixed(3)
+}
+function metricRows(row: Observation) {
+  const metrics = row.metrics
+  return [
+    ['成功解码帧数', gateValue(metrics.frame_count)],
+    ['实际帧率', metrics.actual_fps == null ? '未测定' : `${metrics.actual_fps.toFixed(2)} 帧/秒`],
+    ['最大帧间隔', metrics.max_gap_seconds == null ? '未测定' : `${metrics.max_gap_seconds.toFixed(2)} 秒`],
+    ['区域可见比例', metrics.roi_visible_ratio == null ? '未测定' : `${(metrics.roi_visible_ratio * 100).toFixed(1)}%`],
+    ['过曝比例', metrics.overexposure_ratio == null ? '未测定' : `${(metrics.overexposure_ratio * 100).toFixed(1)}%`],
+    ['画面清晰度', metrics.blur_score == null ? '未测定' : metrics.blur_score.toFixed(1)],
+    ['遮挡比例', metrics.occlusion_ratio == null ? '未测定' : `${(metrics.occlusion_ratio * 100).toFixed(1)}%`],
+    ['可辨目标尺度', metrics.target_scale_px == null ? '未测定' : `${metrics.target_scale_px.toFixed(0)} 像素`],
+  ]
+}
+
 </script>
 
 <template>
@@ -66,7 +108,8 @@ function reasons(row: Observation) {
     <div v-else-if="!error && data?.items.length" class="table-wrap">
       <table>
         <thead><tr><th>视频源</th><th>结论</th><th>帧窗口</th><th>实际帧率</th><th>过曝</th><th>路由版本</th><th>说明</th><th></th></tr></thead>
-        <tbody><tr v-for="row in data.items" :key="row.id">
+        <tbody><tr v-for="row in data.items" :key="row.id"
+          :class="{ picked: selected?.id === row.id }">
           <td class="wrap">{{ names.get(row.source_id) ?? row.source_id }}</td>
           <td><span :class="['observation-verdict', row.verdict]">{{ labels[row.verdict] }}</span></td>
           <td>{{ window(row) }}</td>
@@ -74,12 +117,45 @@ function reasons(row: Observation) {
           <td>{{ glare(row) }}</td>
           <td>{{ row.route_version ?? '—' }}</td>
           <td class="wrap">{{ reasons(row) }}</td>
-          <td><NButton text type="primary" size="small" aria-label="查看该视频源的路由"
-            @click="emit('openRoute', row.source_id)">路由</NButton></td>
+          <td class="observation-actions">
+            <NButton text type="primary" size="small" aria-label="查看该条观察的门禁明细"
+              @click="selected = row">门禁</NButton>
+            <NButton text type="primary" size="small" aria-label="查看该视频源的路由"
+              @click="emit('openRoute', row.source_id)">路由</NButton>
+          </td>
         </tr></tbody>
       </table>
       <p class="muted">最近一条记录时间 {{ formatDate(data.items[0]?.created_at ?? null) }}</p>
     </div>
+
+    <section v-if="selected" class="observation-detail" aria-label="观察门禁明细">
+      <div class="observation-detail-head">
+        <h3>{{ labels[selected.verdict] }} · {{ window(selected) }}</h3>
+        <NButton size="tiny" @click="selected = null">关闭</NButton>
+      </div>
+      <p class="muted">{{ reasons(selected) }}</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>门禁</th><th>结果</th><th>实测</th><th>门槛</th><th>说明</th></tr></thead>
+          <tbody><tr v-for="gate in selected.gates" :key="gate.name">
+            <td>{{ gateLabels[gate.name] ?? gate.name }}</td>
+            <td><span :class="['observation-gate', gate.status]">{{ statusLabels[gate.status] ?? gate.status }}</span></td>
+            <td>{{ gateValue(gate.value) }}</td>
+            <td>{{ gateValue(gate.threshold) }}</td>
+            <td class="wrap">{{ gate.reason ? (gateReasons[gate.reason] ?? gate.reason) : '—' }}</td>
+          </tr></tbody>
+        </table>
+      </div>
+      <h4>实测指标</h4>
+      <ul class="observation-metrics" aria-label="实测指标">
+        <li v-for="[label, value] in metricRows(selected)" :key="label">{{ label }}：{{ value }}</li>
+      </ul>
+      <p class="muted">
+        路由版本 {{ selected.route_version ?? '—' }} · 画像版本 {{ selected.profile_version ?? '—' }}
+        · 模型版本 {{ selected.model_version ?? '—' }} · 路径 {{ selected.path_id ?? '—' }}
+      </p>
+      <p class="muted">同一窗口内的门禁必须全部通过，空结果才允许写成"限定窗口未检出"；未测定的门禁只阻止未检出，不阻止检测到。</p>
+    </section>
   </section>
 </template>
 
@@ -93,4 +169,14 @@ function reasons(row: Observation) {
 .observation-verdict.detected { color: #18a058; }
 .observation-verdict.not_detected { color: #2080f0; }
 .observation-verdict.insufficient { color: #d03050; }
+.observation-actions { display: flex; gap: 8px; }
+tr.picked { background: rgba(32, 128, 240, .08); }
+.observation-detail { margin-top: 16px; border-top: 1px solid rgba(128, 128, 128, .3); padding-top: 12px; }
+.observation-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.observation-gate.pass { color: #18a058; }
+.observation-gate.fail { color: #d03050; }
+.observation-gate.unverified { color: #f0a020; }
+.observation-gate.not_applicable { opacity: .6; }
+.observation-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px 12px; padding-left: 18px; font-size: 12px; }
+h4 { margin: 12px 0 4px; font-size: 13px; }
 </style>

@@ -152,3 +152,19 @@ def test_unknown_source_or_agent_is_reported_not_created(client, seeded):
                        json=observation()).status_code == 404
     assert client.get('/api/v1/sources/missing/semantic-profile',
                       params={'at': 1.0}).status_code == 404
+
+
+def test_single_observation_carries_its_gate_detail(client, seeded):
+    created = client.post('/api/v1/agents/agent/observations', json=observation(count=0))
+    observation_id = created.json()['id']
+    detail = client.get(f'/api/v1/agents/agent/observations/{observation_id}')
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body['id'] == observation_id
+    names = {gate['name'] for gate in body['gates']}
+    assert {'actual_fps', 'overexposure_ratio', 'path_complete', 'version_consistency'} <= names
+    assert body['metrics']['actual_fps'] == 1.0
+    assert body['thresholds']['min_fps'] == 0.9
+    missing = client.get('/api/v1/agents/agent/observations/does-not-exist')
+    assert missing.status_code == 404
+    assert missing.json()['error']['code'] == 'observation_not_found'
