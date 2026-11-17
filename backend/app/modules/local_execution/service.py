@@ -475,7 +475,8 @@ class LocalAgentServices(RegistryAgentServices):
                 rule = IntrusionRule([r.points for r in binding.regions],entry_seconds=parameters['duration_seconds'],
                     occlusion_seconds=parameters['tracking_timeout_seconds'],
                     exit_seconds=parameters['exit_confirmation_seconds'],
-                    max_gap_seconds=min(parameters['tracking_timeout_seconds'],max(1.5,interval*1.5)))
+                    max_gap_seconds=min(parameters['tracking_timeout_seconds'],max(1.5,interval*1.5)),
+                    policy_name=self.config.tracker_policy)
             safety = None
             if self.safety_audit is not None:
                 max_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds

@@ -5,9 +5,11 @@
 失败，而不是悄悄回退到启发式并假装成功。
 """
 from dataclasses import dataclass
+import importlib
 
 from ...shared.errors import Error
 from .heuristic import HeuristicIoUTracker
+from .policy import TrackerPolicy
 
 
 @dataclass(frozen=True)
@@ -56,8 +58,41 @@ def info(name):
     return entry
 
 
+def _external(spec):
+    """Load `module:attribute` as a third-party policy (e.g. a trained MARL policy).
+
+    The spec is deliberately explicit: no directory scanning, no implicit import
+    from user data. The imported object must satisfy the TrackerPolicy protocol,
+    otherwise it is refused rather than failing later inside the rule loop.
+    """
+    module_name, _, attribute = spec.partition(':')
+    if not module_name or not attribute:
+        raise Error(422, 'tracker_policy_spec_invalid',
+                    '外部追踪策略需写成 module:attribute 形式。')
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError:
+        raise Error(503, 'tracker_policy_unavailable',
+                    f'追踪策略模块 {module_name} 无法导入，请确认已安装。') from None
+    factory = getattr(module, attribute, None)
+    if factory is None:
+        raise Error(503, 'tracker_policy_unavailable',
+                    f'模块 {module_name} 中没有 {attribute}。')
+    try:
+        policy = factory()
+    except Exception as error:
+        raise Error(503, 'tracker_policy_unavailable',
+                    f'追踪策略初始化失败：{error}') from None
+    if not isinstance(policy, TrackerPolicy):
+        raise Error(503, 'tracker_policy_incompatible',
+                    '外部追踪策略必须实现 name / reset / decide / describe。')
+    return policy
+
+
 def create(name='heuristic-iou', **kwargs):
-    """Instantiate an installed policy; uninstalled ones fail loudly."""
+    """Instantiate a policy by registry name or explicit `module:attribute` spec."""
+    if name and name not in BUILTIN and name not in RESERVED and ':' in name:
+        return _external(name)
     entry = info(name)
     if not entry.installed:
         raise Error(503, 'tracker_policy_not_installed',

@@ -62,7 +62,8 @@ class _PersonTracker:
 class IntrusionRule:
     """One alarm per armed zone-occupancy episode."""
 
-    def __init__(self, regions, entry_seconds=8, occlusion_seconds=5, exit_seconds=10, max_gap_seconds=2):
+    def __init__(self, regions, entry_seconds=8, occlusion_seconds=5, exit_seconds=10, max_gap_seconds=2,
+                 policy_name='heuristic-iou'):
         values = (entry_seconds, occlusion_seconds, exit_seconds, max_gap_seconds)
         if (not regions or any(len(region) < 3 for region in regions)
                 or any(isinstance(value, bool) or not isinstance(value, (int, float))
@@ -74,7 +75,7 @@ class IntrusionRule:
         self.occlusion_seconds = float(occlusion_seconds)
         self.exit_seconds = float(exit_seconds)
         self.max_gap_seconds = float(max_gap_seconds)
-        self.tracker = _PersonTracker(self.occlusion_seconds)
+        self.tracker = _PersonTracker(self.occlusion_seconds, policy_name)
         self.mark_unavailable()
 
     def mark_unavailable(self):

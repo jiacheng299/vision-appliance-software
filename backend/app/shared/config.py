@@ -23,6 +23,8 @@ class Config(BaseSettings):
     # Valid-observation records are additive evidence; they never change alarms.
     observation_records: bool = True
     observation_window_seconds: float = Field(default=30.0, gt=0, le=3600, allow_inf_nan=False)
+    # Built-in policy name, or module:attribute for an externally trained policy.
+    tracker_policy: str = Field(default='heuristic-iou', min_length=1, max_length=200)
     deepseek_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('VISION_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY', 'deepseek_api_key'))
     deepseek_model: str = Field(default='deepseek-flash', min_length=1, max_length=160)
     deepseek_match_threshold: float = Field(default=.8, ge=0, le=1, allow_inf_nan=False)
