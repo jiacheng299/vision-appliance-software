@@ -14,6 +14,7 @@ import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 import Icon from '../../shared/ui/Icon.vue'
 import StatusBadge from '../../shared/ui/StatusBadge.vue'
 import MediaPlayer from '../../shared/media/MediaPlayer.vue'
+import ProfilePanel from './ProfilePanel.vue'
 const route=useRoute(),router=useRouter(),message=useMessage()
 const search=ref(String(route.query.q??'')),kind=ref(''),status=ref(''),tab=ref<'file'|'camera'>('file')
 const {data,loading,error,refresh}=useResource(()=>api.sources(search.value,kind.value,status.value))
@@ -225,6 +226,7 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 </div>
 <EmptyState v-if="!selected" title="选择一个视频源" description="从左侧列表打开详情，查看元信息、编辑连接或预览视频。" large icon="video"/>
 </section>
+<ProfilePanel v-if="selected" :key="selected.id" :source-id="selected.id"/>
 </div>
 <section id="source-import" class="panel import-section">
 <div class="import-tabs" role="tablist" aria-label="视频源接入方式">
