@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 20 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 22 个提交，全部只提交未 push。
 
 > 需要一页纸看"交底书哪一条落在哪段代码"时，直接看 [交底书对照表](PATENT_MAPPING.md)。
 
@@ -14,7 +14,7 @@
 | 二 | 执行器影子接入，`RunDTO` 补版本字段，前端"有效观察"面板 | M2、M7、S6–S9 | **已完成（第 2 轮）** |
 | 三 | 需求图、能力表扩展、组合求解 | F2/M4–M6、式(2) | **已完成（第 3 轮）** |
 | 四 | 漂移判定、局部重路由、式(3) 滞回与路由版本切换 | F4/F5/M9、式(3) | **已完成（第 4 轮）** |
-| 五 | 前端信息架构改造 | M1–M9 | **基本完成（第 5、6、9 轮）**：任务详情已按交底书链路重排为「画面 → 有效观察 → 路由候选 → 事件」四个页签，画像编辑、决策历史、观察↔路由互跳均上线；七导航重排与版本时间线未做 |
+| 五 | 前端信息架构改造 | M1–M9 | **基本完成（第 5、6、9、11 轮）**：任务详情已按交底书链路重排为四个页签，画像编辑、观察↔路由互跳、**画像与路由合并的时间线**均已上线；仅剩左侧七导航未按 M1–M9 重新分组 |
 | 六 | 追踪策略接口（为多智能体强化学习预留） | — | **接口与界面展示完成（第 5–6 轮）**；MARL 本体不在本仓库 |
 
 ## 二、提交记录
@@ -41,6 +41,22 @@
 | `16afacb` | `feat(ui): 任务详情按交底书链路重排为「画面 → 有效观察 → 路由候选 → 事件」`：3 个文件，+143 / −32 |
 | `1f68643` | `docs: 更新验收记录至第 9 轮（任务视图按链路重排）` |
 | `a13807f` | `feat(ui): 路由页签内的版本时间线`：4 个文件，+166 / −20 |
+| `038ec6b` | `docs: 更新验收记录至第 10 轮（版本时间线）` |
+| `5c22fc2` | `feat(semantics,routing): 画像版本事件与画像/路由合并时间线`：18 个文件，+1189 / −116 |
+
+### 第 11 轮改动
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/semantics/models.py` | 修改 | 新增 `profile_events`（追加式版本事件） |
+| `backend/alembic/versions/0011_profile_events.py` | 新增 | 纯新增迁移 |
+| `backend/app/modules/semantics/service.py` | 修改 | 三个写入口各追加一条事件；修正属性事件 previous 的读取顺序 |
+| `backend/app/modules/semantics/routes.py`、`schemas.py` | 修改 | `GET /sources/{id}/semantic-profile/events` 与 `ProfileEventView` |
+| `backend/app/modules/routing/state.py`、`routes.py`、`schemas.py` | 修改 | `GET /agents/{id}/routing/timeline`：合并画像事件与路由决策，按时间倒序 |
+| `frontend/src/modules/agents/RouteTimeline.vue` | 修改 | 消费合并条目，来源徽标 + 同来源版本变更才标绿 |
+| `frontend/src/modules/agents/RoutePanel.vue`、`api.ts` | 修改 | 改取 timeline 接口 |
+| `tests/backend/test_profile_events.py` | 新增 | 6 项 |
+| `frontend/tests/route-timeline.test.ts`、`route-panel.test.ts` | 修改 | 改为合并条目形状 |
 
 ### 第 10 轮改动
 
@@ -645,6 +661,40 @@ $ cd frontend && npm run build
 `reason`、`delta_j`、`route_version`、`created_at` 与 `payload.drift/affected/candidate`，
 时间线所需的字段齐全，无需新增接口。
 
+### 第 11 轮（画像版本事件与合并时间线）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+490 passed in 270.34s        # 第 10 轮 484 项 + 本轮 6 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  37 passed (37)
+     Tests  183 passed (183)
+
+$ cd frontend && npm run build
+✓ built in 10.85s
+
+alembic_version = 0011_profile_events（profile_events 表已建）
+```
+
+真实应用验证（写一条属性 + 提议一次后取合并时间线）：
+
+```
+origin  kind            version   摘要                              属性变化
+route   refresh         route-v1  评分增益未达到进入阈值（ΔJ=0.000）
+profile attribute_write v5        写入动态属性 lighting             lighting: →daylight
+route   drift           route-v1  当前组合仍处于最短驻留时间（0/120 秒）
+route   blocked         route-v1  没有可行组合：当前组合失效时保持原状，观察记录输出观察不足
+route   baseline        route-v1  当前组合仍处于最短驻留时间（0/120 秒）
+```
+
+两个版本终于在同一条轴上：**画像 v5 与路由 route-v1 并列可见**，且每条都带
+"为什么"——这正是交底书「时效语义画像 → 有效观察 → 局部重路由」闭环的界面表达。
+
+一处实现细节值得记录：属性事件里"变更前取值"必须在赋值**之前**读，最初的实现
+把它放在赋值之后，测出来的 previous 永远是 null；新加的 `test_attribute_writes_keep_the_previous_label`
+就是为这个顺序问题准备的。
+
 ## 八、自查方法
 
 ```powershell
@@ -707,9 +757,9 @@ cd frontend; npm test; npm run build; cd ..
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 11 轮）计划
+## 十、下一轮（第 12 轮）计划
 
-1. 让时间线同时画出**画像版本**：目前画像版本变更没有单独落库，只能在决策的漂移里间接看到；可在 `profile_attributes` 写入时追加一条轻量版本事件，供时间线与观察记录交叉引用。
+1. 观察详情页：点开一条 `insufficient` 可看到当时的组合成员、五道门禁逐项数值与阈值、以及当时的漂移，而不只是原因文本。
 2. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示（延续"不伪造绿色"的约定）。
 3. 观察记录详情页：点开一条 `insufficient` 可看到当时的组合成员、门禁逐项数值与当时的漂移，而不只是原因文本。
 4. 把"画像为空"的常见路径补上自动初始化：首次运行时按设备字段与首帧图像统计写入固有层与一项动态属性（仍需人工确认后才用于路由）。
