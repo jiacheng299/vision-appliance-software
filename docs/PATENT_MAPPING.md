@@ -28,7 +28,7 @@
 | 步骤 | 交底书动作 | 落点 | 状态 |
 | --- | --- | --- | --- |
 | S1 | 接收任务与摄像头信息 | `/agents/{id}/run-groups` + 自然语言匹配 | 完成 |
-| S2 | 初始抽帧、建立分层画像 | 固有层由设备字段写入；动态属性由画面实测/语言/探针写入（`PUT .../semantic-profile*`） | 部分：初始抽帧尚未自动触发 |
+| S2 | 初始抽帧、建立分层画像 | `POST .../semantic-profile/bootstrap`：固有层取设备字段，录像源从影片前 1/10 取一帧写入保守的 `lighting`；其余动态属性由运行中的观察或人工写入 | 完成（摄像头源不做首帧取图，已说明） |
 | S3 | 生成任务需求图 | `routing.graph.build(rule, duration_seconds)` | 完成 |
 | S4 | 过滤并求解组合 | `solver.evaluate / solve`（硬过滤 + 式(2)） | 完成 |
 | S5 | 发布带版本的组合配置 | `route_states.active_version` + 观察记录按版本盖章 | 部分：不向执行器下发组合 |
@@ -40,7 +40,7 @@
 | S11 | 定位受影响子图 | `graph.affected_requirements` + `solver.solve_local` | 完成 |
 | S12 | 求解替换组合 | `solver.solve_local`（无法局部化则退化为全图重算） | 完成 |
 | S13 | 判定是否进入候选验证 | `hysteresis.decide`（ε_in/ε_out/最短驻留/L 窗口） | 完成 |
-| S14 | 影子运行、预热、原子切换 | `state.advance_window`（计数与原子切换版本）+ `routing/preheat.py`（并存成本实测：+85 MB / ~90 ms / 逐帧 ±2 ms） | **部分：资源上已验证可行，但仍未让候选与当前组合并行推理** |
+| S14 | 影子运行、预热、原子切换 | `state.advance_window`（计数与原子切换版本）+ `routing/preheat.py`（并存成本：+85 MB / ~90 ms / 逐帧 ±2 ms）+ `routing/shadow.py`（同一批帧两个会话逐帧比对） | **部分：资源与逐帧对照都已有实测，但两个会话加载的是同一份产物，仍未接真实第二模型** |
 
 ## 三、公式对照
 
@@ -72,7 +72,7 @@
 
 迁移链：`0009_semantic_observation` → `0010_route_state`，均为纯新增。
 
-## 六、新增接口（12 个）
+## 六、新增接口（14 个）
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
@@ -88,6 +88,8 @@
 | POST | `/agents/{id}/routing/propose` | 评估并提议候选 |
 | POST | `/agents/{id}/routing/cancel` | 取消候选 |
 | GET | `/tracking/policies` | 追踪策略注册表（含未安装的 MARL 槽位） |
+| POST | `/routing/preheat` | 实测并存第二份会话的内存与延迟代价 |
+| POST | `/sources/{id}/semantic-profile/bootstrap` | 按设备记录初始化画像（只填缺项） |
 
 ## 七、界面落点
 
@@ -99,7 +101,7 @@
 
 ## 八、五步演示脚本（答辩现场约 5 分钟）
 
-0. **一条命令复现**（可选）：`deploy/scripts/routing_smoke.py` 与 `deploy/scripts/preheat_measure.py`。
+0. **一条命令复现**（可选）：`deploy/scripts/routing_smoke.py`、`deploy/scripts/preheat_measure.py`、`deploy/scripts/shadow_compare.py`。
 1. **看能力边界**：打开 `运行状态`，指出 `GPU 采集器 unavailable`、`MediaMTX ready`——系统不伪造未接入能力。
 2. **建立画像**：进入某个视频源 → `时效语义画像` → 填写固有层 → 写入 `lighting = daylight`（有效期 600 秒）。刷新页面可看到强度与剩余秒数。
 3. **看路由选择**：回到任务的 `路由候选` → 显示 `评估首选：YOLO11n ... 综合评分 1.6225`，以及 7 条"未安装"的排除原因与"质量数字是示例值"的口径提示。
@@ -115,5 +117,6 @@
 | 能力质量分桶标定 | 质量数字是保守示例值，不是准确率 | 第 3 条 |
 | 遮挡比例测量 | 单帧不可测，保持"未测定" | 第 5 条 |
 | 设备报文推理服务 | 无真实设备平台 | 第 7 条 |
-| 初始抽帧自动建画像 | 目前属性靠接口写入 | S2 行 |
+| 摄像头源的自动建画像 | 只做固有层；动态层需运行中的观察或人工写入 | S2 行 |
+| 跨模型的影子对照 | 两次加载的是同一份 ONNX，只能证明确定性与代价 | 验收记录第 2 条 |
 | 多智能体强化学习追踪本体 | 只有可插拔接口与契约，无训练与权重 | 第 12 条 |

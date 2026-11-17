@@ -2,7 +2,7 @@
 
 本文件随每一轮实现增量更新，用于说明"改了什么、怎么验证、什么还没做、哪些做不了"。设计依据见 [专利框架设计](superpowers/specs/2026-11-17-patent-framework-design.md)，分阶段任务见 [实施计划](superpowers/plans/2026-11-17-patent-framework.md)。
 
-当前基线：`92ecfa1` 之上共 14 个提交，全部只提交未 push。
+当前基线：`92ecfa1` 之上共 16 个提交，全部只提交未 push。
 
 > 需要一页纸看"交底书哪一条落在哪段代码"时，直接看 [交底书对照表](PATENT_MAPPING.md)。
 
@@ -35,6 +35,19 @@
 | `8f28b1c` | `feat(ui): 观察与路由互跳、决策历史与关联策略展示，并新增交底书对照表`：7 个文件，+236 / −7 |
 | `9426040` | `docs: 更新验收记录至第 6 轮（界面收口与对照表）` |
 | `4eebadc` | `feat(routing): 实测影子运行的第二会话成本，并把冒烟脚本固化`：8 个文件，+881 / −4 |
+| `8ed0bf7` | `docs: 更新验收记录至第 7 轮（影子成本实测）` |
+
+### 第 8 轮改动
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `backend/app/modules/semantics/bootstrap.py` | 新增 | 首次运行画像初始化：固有层取设备字段（不含地址凭据），动态层仅在拿到一帧时写入一项保守 `lighting` |
+| `backend/app/modules/routing/shadow.py` | 新增 | 同一批帧喂给两个会话并逐帧比对（完全相同帧数 / IoU 匹配帧数 / 平均 IoU / 双方检测数与时延） |
+| `backend/app/modules/semantics/routes.py`、`schemas.py` | 修改 | `POST /sources/{id}/semantic-profile/bootstrap` 与 `BootstrapView` |
+| `deploy/scripts/shadow_compare.py` | 新增 | 影子对照 CLI（可用 `--video` 指定本地录像，缺省用确定性合成帧） |
+| `frontend/src/modules/sources/ProfilePanel.vue`、`profileApi.ts` | 修改 | "按设备记录初始化"按钮与结果列表 |
+| `tests/backend/test_bootstrap_shadow.py` | 新增 | 10 项：固有层不含凭据、亮度分档、幂等不覆盖、影子确定性、空帧被拒等 |
+| `frontend/tests/profile-panel.test.ts` | 修改 | 新增初始化按钮 1 项 |
 
 ### 第 6 轮改动
 
@@ -519,6 +532,50 @@ task: 人员在岗监测任务 | channel: 4709f75c… | source: 4a959e34…
 | `deploy/scripts/routing_smoke.py` | 基线 → 刷新 → 眩光被阻塞 → 恢复 → 决策审计 → 状态 |
 | `deploy/scripts/preheat_measure.py` | 影子运行的会话并存成本实测 |
 
+### 第 8 轮（画像初始化与影子对照）补充证据
+
+```
+$ .venv\Scripts\python.exe -m pytest tests/backend -q
+484 passed in 202.38s        # 第 7 轮 474 项 + 本轮 10 项，旧用例零回归
+
+$ cd frontend && npm test
+Test Files  35 passed (35)
+     Tests  175 passed (175)   # 第 7 轮 174 项 + 本轮 1 项
+
+$ cd frontend && npm run build
+✓ built in 9.66s
+```
+
+**影子通道的逐帧对照**（`deploy/scripts/shadow_compare.py`，用 `plaza.mp4` 均匀取 6 帧）：
+
+```
+available=True  mode=file  frames=6  identical_artifact=True
+exact_frames=6  iou_frames=6  mean_iou=1.0
+detections_a=33  detections_b=33
+latency_a_ms=70.94  latency_b_ms=69.28
+```
+
+结论：同一份产物下的影子通道**逐帧完全一致**（6/6 帧、33 个目标全对、平均 IoU 1.0），
+两次推理时延几乎相同。这证明了影子通道的确定性与代价，**不证明跨模型更准**。
+
+**空画像初始化**（真实应用的两个视频源）：
+
+```
+录像源 bootstrap：
+  created: 固有层 device_id=… | 固有层 stream=file | 固有层 resolution=640x480
+           | 动态层 lighting=daylight（单帧置信度 0.5，1800 秒后失效）
+  画像版本 2 → 属性 lighting / valid / strength≈0.50 / confidence 0.5
+
+摄像头源 bootstrap：
+  created: 固有层 device_id=… | 固有层 stream=camera
+  notices: 摄像头源不做首帧取图，动态层需由运行中的观察或人工写入。
+           没有可用画面帧，动态层保持为空：亮度类属性必须由实测画面写入。
+```
+
+要点：初始化**只填缺项**（第二次调用 created 为空），固有层**不含地址与凭据**
+（有测试断言 secret 与内网 IP 不出现），动态层只写一项**置信度 0.5** 的亮度属性，
+并在 1800 秒后自动转为"未知"——避免一次初始化就把"白天"当成长期事实。
+
 ## 八、自查方法
 
 ```powershell
@@ -575,14 +632,16 @@ cd frontend; npm test; npm run build; cd ..
 9. **预处理器只建模了"分桶修复"**：去眩光与裁剪在表里声明了修复关系与不可恢复饱和上限，但既未安装也未标定；裁剪带来的等效像素增益没有建模（需要真实标定才能写），因此目标尺度不足只能靠换模型解决。
 10. **漂移只看属性层**：设备事件（PTZ 转动、断电、断流）目前只通过 `source_identity` 变化间接体现，没有进入 `drift.py`；视场版本切换也还没有自动触发。
 11. **前端是"基本完成"**：画像编辑、有效观察、路由候选、决策历史、关联策略与观察↔路由互跳都已上线；但七导航结构、页面骨架与版本时间线还没有按 M1–M9 重排。
-12. **多智能体强化学习追踪只有接口，没有能力**：`modules/tracking` 固定了观测（归一化检测框 + ROI + 可选画面指标）、动作（关联/入场/丢失）与轨迹状态归属，`marl-association` 在注册表里标记 `installed=False`、`calibrated=False`，界面上也如实显示"未安装"；**本仓库不含训练循环、仿真环境与策略权重**，创建它会直接 503。论文里只能说"预留了可插拔的策略接口"，不能说"已实现 MARL 追踪"。
+12. **影子对照不是跨模型对照**：`shadow.py` 让两个会话跑同一批帧并逐帧比对，但两者加载的是**同一份 ONNX**，因此只能证明影子通道的确定性与代价；真正"换个模型是否更准"需要第二份已标定的产物。
+13. **画像初始化只做了一半**：录像源能从影片前 1/10 取一帧写入一项保守 `lighting`；摄像头源不做首帧取图，动态层仍需运行中的观察或人工写入。初始化只填缺项，不会覆盖已有属性。
+14. **多智能体强化学习追踪只有接口，没有能力**：`modules/tracking` 固定了观测（归一化检测框 + ROI + 可选画面指标）、动作（关联/入场/丢失）与轨迹状态归属，`marl-association` 在注册表里标记 `installed=False`、`calibrated=False`，界面上也如实显示"未安装"；**本仓库不含训练循环、仿真环境与策略权重**，创建它会直接 503。论文里只能说"预留了可插拔的策略接口"，不能说"已实现 MARL 追踪"。
 
 另有两条**已知的展示性噪音**，不影响正确性：`contracts/openapi.json` 的整段重排（FastAPI 的 schema 排序基于集合迭代顺序，新增 schema 时会重排，只加字段则不会）；`var/logs`、`dist`、`.venv` 等运行产物不入 Git。
 
-## 十、下一轮（第 8 轮）计划
+## 十、下一轮（第 9 轮）计划
 
 1. 任务详情改为"画面 / 观察 / 路由 / 事件"标签页，把版本时间线画在一条轴上（`profile_version` 与 `route_version` 交替变更可直接看出来）。
 2. 运行状态页增加"画像 / 观察 / 路由"三项就绪度，未就绪如实显示（延续"不伪造绿色"的约定）。
 3. 观察记录详情页：点开一条 `insufficient` 可看到当时的组合成员、门禁逐项数值与当时的漂移，而不只是原因文本。
 4. 把"画像为空"的常见路径补上自动初始化：首次运行时按设备字段与首帧图像统计写入固有层与一项动态属性（仍需人工确认后才用于路由）。
-5. 若时间允许，在 `preheat.py` 基础上做一次"候选会话真跑一小段帧"的对照实验（同一帧窗口分别用两个会话推理并比对输出），把 S14 的影子运行补成"有并行推理、有输出比对"的完整形态。
+5. 若拿到第二份已标定的 ONNX，把 `shadow.py` 的对照从"同产物确定性"推进到"跨模型质量对比"，并回填能力表的分桶质量。
