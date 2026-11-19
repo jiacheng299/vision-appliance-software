@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { NSelect } from 'naive-ui'
 import { agentApi, type Observation, type ObservationPage, type Revision, type Workspace } from '../src/modules/agents/api'
 import { profileApi } from '../src/modules/sources/profileApi'
+import type { Source } from '../src/shared/api/types'
 import ObservationPanel from '../src/modules/agents/ObservationPanel.vue'
 import MonitorPanel from '../src/modules/agents/MonitorPanel.vue'
 
@@ -108,6 +109,112 @@ it('shows the model combination version of each window and keeps the existing ju
     expect(wrapper.emitted('openRoute')?.[0]).toEqual(['one'])
   } finally { wrapper.unmount() }
 })
+function mountMultiSourcePanel() {
+  const observedAt = '2026-11-17T03:00:00Z'
+  const revision: Revision = { id: 'revision', agent_id: 'task', revision_no: 1, base_revision_id: null,
+    state: 'published', row_version: 1, created_at: observedAt, updated_at: observedAt,
+    config: { schema_version: '1.0', channels: [
+      { channel_id: 'channel-one', name: '一号岗位', target: 'person', rule: 'absence', duration_seconds: 30,
+        requirement_text: '一号岗位人员监测', sources: [{ source_id: 'one', regions: [] }], parameters: [] },
+      { channel_id: 'channel-two', name: '二号岗位', target: 'person', rule: 'presence', duration_seconds: 45,
+        requirement_text: '二号岗位人员监测', sources: [{ source_id: 'two', regions: [] }], parameters: [] },
+    ] } }
+  const workspace: Workspace = { agent_id: 'task', runs: [], data_origin: 'real', runtime_available: true,
+    runtime_error: '', observed_at: observedAt }
+  const observationRequest = vi.spyOn(agentApi, 'observations').mockResolvedValue(page([blocked]))
+  const routeRequest = vi.spyOn(agentApi, 'routes').mockImplementation(async sourceId => ({
+    source_id: sourceId, rule: sourceId === 'two' ? 'presence' : 'absence', profile_version: 0,
+    scenario: { bucket: 'default', reasons: [] }, graph: { requirements: [], edges: [] },
+    capabilities: [], chosen: null, ranked: [], blocked: [], weights: {}, budgets: {},
+    min_quality: 0.6, notices: [],
+  }))
+  const timelineRequest = vi.spyOn(agentApi, 'routeTimeline').mockResolvedValue([])
+  vi.spyOn(agentApi, 'routeStates').mockResolvedValue([{
+    agent_id: 'task', channel_id: 'channel-two', source_id: 'two', rule: 'presence',
+    active_members: ['model-two'], active_version: 'route-two', active_since: 1,
+    mode: 'stable', candidate_members: null, candidate_score: null, valid_windows: 1,
+    hard_failure: false, delta_j: null, drift: [], affected: [], fixed: [], escalated: false,
+    chosen: null, notices: [], updated_at: observedAt,
+  }])
+  vi.spyOn(agentApi, 'routeDecisions').mockResolvedValue([])
+  const profileRequest = vi.spyOn(profileApi, 'read').mockImplementation(async sourceId => ({
+    source_id: sourceId, view_version: '1', version: sourceId === 'two' ? 9 : 3,
+    intrinsic: {}, runtime: {}, attributes: [], evaluated_at: 0, updated_at: observedAt,
+  }))
+  vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({ items: [], active: 'heuristic-iou',
+    resolved: { spec: 'heuristic-iou', available: true, name: 'heuristic-iou',
+      label: '固定机位 IoU/中心距关联', kind: 'heuristic', external: false, detail: {} }, notice: '' })
+  const wrapper = mount(MonitorPanel, {
+    props: { agentId: 'task', sources: sources as unknown as Source[], canWrite: false, workspace, revision },
+    global: { stubs: { EventsPanel: true, MediaPlayer: true, VideoWall: true } },
+  })
+  return { wrapper, revision, observationRequest, routeRequest, timelineRequest, profileRequest }
+}
+
+async function openSecondRoute(wrapper: ReturnType<typeof mountMultiSourcePanel>['wrapper']) {
+  await flushPromises()
+  await wrapper.get('button[aria-label="观察记录"]').trigger('click')
+  await flushPromises()
+  await wrapper.get('[aria-label="查看该视频源的模型组合"]').trigger('click')
+  await flushPromises()
+}
+
+it('keeps the second video context across observation, model combination and summary', async () => {
+  const { wrapper, observationRequest, routeRequest, timelineRequest, profileRequest } = mountMultiSourcePanel()
+  try {
+    await openSecondRoute(wrapper)
+    expect(routeRequest).toHaveBeenLastCalledWith('two', { rule: 'presence', duration_seconds: 45 })
+    expect(timelineRequest).toHaveBeenLastCalledWith('task', {
+      channel_id: 'channel-two', source_id: 'two', limit: 12 })
+    expect(profileRequest).toHaveBeenLastCalledWith('two')
+    expect(observationRequest).toHaveBeenLastCalledWith('task', { source_id: 'two' }, undefined)
+    expect(wrapper.get('section[aria-label="模型组合"] .panel-title').text()).toContain('二号录像')
+    const summary = wrapper.get('[aria-label="任务可观察性摘要"]')
+    expect(summary.text()).toContain('当前视频')
+    expect(summary.text()).toContain('v9')
+    expect(summary.text()).toContain('route-two')
+    expect(summary.text()).toContain('model-two')
+  } finally { wrapper.unmount() }
+})
+
+it('re-resolves the selected video rule and duration when the revision changes', async () => {
+  const { wrapper, revision, routeRequest } = mountMultiSourcePanel()
+  try {
+    await openSecondRoute(wrapper)
+    const channels = revision.config.channels!
+    const changedRule: Revision = { ...revision, revision_no: 2, config: { ...revision.config,
+      channels: [channels[0], { ...channels[1], rule: 'absence' }] } }
+    await wrapper.setProps({ revision: changedRule })
+    await flushPromises()
+    expect(routeRequest).toHaveBeenLastCalledWith('two', { rule: 'absence', duration_seconds: 45 })
+    const changedDuration: Revision = { ...changedRule, config: { ...changedRule.config,
+      channels: [channels[0], { ...channels[1], rule: 'absence', duration_seconds: 60 }] } }
+    await wrapper.setProps({ revision: changedDuration })
+    await flushPromises()
+    expect(routeRequest).toHaveBeenLastCalledWith('two', { rule: 'absence', duration_seconds: 60 })
+    const requestCount = routeRequest.mock.calls.length
+    await wrapper.setProps({ revision: { ...changedDuration } })
+    await flushPromises()
+    expect(wrapper.get('section[aria-label="模型组合"] .panel-title').text()).toContain('二号录像')
+    expect(routeRequest).toHaveBeenCalledTimes(requestCount)
+  } finally { wrapper.unmount() }
+})
+
+it('falls back to the first video when the selected source is removed from the revision', async () => {
+  const { wrapper, revision, observationRequest, routeRequest, profileRequest } = mountMultiSourcePanel()
+  try {
+    await openSecondRoute(wrapper)
+    const firstChannel = revision.config.channels![0]
+    await wrapper.setProps({ revision: { ...revision, revision_no: 2,
+      config: { ...revision.config, channels: [firstChannel] } } })
+    await flushPromises()
+    expect(routeRequest).toHaveBeenLastCalledWith('one', { rule: 'absence', duration_seconds: 30 })
+    expect(profileRequest).toHaveBeenLastCalledWith('one')
+    expect(observationRequest).toHaveBeenLastCalledWith('task', { source_id: 'one' }, undefined)
+    expect(wrapper.get('section[aria-label="模型组合"] .panel-title').text()).toContain('一号录像')
+  } finally { wrapper.unmount() }
+})
+
 it('translates stored version-mismatch reasons into the same business language', async () => {
   vi.spyOn(agentApi, 'observations').mockResolvedValue(page([{ ...empty, verdict: 'insufficient',
     reasons: ['路由、画像或模型版本与当前不一致。'] }]))

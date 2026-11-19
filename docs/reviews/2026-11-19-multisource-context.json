@@ -1,0 +1,114 @@
+{
+  "change_id": "2026-11-19-multisource-context",
+  "base_commit": "9c5abc1de62e38ed99ac3438b77a1e3351636313",
+  "implementer": "agent-11",
+  "reviewer": "agent-12",
+  "reviewer_independent": true,
+  "patch_sha256": "e7f189225e380bdf657b59971196c116343ae8cb94f62fdf4224c17c43567e61",
+  "approved_at": "2026-11-19T18:48:01+08:00",
+  "decision": "approved",
+  "verification": {
+    "red": "6 initial assertions failed on old context and summary states; 2 revision-switch assertions failed before the review fix",
+    "focused": "20 passed",
+    "frontend_full_after_final_fixes": "206 passed",
+    "frontend_build_after_final_fixes": "passed",
+    "browser": "Two real video sources, refresh, 1440x900, 390x844, real connection failure, controlled loading and empty responses",
+    "evidence_checker": "passed",
+    "diff_check": "passed"
+  },
+  "review_history": [
+    {
+      "patch_sha256": "2fc8caa1b4a17ef532cb33c1f6ae74f83461cdbc4ace4ea4edfc4901bbfece09",
+      "decision": "rejected",
+      "reason": "The selected target could retain stale rule, duration or removed source after a revision change."
+    },
+    {
+      "patch_sha256": "e7f189225e380bdf657b59971196c116343ae8cb94f62fdf4224c17c43567e61",
+      "decision": "approved",
+      "reason": "The target is re-resolved from the current revision, falls back when invalid, and preserves selection on equivalent refreshes."
+    }
+  ],
+  "limitations": [
+    "Current-video counts cover only the latest 30 returned records and are labeled accordingly.",
+    "Different rules and durations across channels are covered by component tests, not by the real two-source browser fixture.",
+    "Candidate model shadow execution and real model switching remain unimplemented."
+  ],
+  "contract": "本文件 designContract 记录可检查的产品表面、共享目标、摘要口径、设计约束和视口；渲染证据必须覆盖 1440x900 与 390x844。",
+  "designContract": {
+    "productSurface": "中文本地视觉监测工具的任务详情、观察记录、模型组合与顶部摘要",
+    "userJob": "在多路视频之间核对同一观察目标对应的模型组合、场景记录和最近观察，不被第一路默认值或任务累计值误导",
+    "primaryAction": "从某条观察记录进入该视频源的模型组合，并继续切换或刷新核对",
+    "hierarchy": "共享当前视频目标 → 场景记录/最近观察/当前组合 → 模型组合标题与证据 → 既有候选和原生披露区",
+    "targetViewports": ["1440x900", "390x844"],
+    "referenceObservation": "沿用 Task 4 的信息密集、安静业务工具界面、Naive UI、本机字体和原生 details；本任务只修正上下文和状态表达，不做额外视觉重构",
+    "sharedTarget": "{channelId, sourceId, rule, duration}；无显式选择使用第一通道第一绑定，选择后仅保存 sourceId 并始终按当前 revision 重解析完整目标，失效时回退默认",
+    "summaryScope": "有当前视频时按 source_id 请求并统计返回的最近 30 条；无当前视频时显示任务累计 summary",
+    "palette": {
+      "page": "#F5F8FC",
+      "surface": "#FFFFFF",
+      "text": "#17233B",
+      "muted": "#78859A",
+      "focus": "#2367ED",
+      "error": "#D03050"
+    },
+    "typography": "Microsoft YaHei / PingFang SC / system-ui / sans-serif；沿用现有 12–14px 摘要与面板层级",
+    "constraints": [
+      "不改后端 API、路由路径或原生披露区",
+      "不新增依赖、深链接、营销区、装饰动画或额外视觉系统",
+      "加载失败不得写成 0、无记录或尚未建立",
+      "长中文与错误文本在 390px 内换行"
+    ]
+  },
+  "targetViewports": ["1440x900", "390x844"],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "真实浏览器使用按钮原生 Enter 在观察记录与两路模型组合之间切换；三个摘要失败项均以 role=alert 公告，加载以 role=status 表达，状态文字不依赖颜色。未运行屏幕阅读器或 axe，本任务没有新增交互控件。"
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "真实浏览器分别检查 1440×900 与 390×844。桌面第二路 v19、6/4/9、尚未建立和夜间街道标题同时可见；390px 截图中摘要、错误、标题、按钮及长候选说明均换行，未见页面级横向溢出。390px PNG 为 deviceScaleFactor=2 的 780×1688 图像。"
+  },
+  "contentStates": {
+    "loading": {
+      "status": "pass",
+      "evidence": "本机临时代理只延迟 observations 响应 20 秒，真实浏览器在刷新后捕获“最近观察（当前视频最近 30 条）正在读取”；其他面板结构保持稳定。"
+    },
+    "empty": {
+      "status": "pass",
+      "evidence": "本机临时代理按现有 API 契约返回 items=[] 和全零 summary，真实浏览器显示“无记录”，同时保留其他接口成功返回的 v5 与 route-v1；真实第二路还显示当前组合“尚未建立”。"
+    },
+    "error": {
+      "status": "pass",
+      "evidence": "停止隔离 API 服务后从已加载观察列表切换视频，真实浏览器三个摘要项分别显示“加载失败：无法连接本机服务，请确认服务已启动后重试。”，没有回落为 0、无记录或尚未建立；模型组合区保留重试入口。"
+    },
+    "partial": {
+      "status": "pass",
+      "evidence": "真实夜间街道数据同时显示场景记录 v19、最近观察 6/4/9、当前组合尚未建立以及可用评估首选，缺失组合不会掩盖其他已读取数据；受控空观察响应也保留成功 profile/route 数据。"
+    },
+    "success": {
+      "status": "pass",
+      "evidence": "真实任务 989b2e50-81bc-43ad-b797-9603ceba6b40 从默认行人广场 v5、2/0/0、route-v1 切到夜间街道 v19、6/4/9、尚未建立，再切回后恢复前者；刷新及设备重载回到第一路默认。"
+    },
+    "permission": {
+      "status": "not-applicable",
+      "reason": "本任务不新增或修改权限边界；验收使用既有只读历史任务，运行不可用与写操作禁用逻辑保持原样。"
+    }
+  },
+  "renderedEvidence": [
+    {
+      "viewport": "1440x900",
+      "artifact": "2026-11-19-multisource-context-1440.png",
+      "observation": "第二路夜间街道模型组合：摘要为 v19、检测到 6、未检出 4、观察不足 9、尚未建立；标题和证据属于夜间街道，未沿用第一路 route-v1。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "2026-11-19-multisource-context-390.png",
+      "observation": "390×844 第二路摘要与模型组合，长中文、视频名、指标和按钮正常换行，无页面级横向溢出。"
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "2026-11-19-multisource-context-error-390.png",
+      "observation": "真实连接失败后的三个独立摘要错误与模型组合重试入口，窄屏错误文本完整换行。"
+    }
+  ]
+}

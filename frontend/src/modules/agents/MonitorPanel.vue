@@ -25,15 +25,37 @@ const trustChecksOpen = ref(false)
 type Tab = 'live' | 'observation' | 'routing' | 'events'
 const tab = ref<Tab>('live')
 const real=computed(()=>props.workspace?.data_origin==='real')
-const routeTarget = computed(() => {
+type RouteTarget = { sourceId: string; channelId: string; rule: string; duration: number | null }
+const defaultRouteTarget = computed<RouteTarget | null>(() => {
   const channel = props.revision.config.channels?.[0]
   const binding = channel ? channelSources(channel)[0] : undefined
   const source = binding ? props.sources.find(item => item.id === binding.source_id) : undefined
-  return channel && source
+  return channel?.channel_id && source
     ? { sourceId: source.id, channelId: channel.channel_id, rule: channel.rule,
         duration: channel.duration_seconds ?? null }
     : null
 })
+const selectedRouteSourceId = ref<string | null>(null)
+const selectedRouteTarget = computed<RouteTarget | null>(() => {
+  const sourceId = selectedRouteSourceId.value
+  if (!sourceId) return null
+  const channel = props.revision.config.channels?.find(item =>
+    channelSources(item).some(binding => binding.source_id === sourceId))
+  const source = props.sources.find(item => item.id === sourceId)
+  return channel?.channel_id && source
+    ? { sourceId, channelId: channel.channel_id, rule: channel.rule,
+        duration: channel.duration_seconds ?? null }
+    : null
+})
+const routeTarget = computed(() => selectedRouteTarget.value ?? defaultRouteTarget.value)
+function openRoute(sourceId: string) {
+  if (!props.sources.some(item => item.id === sourceId)) return
+  const channel = props.revision.config.channels?.find(item =>
+    channelSources(item).some(binding => binding.source_id === sourceId))
+  if (!channel?.channel_id) return
+  selectedRouteSourceId.value = sourceId
+  tab.value = 'routing'
+}
 const tabs = computed<{value:Tab;label:string;enabled:boolean}[]>(() => [
   {value:'live', label:'画面', enabled:true},
   {value:'observation', label:'观察记录', enabled:real.value},
@@ -100,9 +122,10 @@ async function stop(run:Run){
   </template>
 
   <ObservationPanel v-if="tab==='observation' && real" :key="agentId"
-    :agent-id="agentId" :runs="runs" :sources="sources" @open-route="tab='routing'"/>
+    :agent-id="agentId" :runs="runs" :sources="sources" @open-route="openRoute"/>
 
-  <RoutePanel v-if="tab==='routing' && real && routeTarget" :key="`${routeTarget.sourceId}:${routeTarget.rule}`"
+  <RoutePanel v-if="tab==='routing' && real && routeTarget"
+    :key="`${routeTarget.sourceId}:${routeTarget.channelId}:${routeTarget.rule}:${routeTarget.duration ?? ''}`"
     :agent-id="agentId" :channel-id="routeTarget.channelId"
     :source-label="sources.find(item => item.id === routeTarget?.sourceId)?.name"
     :source-id="routeTarget.sourceId" :rule="routeTarget.rule" :duration-seconds="routeTarget.duration"/>

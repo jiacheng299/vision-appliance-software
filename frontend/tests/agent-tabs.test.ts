@@ -61,6 +61,20 @@ it('orders the task view in business language without internal identifiers', asy
   } finally { wrapper.unmount() }
 })
 
+it('defaults observation, model combination and summary to the first video', async () => {
+  const wrapper = mountPanel()
+  try {
+    await flushPromises()
+    await wrapper.get('button[aria-label="模型组合"]').trigger('click')
+    await flushPromises()
+    expect(agentApi.routes).toHaveBeenLastCalledWith('one', { rule: 'absence', duration_seconds: 30 })
+    expect(agentApi.routeTimeline).toHaveBeenLastCalledWith('task', {
+      channel_id: 'channel', source_id: 'one', limit: 12 })
+    expect(profileApi.read).toHaveBeenLastCalledWith('one')
+    expect(agentApi.observations).toHaveBeenCalledWith('task', { source_id: 'one' }, undefined)
+  } finally { wrapper.unmount() }
+})
+
 it('the 事件 tab shows the full event list while 画面 keeps the compact one', async () => {
   const wrapper = mountPanel()
   try {

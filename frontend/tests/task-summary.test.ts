@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { NTag } from 'naive-ui'
-import { agentApi } from '../src/modules/agents/api'
+import { agentApi, type Observation } from '../src/modules/agents/api'
 import { profileApi } from '../src/modules/sources/profileApi'
 import TaskSummaryStrip from '../src/modules/agents/TaskSummaryStrip.vue'
 import { activeGroupLabel } from '../src/app/navigation'
@@ -18,6 +18,13 @@ const profile = {
   source_id: 'one', view_version: 'v1', version: 7, intrinsic: {}, runtime: {},
   attributes: [], evaluated_at: 1, updated_at: '2026-11-17T00:00:00Z',
 }
+const observation: Observation = {
+  id: 'observation', agent_id: 'task', run_id: 'run', source_id: 'one', task_key: 'person/absence',
+  roi: [], window_start: 0, window_end: 30, route_version: 'route-v2', profile_version: 7,
+  model_version: '1', path_id: 'channel', verdict: 'detected', detection_count: 1,
+  metrics: { frame_count: 30, actual_fps: null, overexposure_ratio: null }, thresholds: {},
+  gates: [], reasons: [], created_at: '2026-11-17T00:00:00Z',
+}
 afterEach(() => vi.restoreAllMocks())
 
 function mountStrip(props: Partial<{ real: boolean; sourceId: string | null; channelId: string | null }> = {}) {
@@ -27,19 +34,23 @@ function mountStrip(props: Partial<{ real: boolean; sourceId: string | null; cha
   })
 }
 
-it('summarises the profile version, the three verdict counts and the active route', async () => {
-  vi.spyOn(agentApi, 'observations').mockResolvedValue({
-    items: [], next_cursor: null, summary: { detected: 8, not_detected: 4, insufficient: 9 } })
+it('summarises the current video with its profile version, verdict counts and active route', async () => {
+  const observations = vi.spyOn(agentApi, 'observations').mockResolvedValue({
+    items: [observation, { ...observation, id: 'not-detected', verdict: 'not_detected' },
+      { ...observation, id: 'insufficient', verdict: 'insufficient' }],
+    next_cursor: null, summary: { detected: 8, not_detected: 4, insufficient: 9 } })
   vi.spyOn(agentApi, 'routeStates').mockResolvedValue([routeState])
   vi.spyOn(profileApi, 'read').mockResolvedValue(profile)
   const wrapper = mountStrip()
   try {
     await flushPromises()
     const strip = wrapper.get('[aria-label="任务可观察性摘要"]')
+    expect(observations).toHaveBeenCalledWith('task', { source_id: 'one' }, undefined)
+    expect(strip.text()).toContain('当前视频')
     expect(strip.text()).toContain('v7')
-    expect(strip.text()).toContain('检测到 8')
-    expect(strip.text()).toContain('未检出 4')
-    expect(strip.text()).toContain('观察不足 9')
+    expect(strip.text()).toContain('检测到 1')
+    expect(strip.text()).toContain('未检出 1')
+    expect(strip.text()).toContain('观察不足 1')
     expect(strip.text()).toContain('route-v2')
     expect(strip.text()).toContain('候选验证中')
     expect(strip.text()).toContain('yolo11n-person')
@@ -48,17 +59,47 @@ it('summarises the profile version, the three verdict counts and the active rout
   } finally { wrapper.unmount() }
 })
 
-it('says 未知 or 尚未建立 instead of inventing numbers', async () => {
-  vi.spyOn(agentApi, 'observations').mockRejectedValue(new Error('offline'))
+it('uses task totals only when no current video is selected', async () => {
+  const observations = vi.spyOn(agentApi, 'observations').mockResolvedValue({
+    items: [], next_cursor: null, summary: { detected: 2, not_detected: 1, insufficient: 0 } })
   vi.spyOn(agentApi, 'routeStates').mockResolvedValue([])
+  const wrapper = mountStrip({ sourceId: null, channelId: null })
+  try {
+    await flushPromises()
+    expect(observations).toHaveBeenCalledWith('task', {}, undefined)
+    expect(wrapper.get('[aria-label="任务可观察性摘要"]').text()).toContain('任务累计')
+  } finally { wrapper.unmount() }
+})
+
+it('announces request failures instead of disguising them as zero or missing records', async () => {
+  vi.spyOn(agentApi, 'observations').mockRejectedValue(new Error('offline'))
+  vi.spyOn(agentApi, 'routeStates').mockRejectedValue(new Error('offline'))
   vi.spyOn(profileApi, 'read').mockRejectedValue(new Error('offline'))
   const wrapper = mountStrip()
   try {
     await flushPromises()
     const strip = wrapper.get('[aria-label="任务可观察性摘要"]')
-    expect(strip.text()).toContain('未知')
-    expect(strip.text()).toContain('尚未建立')
+    expect(strip.text()).toContain('加载失败')
+    expect(strip.text()).toContain('无法连接本机服务')
+    expect(strip.text()).not.toContain('未知')
+    expect(strip.text()).not.toContain('尚未建立')
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(3)
     expect(wrapper.findAllComponents(NTag)).toHaveLength(0)
+  } finally { wrapper.unmount() }
+})
+
+it('distinguishes no observation records from a route that has not been established', async () => {
+  vi.spyOn(agentApi, 'observations').mockResolvedValue({
+    items: [], next_cursor: null, summary: { detected: 0, not_detected: 0, insufficient: 0 } })
+  vi.spyOn(agentApi, 'routeStates').mockResolvedValue([])
+  vi.spyOn(profileApi, 'read').mockResolvedValue(profile)
+  const wrapper = mountStrip()
+  try {
+    await flushPromises()
+    const strip = wrapper.get('[aria-label="任务可观察性摘要"]')
+    expect(strip.text()).toContain('无记录')
+    expect(strip.text()).toContain('尚未建立')
+    expect(strip.text()).not.toContain('加载失败')
   } finally { wrapper.unmount() }
 })
 
