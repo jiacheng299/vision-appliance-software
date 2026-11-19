@@ -202,7 +202,9 @@ def profile_version_for(db, source_id):
     return _current_profile_version(db, source_id)
 
 
-def record_observation(db, agent_id, actor_id, body: ObservationInput):
+def record_observation(db, agent_id, actor_id, body: ObservationInput, *, route_role='active'):
+    if route_role not in {'active', 'candidate'}:
+        raise ValueError(f'未知观察路由角色：{route_role}')
     get_agent(db, agent_id)
     sources_module.get_source(db, body.source_id)
     versions = body.versions
@@ -220,6 +222,7 @@ def record_observation(db, agent_id, actor_id, body: ObservationInput):
                                source_id=body.source_id, task_key=body.task_key, roi=body.roi,
                                window_start=body.window_start, window_end=body.window_end,
                                route_version=body.versions.route_version,
+                               route_role=route_role,
                                profile_version=body.versions.profile_version,
                                model_version=body.versions.model_version,
                                path_id=body.path_id, verdict=verdict,

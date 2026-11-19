@@ -37,7 +37,8 @@ def _latest_evidence(db, source_id, task_key):
     from ..semantics.models import ObservationRecord
     from sqlalchemy import select
     base = select(ObservationRecord).where(ObservationRecord.source_id == source_id,
-                                           ObservationRecord.task_key == task_key)
+                                           ObservationRecord.task_key == task_key,
+                                           ObservationRecord.route_role == 'active')
     valid = db.scalars(base.where(ObservationRecord.verdict.in_(VALID_VERDICTS))
                        .order_by(ObservationRecord.sequence.desc()).limit(1)).first()
     if valid is not None:

@@ -49,10 +49,12 @@ class LocalAgentServices(RegistryAgentServices):
     supports_multimodal_tasks = False
     supports_task_plans = False
 
-    def __init__(self, config, sessions, model_adapter, *, detector_factory=None, reader_factory=None, gateway=None):
+    def __init__(self, config, sessions, model_adapter, *, detector_factory=None, reader_factory=None,
+                 gateway=None, candidate_resolver=None):
         self.config, self.sessions = config, sessions
         self.init_registry(sessions, model_adapter)
         self.detector_factory, self.reader_factory = detector_factory, reader_factory
+        self.candidate_resolver = candidate_resolver
         self.gateway = gateway or MediaGateway(config)
         self.owns_gateway = gateway is None
         self.lock = RLock()
@@ -495,6 +497,15 @@ class LocalAgentServices(RegistryAgentServices):
                     route_version, _members = route_state.active_route(
                         db, run.agent_id, actor_id, run.channel_id, run.source_id,
                         revision_no=run.revision_no)
+            shadow = None
+            if window is not None:
+                from .shadow_runtime import ShadowRuntime
+                shadow = ShadowRuntime(
+                    self.config, self.sessions, self.model_adapter, run=run, channel=channel,
+                    binding=binding, parameters=parameters, actor_id=actor_id,
+                    detector_factory=detector_factory, candidate_resolver=self.candidate_resolver,
+                    close_window=self._close_observation_window, reset_rule=self._reset_window_rule,
+                    sample_evidence=self._sample_evidence)
             with self.writing() as db:
                 row = db.get(LocalRun,identifier)
                 if row.state not in ACTIVE_STATES: return
@@ -521,12 +532,14 @@ class LocalAgentServices(RegistryAgentServices):
                                 with self.sessions() as db: self._checked_source(db,run.source_snapshot,source_identity)
                                 last_source_check = time.monotonic()
                             detected = detector.detect(frame)
+                            preview_only = (run.source_kind=='camera' and next_rule_timestamp is not None
+                                            and timestamp < next_rule_timestamp-1e-6)
+                            if shadow is not None:
+                                shadow.observe(timestamp, frame, process_rule=not preview_only)
                             if window is not None:
                                 window.add_frame(timestamp)
                             boxes = rule.targets_in_regions(detected) if channel.rule == 'absence' else detected
                             if stop.is_set(): break
-                            preview_only = (run.source_kind=='camera' and next_rule_timestamp is not None
-                                            and timestamp < next_rule_timestamp-1e-6)
                             if not preview_only:
                                 if safety is not None:
                                     safety.inspect(safety.check_time, timestamp)
@@ -631,6 +644,8 @@ class LocalAgentServices(RegistryAgentServices):
                     raise Error(503,'camera_frame_timeout','摄像头视频已中断。')
                 except Exception as exc:
                     pending_events.clear()
+                    if shadow is not None:
+                        shadow.reset_observation()
                     if window is not None:
                         window.reset()
                     self._reset_window_rule(rule, window_rule_state,
@@ -690,12 +705,14 @@ class LocalAgentServices(RegistryAgentServices):
         return measurement, int(observation.count), scale
 
     def _close_observation_window(self, db, run, channel, binding, window, timestamp,
-                                  actor_id, thresholds, profile_version, route_version=None):
-        """Judge and persist one closed window before its business events may publish."""
+                                  actor_id, thresholds, profile_version, route_version=None, *,
+                                  route_role='active', model_version=None):
+        """Persist a closed window; only active windows feed routing and business events."""
         roi = [list(point) for point in binding.regions[0].points] if binding.regions else []
         versions = Versions(route_version=route_version or f'local-r{run.revision_no}',
                             profile_version=profile_version,
-                            model_version=getattr(channel.capability_ref, 'model_version', None))
+                            model_version=(model_version if model_version is not None else
+                                           getattr(channel.capability_ref, 'model_version', None)))
         body = ObservationInput(source_id=run.source_id, run_id=run.id, path_id=channel.channel_id,
                                 task_key=f'{channel.target}/{channel.rule}', roi=roi,
                                 window_start=(window.started_at if window.started_at is not None
@@ -703,18 +720,20 @@ class LocalAgentServices(RegistryAgentServices):
                                 window_end=timestamp, detection_count=window.detections,
                                 path_complete=True, metrics=ObservationMetrics(**window.metrics()),
                                 thresholds=thresholds, versions=versions, expected_versions=versions)
-        view = semantics.record_observation(db, run.agent_id, actor_id, body)
-        semantics.set_runtime(db, run.source_id, {'observation': {
-            'verdict': view.verdict, 'window_end': view.window_end,
-            'reasons': list(view.reasons), 'route_version': versions.route_version}})
-        try:
-            route_state.advance_window(db, run.agent_id, actor_id, channel_id=run.channel_id,
-                                       source_id=run.source_id, rule=channel.rule,
-                                       duration_seconds=channel.duration_seconds,
-                                       verdict=view.verdict)
-        except Exception:
-            # Routing feedback is advisory; a failure must not affect the window record.
-            logging.getLogger(__name__).warning('Route window advance failed')
+        view = semantics.record_observation(db, run.agent_id, actor_id, body,
+                                            route_role=route_role)
+        if route_role == 'active':
+            semantics.set_runtime(db, run.source_id, {'observation': {
+                'verdict': view.verdict, 'window_end': view.window_end,
+                'reasons': list(view.reasons), 'route_version': versions.route_version}})
+            try:
+                route_state.advance_window(db, run.agent_id, actor_id, channel_id=run.channel_id,
+                                           source_id=run.source_id, rule=channel.rule,
+                                           duration_seconds=channel.duration_seconds,
+                                           verdict=view.verdict)
+            except Exception:
+                # Routing feedback is advisory; a failure must not affect the window record.
+                logging.getLogger(__name__).warning('Route window advance failed')
         return view
 
     def _save_evidence(self, run, frame, boxes, binding, count, event_type):

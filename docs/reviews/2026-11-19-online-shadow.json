@@ -1,0 +1,30 @@
+{
+  "change_id": "2026-11-19-online-shadow",
+  "base_commit": "d55a72ab976d1b7639c8baf5688cd15245d5b3dc",
+  "implementer": "agent-15",
+  "reviewer": "agent-16",
+  "reviewer_independent": true,
+  "patch_sha256": "38bd26fd3812b7df1a5d4b29c7e395efc7ca8e082468931e81f7afb1c89e6ffc",
+  "approved_at": "2026-11-19T20:27:10+08:00",
+  "decision": "approved",
+  "verification": {
+    "routing_red_green": "3 failed on old behavior; 3 passed",
+    "executor_red_green": "missing runtime and candidate model-version defect reproduced; 9 passed",
+    "related_backend": "117 passed",
+    "migration_upgrade_rollback": "2 passed",
+    "backend_full_final": "529 passed, 6 skipped in 267.40s",
+    "deploy_full": "12 passed",
+    "diff_check": "passed"
+  },
+  "findings": {
+    "critical": 0,
+    "important": 0,
+    "minor": []
+  },
+  "limitations": [
+    "Candidate observations are internal records; no public role filter or frontend presentation was added.",
+    "Positive tests inject real-behavior resolvers and detectors; this is not an installed second-ONNX end-to-end validation.",
+    "The current model catalog skips candidates it cannot resolve instead of substituting the active model.",
+    "Candidates do not publish business events or take over active members or versions."
+  ]
+}

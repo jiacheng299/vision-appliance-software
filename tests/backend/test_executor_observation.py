@@ -9,11 +9,13 @@ from sqlalchemy import select
 from app.shared.config import Config
 from app.shared.db import make_engine, migrate, session_factory
 from app.shared.models import Source
-from app.modules.agents.contracts import RuntimeCommand, SourceSnapshot
+from app.modules.agents.contracts import RunDTO, RuntimeCommand, SourceSnapshot
 from app.modules.agents.models import Agent
-from app.modules.agents.schemas import RevisionConfig
-from app.modules.local_execution.models import LocalEvent
+from app.modules.agents.schemas import CapabilityRef, RevisionConfig, channel_sources
+from app.modules.local_execution.models import LocalEvent, LocalRun
 from app.modules.local_execution.service import LocalAgentServices
+from app.modules.local_execution.shadow_runtime import ShadowRuntime
+from app.modules.routing.models import RouteState
 from app.modules.semantics.models import ObservationRecord
 
 ROI = [(0, 0), (1, 0), (1, 1), (0, 1)]
@@ -169,3 +171,161 @@ def test_disabling_the_feature_writes_nothing(tmp_path):
     config = Config(var_root=tmp_path, agent_demo=False, observation_records=False)
     assert config.observation_records is False
     assert config.observation_window_seconds == 30.0
+
+
+PERSON_BOX = {'label': 'person', 'x': .3, 'y': .3, 'width': .2, 'height': .5,
+              'confidence': .9}
+
+
+def seed_candidate(sessions, members=('candidate-a',)):
+    with sessions() as db:
+        row = db.query(RouteState).filter_by(agent_id='agent', channel_id='channel',
+                                             source_id='video').one_or_none()
+        if row is None:
+            row = RouteState(id='route', actor_id='actor', agent_id='agent', channel_id='channel',
+                             source_id='video', rule='absence', active_members=['active-person'],
+                             active_version='route-v7', active_since=time.time(), mode='candidate',
+                             candidate_members=list(members))
+            db.add(row)
+        else:
+            row.candidate_members = list(members)
+            row.mode = 'candidate'
+        db.commit()
+
+
+def candidate_reference(db, member, channel):
+    return CapabilityRef(model_id=member, model_version='candidate-v1',
+                         template_id='candidate-template', template_version='1')
+
+
+class CandidateAdapter(Adapter):
+    def resolve_model(self, reference):
+        if reference.model_id == 'model':
+            return Path('trusted.onnx')
+        if reference.model_id in {'candidate-a', 'candidate-b'}:
+            return Path('shared.onnx')
+        if reference.model_id == 'broken-candidate':
+            return Path('broken.onnx')
+        return Path(f'{reference.model_id}.onnx')
+
+
+class SplitDetector:
+    loads = []
+    active_boxes = [PERSON_BOX]
+
+    def __init__(self, path, confidence=.5):
+        self.path = str(path)
+        type(self).loads.append(self.path)
+
+    def detect(self, frame):
+        if self.path == 'trusted.onnx':
+            return [dict(box) for box in self.active_boxes]
+        if self.path == 'broken.onnx':
+            raise RuntimeError('candidate inference failed')
+        return []
+
+
+def prepare_split_runtime(service):
+    SplitDetector.loads = []
+    SplitDetector.active_boxes = [PERSON_BOX]
+    service.model_adapter = CandidateAdapter()
+    service.detector_factory = SplitDetector
+    service.candidate_resolver = candidate_reference
+
+
+def test_candidate_runs_on_the_same_frames_without_publishing_business_results(runtime):
+    service, sessions = runtime
+    prepare_split_runtime(service)
+    seed_candidate(sessions)
+    run = finish(service, service.submit(command(), 'actor', 'candidate-shadow'))
+    assert run.state == 'completed'
+    stored = records(sessions)
+    active = [item for item in stored if item.route_role == 'active']
+    candidate = [item for item in stored if item.route_role == 'candidate']
+    assert len(active) == len(candidate) == 3
+    assert [item.verdict for item in active] == ['detected'] * 3
+    assert [item.verdict for item in candidate] == ['not_detected'] * 3
+    assert [item.window_end for item in candidate] == [item.window_end for item in active]
+    assert all(item.route_version == 'route-v7' for item in active)
+    assert all(item.route_version.startswith('route-v7+candidate-') for item in candidate)
+    assert all(item.model_version == 'candidate-v1' for item in candidate)
+    with sessions() as db:
+        assert list(db.scalars(select(LocalEvent))) == []
+        row = db.query(LocalRun).one()
+        assert row.observation['count'] == 1
+        assert row.observation['observed_at']
+
+
+def direct_shadow(service, sessions):
+    request = command()
+    channel = request.config.channels[0]
+    run = RunDTO(id='direct-shadow', agent_id='agent', revision_id='revision', revision_no=1,
+                 channel_id='channel', channel_name='岗位', source_id='video', state='running',
+                 source_kind='file', config_snapshot=request.config,
+                 source_snapshot=request.source_snapshots[0])
+    return ShadowRuntime(service.config, sessions, service.model_adapter, run=run,
+                         channel=channel, binding=channel_sources(channel)[0],
+                         parameters=service._parameters(channel), actor_id='actor',
+                         detector_factory=SplitDetector, candidate_resolver=candidate_reference,
+                         close_window=service._close_observation_window,
+                         reset_rule=service._reset_window_rule,
+                         sample_evidence=service._sample_evidence)
+
+
+def test_candidate_detector_cache_survives_candidate_changes_and_reconnect(runtime):
+    service, sessions = runtime
+    prepare_split_runtime(service)
+    seed_candidate(sessions)
+    shadow = direct_shadow(service, sessions)
+    frame = textured()
+    for timestamp in (0.0, 10.0, 11.0):
+        shadow.observe(timestamp, frame)
+    seed_candidate(sessions, ('candidate-b',))
+    for timestamp in (12.0, 22.0, 23.0):
+        shadow.observe(timestamp, frame)
+    shadow.reset_observation()
+    for timestamp in (24.0, 34.0):
+        shadow.observe(timestamp, frame)
+    seed_candidate(sessions, ('candidate-c',))
+    for timestamp in (35.0, 45.0):
+        shadow.observe(timestamp, frame)
+    seed_candidate(sessions, ('candidate-a',))
+    for timestamp in (46.0, 56.0):
+        shadow.observe(timestamp, frame)
+    assert SplitDetector.loads == ['shared.onnx', 'candidate-c.onnx']
+    stored = [item for item in records(sessions) if item.route_role == 'candidate']
+    assert [item.window_start for item in stored] == [0.0, 12.0, 24.0, 35.0, 46.0]
+    with sessions() as db:
+        row = db.query(RouteState).one()
+        assert row.active_version == 'route-v7'
+        assert row.active_members == ['active-person']
+        assert row.valid_windows == 0
+
+
+def test_uninstalled_candidate_is_unavailable_without_borrowing_active_detector(runtime):
+    service, sessions = runtime
+    Detector.boxes = []
+    seed_candidate(sessions, ('yolo11s-person',))
+    run = finish(service, service.submit(command(), 'actor', 'candidate-not-installed'))
+    assert run.state == 'completed'
+    stored = records(sessions)
+    assert stored and all(item.route_role == 'active' for item in stored)
+    with sessions() as db:
+        events = list(db.scalars(select(LocalEvent)))
+    assert [event.payload['event_type'] for event in events] == ['person_absence']
+
+
+def test_candidate_inference_failure_does_not_affect_active_observation_or_event(runtime):
+    service, sessions = runtime
+    prepare_split_runtime(service)
+    SplitDetector.active_boxes = []
+    seed_candidate(sessions, ('broken-candidate',))
+    run = finish(service, service.submit(command(), 'actor', 'candidate-inference-failure'))
+    assert run.state == 'completed'
+    stored = records(sessions)
+    assert stored and all(item.route_role == 'active' for item in stored)
+    with sessions() as db:
+        events = list(db.scalars(select(LocalEvent)))
+        row = db.query(LocalRun).one()
+        assert row.observation['count'] == 0
+    assert [event.payload['event_type'] for event in events] == ['person_absence']

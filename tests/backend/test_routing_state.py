@@ -1,4 +1,4 @@
-"""路由状态机：基线建立、漂移提议、无替代时的保守、候选切换与人工取消。"""
+"""路由状态机：基线建立、漂移提议、无替代时的保守、候选影子验证与人工取消。"""
 import time
 
 import pytest
@@ -127,19 +127,38 @@ def test_a_better_installed_candidate_enters_verification_after_the_dwell_time(s
     assert view.delta_j > 0
 
 
-def test_the_candidate_takes_over_only_after_the_required_valid_windows(seeded):
+def test_satisfied_shadow_validation_waits_for_takeover_capability(seeded):
     propose(seeded)
     set_active_since(seeded, 1000.0)
     table = strong_table()
     entered = propose(seeded, table=table)
     assert entered.mode == 'candidate'
     first = advance(seeded, verdict='detected', table=table)
-    assert first.active_version in ('route-v1', 'route-v2')
+    assert first.active_version == 'route-v1'
     second = advance(seeded, verdict='detected', table=table)
-    assert second.active_version == 'route-v2'
-    assert second.active_members == ['yolo11s-person']
-    assert second.mode == 'stable'
-    assert second.candidate_members is None
+    assert second.active_version == 'route-v1'
+    assert second.active_members == ['yolo11n-person']
+    assert second.mode == 'candidate'
+    assert second.candidate_members == ['yolo11s-person']
+    with seeded.state.sessions() as db:
+        decision = db.query(RouteDecision).order_by(RouteDecision.sequence.desc()).first()
+    assert decision.action == 'hold'
+    assert decision.reason == '影子验证已满足，等待接管能力'
+
+
+def test_pending_candidate_version_binds_active_version_and_member_digest(seeded):
+    propose(seeded)
+    set_active_since(seeded, 1000.0)
+    propose(seeded, table=strong_table())
+    with seeded.state.sessions() as db:
+        row = db.query(RouteState).first()
+        candidate = routing_state.pending_candidate(row)
+        assert candidate.members == ('yolo11s-person',)
+        assert candidate.version.startswith('route-v1+candidate-')
+        row.candidate_members = ['another-person']
+        assert routing_state.pending_candidate(row).version != candidate.version
+        row.candidate_members = None
+        assert routing_state.pending_candidate(row) is None
 
 
 def test_an_insufficient_window_does_not_count_towards_the_switch(seeded):
@@ -193,6 +212,27 @@ def test_scenario_ignores_metrics_from_an_insufficient_window(seeded):
     assert scenario.target_px is None
     assert scenario.brightness is None
     assert scenario.blur is None
+
+
+def test_latest_evidence_ignores_newer_candidate_observations(seeded):
+    from app.modules.routing.service import _latest_evidence
+    from app.modules.semantics.models import ObservationRecord
+    with seeded.state.sessions() as db:
+        db.add(ObservationRecord(id='active-evidence', agent_id='agent', actor_id=ACTOR,
+                                 source_id='cam', task_key='person/absence', window_start=0.0,
+                                 window_end=30.0, verdict='detected',
+                                 metrics={'target_scale_px': 32.0}))
+        db.add(ObservationRecord(id='candidate-evidence', agent_id='agent', actor_id=ACTOR,
+                                 source_id='cam', task_key='person/absence', window_start=30.0,
+                                 window_end=60.0, verdict='not_detected', route_role='candidate',
+                                 metrics={'target_scale_px': 999.0, 'brightness': 0.01}))
+        db.commit()
+        active = db.query(ObservationRecord).filter_by(id='active-evidence').one()
+        metrics, evidence, fell_back = _latest_evidence(db, 'cam', 'person/absence')
+        assert active.route_role == 'active'
+    assert evidence.id == 'active-evidence'
+    assert metrics == {'target_scale_px': 32.0}
+    assert fell_back is False
 
 
 def test_active_route_falls_back_to_the_revision_version(seeded):

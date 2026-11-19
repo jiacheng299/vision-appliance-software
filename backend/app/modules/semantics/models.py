@@ -69,6 +69,7 @@ class ObservationRecord(Base):
     window_start: Mapped[float] = mapped_column(Float)
     window_end: Mapped[float] = mapped_column(Float)
     route_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    route_role: Mapped[str] = mapped_column(String, default='active', server_default='active')
     profile_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     model_version: Mapped[str | None] = mapped_column(String, nullable=True)
     path_id: Mapped[str | None] = mapped_column(String, nullable=True)

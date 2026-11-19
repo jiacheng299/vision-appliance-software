@@ -1,8 +1,10 @@
-"""路由状态机（S10–S14）：漂移定位、局部重路由、式(3) 滞回与版本切换。
+"""路由状态机（S10–S14）：漂移定位、局部重路由与式(3) 滞回。
 
-这一层只改"路由版本"，不改报警规则：切换后新的观察窗口按新版本记录，
-旧窗口保持它自己的版本，不会出现旧结果冒充新配置。
+候选窗口只推进影子验证；达到原切换条件时保留 active 组合并记录等待接管能力。
 """
+from dataclasses import dataclass
+import hashlib
+import json
 import time
 
 from sqlalchemy import select
@@ -20,6 +22,20 @@ from .schemas import (DriftView, RouteDecisionView, RouteStateView, ScenarioView
 
 ACTIVE_FALLBACK = 'local-r{revision}'
 ENTRY_KINDS = ('baseline', 'enter', 'switch', 'cancel', 'hold')
+
+
+@dataclass(frozen=True)
+class CandidateRef:
+    version: str
+    members: tuple[str, ...]
+
+
+def pending_candidate(row):
+    members = tuple(row.candidate_members or ())
+    if row.mode != hysteresis.CANDIDATE or not members:
+        return None
+    digest = hashlib.sha256(json.dumps(members, separators=(',', ':')).encode()).hexdigest()[:16]
+    return CandidateRef(version=f'{row.active_version}+candidate-{digest}', members=members)
 
 
 def _epoch():
@@ -272,32 +288,26 @@ def advance_window(db, agent_id, actor_id, *, channel_id, source_id, rule, verdi
     delta = None
     if current is not None and current.feasible and solution.chosen is not None:
         delta = solution.chosen.score - current.score
-    decision = hysteresis.decide(state=state_of(row), delta_j=delta, now=_epoch(),
+    current_state = state_of(row)
+    window_valid = verdict != 'insufficient'
+    decision = hysteresis.decide(state=current_state, delta_j=delta, now=_epoch(),
                                  thresholds=_thresholds(), hard_infeasible=hard_failure,
-                                 window_valid=verdict != 'insufficient')
-    previous_version = row.active_version
+                                 window_valid=window_valid)
+    if decision.action == hysteresis.SWITCH:
+        decision = hysteresis.Decision(
+            hysteresis.HOLD,
+            hysteresis.State(mode=hysteresis.CANDIDATE,
+                             active_since=current_state.active_since,
+                             candidate_since=current_state.candidate_since,
+                             valid_windows=current_state.valid_windows + int(window_valid),
+                             hard_failure=current_state.hard_failure),
+            '影子验证已满足，等待接管能力')
     _apply(row, decision.state)
-    if decision.action == hysteresis.SWITCH and row.candidate_members:
-        row.active_members = list(row.candidate_members)
-        row.active_version = _next_version(previous_version)
-        row.active_since = _epoch()
-        row.candidate_members = None
-        row.candidate_score = None
-        row.candidate_since = None
-        row.valid_windows = 0
     _decision_row(db, row, kind='window', action=decision.action, reason=decision.reason,
                   delta_j=delta, payload={'verdict': verdict,
                                           'affected': report.get('affected', [])})
     db.flush()
     return _view(row, delta_j=delta, report=report, chosen=solution.chosen)
-
-
-def _next_version(version):
-    try:
-        number = int(str(version).rsplit('v', 1)[1])
-    except (IndexError, ValueError):
-        number = 1
-    return f'route-v{number + 1}'
 
 
 def timeline(db, agent_id, actor_id, *, channel_id, source_id, limit=40):
