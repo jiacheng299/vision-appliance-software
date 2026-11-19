@@ -1,0 +1,32 @@
+{
+  "change_id": "2026-11-19-route-evidence",
+  "base_commit": "625e35f0afa347fece774461e155d73db4a4e84a",
+  "implementer": "agent-3",
+  "reviewer": "agent-4",
+  "reviewer_independent": true,
+  "patch_sha256": "b8ed0f116f0ccf001a7e5969a1cd45d4599cab74d93eaa75f0f11ed917ed81dd",
+  "approved_at": "2026-11-19T11:47:34+08:00",
+  "decision": "approved",
+  "verification": {
+    "backend_focused": "23 passed in 17.20s",
+    "frontend_focused": "11 passed",
+    "frontend_build": "passed",
+    "diff_check": "passed",
+    "backend_full": "503 passed, 6 skipped in 281.71s",
+    "frontend_full": "197 passed",
+    "deploy_full": "12 passed"
+  },
+  "findings": {
+    "critical": 0,
+    "important": 0,
+    "minor": [
+      "Unused evidence parameter in _notices can be removed later.",
+      "Unused verdict_metrics test helper parameter can be removed later.",
+      "Two changed test files lack a trailing newline."
+    ]
+  },
+  "limitations": [
+    "This change selects and labels evidence; it does not implement candidate model shadow execution or switching.",
+    "Invalid-only fallback metrics are excluded by the following task, not by this patch."
+  ]
+}

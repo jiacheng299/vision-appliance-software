@@ -19120,6 +19120,11 @@
           "usable": {
             "type": "boolean",
             "title": "Usable"
+          },
+          "confidence": {
+            "type": "string",
+            "title": "Confidence",
+            "default": "unverified"
           }
         },
         "additionalProperties": false,

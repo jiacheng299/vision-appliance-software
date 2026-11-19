@@ -66,6 +66,7 @@ class EvidenceView(DTO):
     window_start: float
     window_end: float
     usable: bool
+    confidence: str = 'unverified'
 
 
 class RouteView(DTO):

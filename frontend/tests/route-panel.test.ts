@@ -202,7 +202,7 @@ it('states what policy is actually loaded, including when the configured one is 
 it('says which window the scenario evidence came from, and flags a weak one', async () => {
   vi.spyOn(agentApi, 'routes').mockResolvedValue({ ...view,
     evidence: { observation_id: 'obs-9', verdict: 'insufficient', window_start: 90,
-      window_end: 120, usable: false } })
+      window_end: 120, usable: false, confidence: 'unverified' } })
   const wrapper = mount(RoutePanel, { props: { sourceId: 'one', rule: 'absence' } })
   try {
     await flushPromises()
@@ -220,5 +220,18 @@ it('states that no observation exists yet when there is none', async () => {
   try {
     await flushPromises()
     expect(wrapper.get('[aria-label="场景证据来源"]').text()).toContain('还没有观察记录')
+  } finally { wrapper.unmount() }
+})
+it('labels a confirmed window as effective evidence', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue({ ...view,
+    evidence: { observation_id: 'obs-1', verdict: 'not_detected', window_start: 0,
+      window_end: 30, usable: true, confidence: 'confirmed' } })
+  const wrapper = mount(RoutePanel, { props: { sourceId: 'one', rule: 'absence' } })
+  try {
+    await flushPromises()
+    const line = wrapper.get('[aria-label="场景证据来源"]')
+    expect(line.text()).toContain('有效观察')
+    expect(line.text()).not.toContain('只能作为提示')
+    expect(line.classes()).toContain('ok')
   } finally { wrapper.unmount() }
 })

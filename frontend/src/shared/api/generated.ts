@@ -2616,6 +2616,11 @@ export interface components {
             window_end: number;
             /** Usable */
             usable: boolean;
+            /**
+             * Confidence
+             * @default unverified
+             */
+            confidence: string;
         };
         /** ExecutionPlanRef */
         ExecutionPlanRef: {

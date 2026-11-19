@@ -138,3 +138,52 @@ def test_without_any_observation_the_route_says_so(client, seeded):
     body = routes(client, rule='absence')
     assert body['evidence'] is None
     assert any('还没有观察记录' in notice for notice in body['notices'])
+
+def _observation_payload(verdict_metrics, *, overexposure=0.05, target_px=64.0):
+    return dict(source_id='cam', task_key='person/absence', roi=[], window_start=0.0,
+                window_end=30.0, detection_count=0, path_complete=True,
+                metrics=dict(frame_count=30, duration_seconds=30.0, actual_fps=1.0,
+                             max_gap_seconds=1.1, roi_visible_ratio=1.0,
+                             overexposure_ratio=overexposure, blur_score=120.0,
+                             occlusion_ratio=0.0, target_scale_px=target_px),
+                thresholds=dict(min_fps=0.9, max_gap_seconds=1.5, min_window_seconds=20.0,
+                                min_roi_visible_ratio=0.9, max_overexposure_ratio=0.2,
+                                min_blur_score=50.0, max_occlusion_ratio=0.3,
+                                min_target_scale_px=24.0),
+                versions={'route_version': 'route-1', 'model_version': 'yolo11n'})
+
+
+def _seed_agent(app):
+    from app.modules.agents.models import Agent
+    with app.state.sessions() as db:
+        db.add(Agent(id='agent', name='任务', description='', owner_id='workspace'))
+        db.commit()
+
+
+def test_a_valid_window_is_preferred_over_a_newer_insufficient_one(client, seeded):
+    """证据应取最近的有效窗口，哪怕它比一条无效窗口更早。"""
+    _seed_agent(seeded)
+    good = client.post('/api/v1/agents/agent/observations',
+                       json=_observation_payload({}, target_px=64.0))
+    assert good.json()['verdict'] == 'not_detected'
+    bad = client.post('/api/v1/agents/agent/observations',
+                      json=_observation_payload({}, overexposure=0.62, target_px=8.0))
+    assert bad.json()['verdict'] == 'insufficient'
+
+    body = routes(client, rule='absence')
+    assert body['evidence']['observation_id'] == good.json()['id']
+    assert body['evidence']['confidence'] == 'confirmed'
+    assert body['evidence']['usable'] is True
+    # 用的是有效窗口的 64 像素，而不是无效窗口的 8 像素
+    assert body['scenario']['target_px'] == 64.0
+
+
+def test_only_insufficient_windows_are_marked_as_unverified_evidence(client, seeded):
+    _seed_agent(seeded)
+    bad = client.post('/api/v1/agents/agent/observations',
+                      json=_observation_payload({}, overexposure=0.62, target_px=8.0))
+    body = routes(client, rule='absence')
+    assert body['evidence']['observation_id'] == bad.json()['id']
+    assert body['evidence']['confidence'] == 'unverified'
+    assert body['evidence']['usable'] is False
+    assert any('还没有有效观察窗口' in notice for notice in body['notices'])

@@ -119,11 +119,11 @@ async function cancel() {
     <RouteTimeline v-if="timeline.data.value?.length" :entries="timeline.data.value"/>
     <p v-if="loading && !data" class="muted" role="status">正在评估路由候选…</p>
     <template v-else-if="data">
-      <p v-if="data.evidence" class="route-evidence" :class="data.evidence.usable ? 'ok' : 'blocked'"
+      <p v-if="data.evidence" class="route-evidence" :class="data.evidence.confidence === 'confirmed' ? 'ok' : 'blocked'"
         aria-label="场景证据来源">
-        场景证据来自{{ data.evidence.usable ? '有效观察' : '观察不足' }}窗口
+        场景证据来自{{ data.evidence.confidence === 'confirmed' ? '有效观察' : '观察不足' }}窗口
         {{ data.evidence.window_start.toFixed(1) }}–{{ data.evidence.window_end.toFixed(1) }} 秒
-        <span v-if="!data.evidence.usable">（只能作为提示，不能当作已成立的场景条件）</span>
+        <span v-if="data.evidence.confidence !== 'confirmed'">（该视频源没有有效窗口，只能作为提示）</span>
       </p>
       <p v-else class="route-evidence muted" aria-label="场景证据来源">
         该视频源还没有观察记录，场景条件按未测定处理。

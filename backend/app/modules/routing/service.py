@@ -24,17 +24,28 @@ def _labels(attributes):
     return labels
 
 
-def _latest_metrics(db, source_id, task_key):
-    """The most recent window tells us the target scale we actually observed."""
+VALID_VERDICTS = ('detected', 'not_detected')
+
+
+def _latest_evidence(db, source_id, task_key):
+    """场景证据优先取最近一次**有效**观察；没有时才退回最近一条并标记为未证实。
+
+    直接取"最后一条"会把一次没看清的窗口当成既成事实；而退回默认分桶又会
+    悄悄抬高评分（默认分桶的质量高于眩光等分桶），所以这里只做"换一条更可信的
+    证据 + 标注"，不改动求解规则。
+    """
     from ..semantics.models import ObservationRecord
     from sqlalchemy import select
-    row = db.scalars(select(ObservationRecord)
-                     .where(ObservationRecord.source_id == source_id,
-                            ObservationRecord.task_key == task_key)
-                     .order_by(ObservationRecord.sequence.desc()).limit(1)).first()
-    if row is None:
-        return {}, None
-    return dict(row.metrics), row
+    base = select(ObservationRecord).where(ObservationRecord.source_id == source_id,
+                                           ObservationRecord.task_key == task_key)
+    valid = db.scalars(base.where(ObservationRecord.verdict.in_(VALID_VERDICTS))
+                       .order_by(ObservationRecord.sequence.desc()).limit(1)).first()
+    if valid is not None:
+        return dict(valid.metrics), valid, False
+    fallback = db.scalars(base.order_by(ObservationRecord.sequence.desc()).limit(1)).first()
+    if fallback is None:
+        return {}, None, False
+    return dict(fallback.metrics), fallback, True
 
 
 def _capability_views(table):
@@ -62,7 +73,7 @@ def _evaluation_view(item):
                           reasons=list(item.reasons), bucket=item.bucket)
 
 
-def _notices(table, scenario, metrics, evidence=None):
+def _notices(table, scenario, metrics, evidence=None, fell_back=False):
     notices = []
     uncalibrated = [capability.label for capability in table.values() if not capability.calibrated]
     if uncalibrated:
@@ -70,9 +81,9 @@ def _notices(table, scenario, metrics, evidence=None):
                        + '、'.join(uncalibrated))
     if not metrics:
         notices.append('该视频源还没有观察记录，目标尺度按未测定处理。')
-    elif evidence is not None and evidence.verdict == 'insufficient':
-        notices.append('最近一次窗口是"观察不足"，它给出的目标尺度与画质只能作为提示，'
-                       '不能当作已成立的场景条件。')
+    elif fell_back:
+        notices.append('该视频源还没有有效观察窗口；最近一次是"观察不足"，'
+                       '它给出的目标尺度与画质只能作为提示，不能当作已成立的场景条件。')
     if scenario.saturated_ratio is None:
         notices.append('不可恢复饱和像素比例未测定，去眩光类预处理能否修复当前画面无法确认。')
     if scenario.bucket != capabilities.DEFAULT_BUCKET:
@@ -89,7 +100,7 @@ def evaluate_route(db, source_id, rule, *, duration_seconds=None, table=None,
     except graphs.GraphError as error:
         raise Error(422, 'route_rule_invalid', str(error)) from None
     profile = semantics.read_profile(db, source_id)
-    metrics, evidence = _latest_metrics(db, source_id, f'person/{rule}')
+    metrics, evidence, fell_back = _latest_evidence(db, source_id, f'person/{rule}')
     scenario = capabilities.scenario_from(labels=_labels(profile.attributes),
                                           target_px=metrics.get('target_scale_px'),
                                           brightness=metrics.get('brightness'),
@@ -123,7 +134,7 @@ def evaluate_route(db, source_id, rule, *, duration_seconds=None, table=None,
                      weights=solution.weights.as_dict(), budgets=solution.budgets.as_dict(),
                      min_quality=min_quality,
                      evidence=_evidence_view(evidence),
-                     notices=_notices(table, scenario, metrics, evidence))
+                     notices=_notices(table, scenario, metrics, evidence, fell_back))
 
 
 def _evidence_view(row):
@@ -132,4 +143,5 @@ def _evidence_view(row):
         return None
     return EvidenceView(observation_id=row.id, verdict=row.verdict,
                         window_start=row.window_start, window_end=row.window_end,
-                        usable=row.verdict != 'insufficient')
+                        usable=row.verdict != 'insufficient',
+                        confidence='confirmed' if row.verdict != 'insufficient' else 'unverified')
