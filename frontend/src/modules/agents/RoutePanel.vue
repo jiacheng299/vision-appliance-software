@@ -123,7 +123,7 @@ async function cancel() {
         aria-label="场景证据来源">
         场景证据来自{{ data.evidence.confidence === 'confirmed' ? '有效观察' : '观察不足' }}窗口
         {{ data.evidence.window_start.toFixed(1) }}–{{ data.evidence.window_end.toFixed(1) }} 秒
-        <span v-if="data.evidence.confidence !== 'confirmed'">（该视频源没有有效窗口，只能作为提示）</span>
+        <span v-if="data.evidence.confidence !== 'confirmed'">（当前监测规则尚无有效观察窗口，只能作为提示）</span>
       </p>
       <p v-else class="route-evidence muted" aria-label="场景证据来源">
         该视频源还没有观察记录，场景条件按未测定处理。

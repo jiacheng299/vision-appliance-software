@@ -209,7 +209,8 @@ it('says which window the scenario evidence came from, and flags a weak one', as
     const line = wrapper.get('[aria-label="场景证据来源"]')
     expect(line.text()).toContain('观察不足')
     expect(line.text()).toContain('90.0–120.0 秒')
-    expect(line.text()).toContain('只能作为提示')
+    expect(line.text()).toContain('当前监测规则尚无有效观察窗口，只能作为提示')
+    expect(line.text()).not.toContain('该视频源没有有效窗口')
     expect(line.classes()).toContain('blocked')
   } finally { wrapper.unmount() }
 })

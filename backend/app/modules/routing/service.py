@@ -28,11 +28,11 @@ VALID_VERDICTS = ('detected', 'not_detected')
 
 
 def _latest_evidence(db, source_id, task_key):
-    """场景证据优先取最近一次**有效**观察；没有时才退回最近一条并标记为未证实。
+    """场景证据优先取最近一次**有效**观察；没有时保留最近无效记录作未证实提示。
 
     直接取"最后一条"会把一次没看清的窗口当成既成事实；而退回默认分桶又会
-    悄悄抬高评分（默认分桶的质量高于眩光等分桶），所以这里只做"换一条更可信的
-    证据 + 标注"，不改动求解规则。
+    悄悄抬高评分（默认分桶的质量高于眩光等分桶），所以无效窗口只用于提示，
+    其指标不参与场景求解。
     """
     from ..semantics.models import ObservationRecord
     from sqlalchemy import select
@@ -45,7 +45,7 @@ def _latest_evidence(db, source_id, task_key):
     fallback = db.scalars(base.order_by(ObservationRecord.sequence.desc()).limit(1)).first()
     if fallback is None:
         return {}, None, False
-    return dict(fallback.metrics), fallback, True
+    return {}, fallback, True
 
 
 def _capability_views(table):
@@ -79,11 +79,11 @@ def _notices(table, scenario, metrics, evidence=None, fell_back=False):
     if uncalibrated:
         notices.append('以下能力的质量数字是保守示例值，未做分桶验证，不能当作准确率：'
                        + '、'.join(uncalibrated))
-    if not metrics:
-        notices.append('该视频源还没有观察记录，目标尺度按未测定处理。')
-    elif fell_back:
-        notices.append('该视频源还没有有效观察窗口；最近一次是"观察不足"，'
+    if fell_back:
+        notices.append('当前监测规则尚无有效观察窗口；最近一次是"观察不足"，'
                        '它给出的目标尺度与画质只能作为提示，不能当作已成立的场景条件。')
+    elif not metrics:
+        notices.append('该视频源还没有观察记录，目标尺度按未测定处理。')
     if scenario.saturated_ratio is None:
         notices.append('不可恢复饱和像素比例未测定，去眩光类预处理能否修复当前画面无法确认。')
     if scenario.bucket != capabilities.DEFAULT_BUCKET:

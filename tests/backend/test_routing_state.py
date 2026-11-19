@@ -179,6 +179,22 @@ def test_observation_windows_without_a_route_state_are_ignored(seeded):
     assert advance(seeded) is None
 
 
+def test_scenario_ignores_metrics_from_an_insufficient_window(seeded):
+    from app.modules.semantics.models import ObservationRecord
+    with seeded.state.sessions() as db:
+        db.add(ObservationRecord(id='observation-insufficient', agent_id='agent', actor_id=ACTOR,
+                                 source_id='cam', task_key='person/absence', window_start=0.0,
+                                 window_end=30.0, verdict='insufficient',
+                                 metrics={'target_scale_px': 8.0, 'brightness': 0.01,
+                                          'blur_score': 1.0}))
+        db.commit()
+    with seeded.state.sessions() as db:
+        scenario, _profile = routing_state._scenario(db, 'cam', 'absence')
+    assert scenario.target_px is None
+    assert scenario.brightness is None
+    assert scenario.blur is None
+
+
 def test_active_route_falls_back_to_the_revision_version(seeded):
     with seeded.state.sessions() as db:
         version, members = routing_state.active_route(db, 'agent', ACTOR, 'ch', 'cam',

@@ -1,0 +1,28 @@
+{
+  "change_id": "2026-11-19-invalid-evidence-exclusion",
+  "base_commit": "9a58f42206fab7c2982df3c77a8698ad941e8ffd",
+  "implementer": "agent-5",
+  "reviewer": "agent-6",
+  "reviewer_independent": true,
+  "patch_sha256": "b659d30be1d76b084bcef1eeabba97df6e68fd750ff41c2897db2406b492cb64",
+  "approved_at": "2026-11-19T12:06:37+08:00",
+  "decision": "approved",
+  "verification": {
+    "red": "2 backend tests and 1 frontend test failed on the old behavior",
+    "backend_focused": "24 passed",
+    "frontend_focused": "11 passed",
+    "backend_full": "504 passed, 6 skipped in 289.92s",
+    "frontend_full": "197 passed",
+    "frontend_build": "passed",
+    "diff_check": "passed"
+  },
+  "findings": {
+    "critical": 0,
+    "important": 0,
+    "minor": []
+  },
+  "limitations": [
+    "This change excludes invalid-only fallback metrics from route evaluation; it does not implement candidate model execution.",
+    "Existing frontend test logging and the large chunk build warning remain unchanged."
+  ]
+}

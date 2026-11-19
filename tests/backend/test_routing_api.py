@@ -186,4 +186,5 @@ def test_only_insufficient_windows_are_marked_as_unverified_evidence(client, see
     assert body['evidence']['observation_id'] == bad.json()['id']
     assert body['evidence']['confidence'] == 'unverified'
     assert body['evidence']['usable'] is False
-    assert any('还没有有效观察窗口' in notice for notice in body['notices'])
+    assert body['scenario']['target_px'] is None
+    assert any('当前监测规则尚无有效观察窗口' in notice for notice in body['notices'])
