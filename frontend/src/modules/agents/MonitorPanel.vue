@@ -35,25 +35,25 @@ const defaultRouteTarget = computed<RouteTarget | null>(() => {
         duration: channel.duration_seconds ?? null }
     : null
 })
-const selectedRouteSourceId = ref<string | null>(null)
+const selectedRouteKey = ref<{ sourceId: string; channelId: string } | null>(null)
 const selectedRouteTarget = computed<RouteTarget | null>(() => {
-  const sourceId = selectedRouteSourceId.value
-  if (!sourceId) return null
-  const channel = props.revision.config.channels?.find(item =>
-    channelSources(item).some(binding => binding.source_id === sourceId))
-  const source = props.sources.find(item => item.id === sourceId)
-  return channel?.channel_id && source
-    ? { sourceId, channelId: channel.channel_id, rule: channel.rule,
+  const selected = selectedRouteKey.value
+  if (!selected) return null
+  const channel = props.revision.config.channels?.find(item => item.channel_id === selected.channelId)
+  const source = props.sources.find(item => item.id === selected.sourceId)
+  const bound = channel && channelSources(channel).some(binding => binding.source_id === selected.sourceId)
+  return channel?.channel_id && source && bound
+    ? { sourceId: selected.sourceId, channelId: channel.channel_id, rule: channel.rule,
         duration: channel.duration_seconds ?? null }
     : null
 })
 const routeTarget = computed(() => selectedRouteTarget.value ?? defaultRouteTarget.value)
-function openRoute(sourceId: string) {
-  if (!props.sources.some(item => item.id === sourceId)) return
-  const channel = props.revision.config.channels?.find(item =>
-    channelSources(item).some(binding => binding.source_id === sourceId))
-  if (!channel?.channel_id) return
-  selectedRouteSourceId.value = sourceId
+function openRoute(target: { sourceId: string; channelId: string | null }) {
+  if (!target.channelId || !props.sources.some(item => item.id === target.sourceId)) return
+  const channel = props.revision.config.channels?.find(item => item.channel_id === target.channelId
+    && channelSources(item).some(binding => binding.source_id === target.sourceId))
+  if (!channel) return
+  selectedRouteKey.value = { sourceId: target.sourceId, channelId: target.channelId }
   tab.value = 'routing'
 }
 const tabs = computed<{value:Tab;label:string;enabled:boolean}[]>(() => [

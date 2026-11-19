@@ -589,9 +589,15 @@ class LocalAgentServices(RegistryAgentServices):
                                         if view.verdict == 'insufficient':
                                             self._reset_window_rule(rule, window_rule_state, timestamp)
                                         else:
+                                            required_count = parameters.get('min_count', 1)
+                                            absence_compatible = view.verdict == 'not_detected' or (
+                                                view.verdict == 'detected' and view.detection_count < required_count)
+                                            recovery_compatible = (view.verdict == 'detected'
+                                                and view.detection_count >= required_count)
                                             ready_events = [pending for pending in pending_events
-                                                if view.verdict == ('detected' if channel.rule == 'intrusion'
-                                                    or pending[0].transition == 'restored' else 'not_detected')]
+                                                if (channel.rule == 'intrusion' and view.verdict == 'detected')
+                                                or (channel.rule == 'absence' and (recovery_compatible
+                                                    if pending[0].transition == 'restored' else absence_compatible))]
                                             if len(ready_events) != len(pending_events):
                                                 ready_events = []
                                                 self._reset_window_rule(rule, window_rule_state, timestamp)
@@ -624,7 +630,12 @@ class LocalAgentServices(RegistryAgentServices):
                         return
                     raise Error(503,'camera_frame_timeout','摄像头视频已中断。')
                 except Exception as exc:
-                    rule.mark_unavailable()
+                    pending_events.clear()
+                    if window is not None:
+                        window.reset()
+                    self._reset_window_rule(rule, window_rule_state,
+                        rule.last_observed if isinstance(rule, PresenceRule) else None)
+                    window_rule_state = rule.state if isinstance(rule, PresenceRule) else None
                     if stop.is_set(): break
                     if safety is not None:
                         safety.inspect(safety.interrupted)

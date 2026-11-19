@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.shared.config import Config
 from app.shared.db import make_engine, migrate, session_factory
+from app.shared.errors import Error
 from app.shared.models import Source
 from app.modules.agents.contracts import RuntimeCommand, SourceSnapshot
 from app.modules.agents.models import Agent
@@ -86,11 +87,12 @@ def runtime(tmp_path):
     engine.dispose()
 
 
-def command(*, rule='absence', duration=2, end=5000, alarm_interval=60):
+def command(*, rule='absence', duration=2, end=5000, alarm_interval=60, min_count=1):
     parameters = [dict(key='sample_interval_seconds', value=1),
                   dict(key='confidence_threshold', value=.5)]
     if rule == 'absence':
-        parameters.append(dict(key='alarm_interval_seconds', value=alarm_interval))
+        parameters.extend([dict(key='alarm_interval_seconds', value=alarm_interval),
+                           dict(key='min_count', value=min_count)])
     else:
         parameters.extend([dict(key='tracking_timeout_seconds', value=2),
                            dict(key='exit_confirmation_seconds', value=3)])
@@ -309,6 +311,172 @@ def test_valid_absence_repeats_without_window_queue_duplicates(runtime):
     stored_events = events(sessions)
     assert [event['event_type'] for event in stored_events] == ['person_absence'] * 5
     assert [event['end_media_ms'] for event in stored_events] == [2000, 4000, 6000, 8000, 10000]
+
+
+def test_min_count_two_publishes_absence_for_persistent_single_person(runtime):
+    service, sessions, _ = runtime
+    sequence(10, people=range(11))
+    run = finish(service, service.submit(
+        command(end=10000, min_count=2), 'actor', 'single-person-absence'))
+    assert run.state == 'completed'
+    stored_events = events(sessions)
+    assert [event['event_type'] for event in stored_events] == ['person_absence']
+    assert stored_events[0]['end_media_ms'] == 2000
+    assert [item.verdict for item in observations(sessions)] == ['detected', 'detected']
+    with sessions() as db:
+        assert db.get(LocalRun, run.id).payload['alert_state'] == 'absence'
+
+
+def test_min_count_two_zero_to_one_person_keeps_absence_active(runtime):
+    service, sessions, _ = runtime
+    sequence(10, people=range(6, 11))
+    run = finish(service, service.submit(
+        command(end=10000, alarm_interval=5, min_count=2), 'actor', 'below-required-count'))
+    assert run.state == 'completed'
+    stored_events = events(sessions)
+    assert [event['event_type'] for event in stored_events] == ['person_absence'] * 2
+    assert [event['end_media_ms'] for event in stored_events] == [2000, 7000]
+    assert [item.verdict for item in observations(sessions)] == ['not_detected', 'detected']
+    with sessions() as db:
+        assert db.get(LocalRun, run.id).payload['alert_state'] == 'absence'
+
+
+def test_min_count_two_restores_only_after_required_count_returns(runtime):
+    service, sessions, _ = runtime
+    Reader.samples = [(float(timestamp), textured()) for timestamp in range(16)]
+    Detector.detections = [[] if timestamp <= 5 else [PERSON] if timestamp <= 10 else [PERSON, PERSON]
+                           for timestamp in range(16)]
+    Reader.stop_after = None
+    run = finish(service, service.submit(
+        command(end=15000, min_count=2), 'actor', 'required-count-restored'))
+    assert run.state == 'completed'
+    stored_events = events(sessions)
+    assert [event['event_type'] for event in stored_events] == [
+        'person_absence', 'person_presence_restored']
+    assert [event['end_media_ms'] for event in stored_events] == [2000, 13000]
+    assert [item.detection_count for item in observations(sessions)] == [0, 1, 2]
+    with sessions() as db:
+        assert db.get(LocalRun, run.id).payload['alert_state'] == 'normal'
+
+
+def test_camera_reconnect_discards_pending_absence_and_restarts_observation_window(runtime, monkeypatch):
+    service, sessions, _ = runtime
+
+    class Gateway:
+        def ensure_published(self, source, networks): return 'plaza'
+        def close(self): pass
+
+    service.gateway.close()
+    service.gateway = Gateway()
+    with sessions() as db:
+        source = db.get(Source, 'video')
+        source.kind = 'camera'
+        source.status = 'online'
+        source.address = 'rtsp://127.0.0.1:8554/plaza'
+        source.sha256 = None
+        source.duration_ms = None
+        db.commit()
+
+    class ReconnectReader:
+        connections = 0
+
+        def __init__(self, *args, **kwargs): self.stop = kwargs['stop']
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+
+        def frames(self):
+            type(self).connections += 1
+            if self.connections == 1:
+                for timestamp in range(3):
+                    yield float(timestamp), textured()
+                raise Error(503, 'camera_frame_timeout', '摄像头视频已中断。')
+            for timestamp in range(3, 9):
+                yield float(timestamp), textured()
+            self.stop.set()
+
+    Detector.detections = [[] for _ in range(9)]
+    Reader.stop_after = None
+    service.reader_factory = ReconnectReader
+    published_timestamps = []
+    record_transition = service._record_transition_event
+    def record_at_timestamp(run, observation, timestamp, *args):
+        published_timestamps.append(timestamp)
+        return record_transition(run, observation, timestamp, *args)
+    monkeypatch.setattr(service, '_record_transition_event', record_at_timestamp)
+    request = command()
+    request.source_kinds = {'video': 'camera'}
+    request.source_snapshots = [SourceSnapshot(id='video', row_version=1, kind='camera',
+                                               width=64, height=48, sha256=None, duration_ms=None)]
+    binding = request.config.channels[0].sources[0]
+    binding.start_media_ms = binding.end_media_ms = None
+    run = finish(service, service.submit(request, 'actor', 'camera-reconnect-window'))
+    assert run.state == 'stopped'
+    assert ReconnectReader.connections == 2
+    stored_events = events(sessions)
+    assert [event['event_type'] for event in stored_events] == ['person_absence']
+    assert published_timestamps == [5.0]
+    assert stored_events[0]['start_media_ms'] is None
+    stored = observations(sessions)
+    assert len(stored) == 1
+    assert stored[0].verdict == 'not_detected'
+    assert (stored[0].window_start, stored[0].window_end) == (3, 8)
+    assert stored[0].detection_count == 0
+
+
+def test_intrusion_camera_exception_reconnects_without_presence_state(runtime, monkeypatch):
+    service, sessions, _ = runtime
+
+    class Gateway:
+        def ensure_published(self, source, networks): return 'plaza'
+        def close(self): pass
+
+    service.gateway.close()
+    service.gateway = Gateway()
+    with sessions() as db:
+        source = db.get(Source, 'video')
+        source.kind = 'camera'
+        source.status = 'online'
+        source.address = 'rtsp://127.0.0.1:8554/plaza'
+        source.sha256 = None
+        source.duration_ms = None
+        db.commit()
+
+    class ReconnectReader:
+        connections = 0
+
+        def __init__(self, *args, **kwargs): self.stop = kwargs['stop']
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+
+        def frames(self):
+            type(self).connections += 1
+            if self.connections == 1:
+                for timestamp in range(2):
+                    yield float(timestamp), textured()
+                raise Error(503, 'camera_frame_timeout', '摄像头视频已中断。')
+            for timestamp in range(2, 5):
+                yield float(timestamp), textured()
+            self.stop.set()
+
+    Detector.detections = [[] for _ in range(5)]
+    service.reader_factory = ReconnectReader
+    terminal_exceptions = []
+    finish_run = service._finish
+    def capture_finish(identifier, state, message, code=None):
+        import sys
+        terminal_exceptions.append(sys.exception())
+        return finish_run(identifier, state, message, code)
+    monkeypatch.setattr(service, '_finish', capture_finish)
+    request = command(rule='intrusion')
+    request.source_kinds = {'video': 'camera'}
+    request.source_snapshots = [SourceSnapshot(id='video', row_version=1, kind='camera',
+                                               width=64, height=48, sha256=None, duration_ms=None)]
+    binding = request.config.channels[0].sources[0]
+    binding.start_media_ms = binding.end_media_ms = None
+    run = finish(service, service.submit(request, 'actor', 'intrusion-camera-reconnect'))
+    assert run.state == 'stopped', terminal_exceptions
+    assert ReconnectReader.connections == 2
+    assert events(sessions) == []
 
 
 def test_file_completion_before_window_close_discards_pending_event(runtime):

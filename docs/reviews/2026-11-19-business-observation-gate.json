@@ -38,5 +38,10 @@
     "Business events intentionally wait for their observation window to close.",
     "Disabling observation records disables business event publication rather than bypassing validity checks.",
     "Candidate model shadow execution and real model switching remain unimplemented."
-  ]
+  ],
+  "clarification": {
+    "atomicity_scope": "Window-level compatibility-filtering atomicity only: if any pending event is incompatible with the closed window, no compatible subset from that window is released.",
+    "persistence_semantics": "Compatible events are still persisted one by one through the existing independent transactions. Partial persistence failures retain the existing error semantics; database batch-write atomicity is not provided or claimed.",
+    "historical_record": "This clarification narrows the wording of the approved record without changing its patch hash, decision, or review history."
+  }
 }

@@ -1,0 +1,46 @@
+{
+  "change_id": "2026-11-19-final-review-fixes",
+  "base_commit": "c3ef6f44f03118c8cdbc58b033143d21068a13ce",
+  "implementer": "agent-14",
+  "reviewer": "agent-13",
+  "reviewer_independent": true,
+  "patch_sha256": "096a80cd0fc3a3d3cec105994a9e6872425ec1a53ebe6358f9f17bc9c5fee07c",
+  "approved_at": "2026-11-19T19:40:53+08:00",
+  "decision": "approved",
+  "verification": {
+    "min_count": "RED 2 failed; GREEN 16 gate tests and 79 related tests",
+    "camera_reconnect": "RED reproduced stale publication and IntrusionRule AttributeError; GREEN 80 related tests",
+    "same_source_channels": "RED 2 failed; GREEN 21 related tests",
+    "backend_full": "523 passed, 6 skipped in 257.54s",
+    "frontend_full": "207 passed",
+    "frontend_build": "passed",
+    "deploy_full": "12 passed",
+    "diff_check": "passed"
+  },
+  "review_history": [
+    {
+      "patch_sha256": "dbdb8fda7441b7340d1a4b4459a43bcc442bc555046bbaa780be86b424c741cc",
+      "decision": "rejected",
+      "reason": "The first reconnect fix read rule.state on IntrusionRule, which has no state attribute."
+    },
+    {
+      "patch_sha256": "096a80cd0fc3a3d3cec105994a9e6872425ec1a53ebe6358f9f17bc9c5fee07c",
+      "decision": "approved",
+      "reason": "Presence-only state synchronization and the intrusion reconnect regression resolved the remaining issue."
+    }
+  ],
+  "findings": {
+    "critical": 0,
+    "important_open": 0,
+    "important_resolved": 5,
+    "minor_deferred": [
+      "The pending raw-frame queue remains unbounded under extreme configuration."
+    ]
+  },
+  "limitations": [
+    "Window-level compatibility filtering is atomic; event persistence remains per event.",
+    "Camera reconnect behavior is covered by controlled executor tests, not a physical camera outage.",
+    "Same-source dual-channel behavior is covered by component integration tests, not a new browser scenario.",
+    "Candidate model shadow execution and real model switching remain unimplemented."
+  ]
+}

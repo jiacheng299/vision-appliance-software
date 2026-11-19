@@ -11,12 +11,12 @@ const sources = [{ id: 'one', name: '一号录像' }, { id: 'two', name: '二号
 const blocked: Observation = {
   id: 'obs-blocked', agent_id: 'task', run_id: 'run-two', source_id: 'two', task_key: 'person/absence',
   roi: [], window_start: 60, window_end: 90, route_version: 'local-r1', profile_version: 2,
-  model_version: '1', path_id: 'channel', verdict: 'insufficient', detection_count: 0,
+  model_version: '1', path_id: 'channel-two', verdict: 'insufficient', detection_count: 0,
   metrics: { frame_count: 30, actual_fps: null, overexposure_ratio: null },
   thresholds: {}, gates: [], reasons: ['监测区域过曝比例超过门槛。'], created_at: '2026-11-17T03:00:00Z',
 }
 const empty: Observation = {
-  ...blocked, id: 'obs-empty', source_id: 'one', run_id: 'run-one', verdict: 'not_detected',
+  ...blocked, id: 'obs-empty', source_id: 'one', run_id: 'run-one', path_id: 'channel', verdict: 'not_detected',
   reasons: [], metrics: { frame_count: 30, actual_fps: 1.02, overexposure_ratio: 0.05 },
 }
 const page = (items: Observation[]): ObservationPage => ({
@@ -106,7 +106,7 @@ it('shows the model combination version of each window and keeps the existing ju
     await flushPromises()
     expect(wrapper.text()).toContain('local-r1')
     await wrapper.get('[aria-label="查看该视频源的模型组合"]').trigger('click')
-    expect(wrapper.emitted('openRoute')?.[0]).toEqual(['one'])
+    expect(wrapper.emitted('openRoute')?.[0]).toEqual([{ sourceId: 'one', channelId: 'channel' }])
   } finally { wrapper.unmount() }
 })
 function mountMultiSourcePanel() {
@@ -174,6 +174,21 @@ it('keeps the second video context across observation, model combination and sum
     expect(summary.text()).toContain('v9')
     expect(summary.text()).toContain('route-two')
     expect(summary.text()).toContain('model-two')
+  } finally { wrapper.unmount() }
+})
+
+it('keeps the selected channel when two channels with different rules share one video', async () => {
+  const { wrapper, revision, routeRequest, timelineRequest } = mountMultiSourcePanel()
+  try {
+    const channels = revision.config.channels!
+    await wrapper.setProps({ revision: { ...revision, config: { ...revision.config, channels: [
+      { ...channels[0], sources: [{ source_id: 'two', regions: [] }] }, channels[1],
+    ] } } })
+    await openSecondRoute(wrapper)
+    expect(routeRequest).toHaveBeenLastCalledWith('two', { rule: 'presence', duration_seconds: 45 })
+    expect(timelineRequest).toHaveBeenLastCalledWith('task', {
+      channel_id: 'channel-two', source_id: 'two', limit: 12 })
+    expect(wrapper.get('[aria-label="任务可观察性摘要"]').text()).toContain('route-two')
   } finally { wrapper.unmount() }
 })
 

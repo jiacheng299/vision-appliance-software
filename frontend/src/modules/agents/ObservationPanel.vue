@@ -7,7 +7,7 @@ import { formatDate, useResource } from '../../shared/ui/resource'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
 
 const props = defineProps<{ agentId: string; runs: Pick<Run, 'source_id'>[]; sources: Pick<Source, 'id' | 'name'>[] }>()
-const emit = defineEmits<{ openRoute: [sourceId: string] }>()
+const emit = defineEmits<{ openRoute: [target: { sourceId: string; channelId: string | null }] }>()
 const sourceId = ref<string | null>(null)
 const verdict = ref<ObservationVerdict | null>(null)
 const names = computed(() => new Map(props.sources.map(source => [source.id, source.name])))
@@ -126,7 +126,7 @@ function metricRows(row: Observation) {
             <NButton text type="primary" size="small" aria-label="查看该条观察的观察条件"
               @click="selected = row">观察条件</NButton>
             <NButton text type="primary" size="small" aria-label="查看该视频源的模型组合"
-              @click="emit('openRoute', row.source_id)">模型组合</NButton>
+              @click="emit('openRoute', { sourceId: row.source_id, channelId: row.path_id ?? null })">模型组合</NButton>
           </td>
         </tr></tbody>
       </table>
