@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { agentApi, type Revision, type RouteEvaluation, type RouteState, type RouteView, type Workspace } from '../src/modules/agents/api'
 import type { Source } from '../src/shared/api/types'
 import RoutePanel from '../src/modules/agents/RoutePanel.vue'
@@ -29,6 +29,13 @@ const view: RouteView = {
   notices: ['以下能力的质量数字是保守示例值，未做分桶验证，不能当作准确率：YOLO11n'],
 }
 afterEach(() => vi.restoreAllMocks())
+beforeEach(() => {
+  vi.spyOn(agentApi, 'routeStates').mockResolvedValue([])
+  vi.spyOn(agentApi, 'routeTimeline').mockResolvedValue([])
+  vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({ items: [], active: 'heuristic-iou',
+    resolved: { spec: 'heuristic-iou', available: true, name: 'heuristic-iou',
+      label: '固定机位 IoU/中心距关联', kind: 'heuristic', external: false, detail: {} }, notice: '' })
+})
 
 it('shows the chosen combination with its score breakdown and the blocked ones', async () => {
   const request = vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
@@ -41,7 +48,7 @@ it('shows the chosen combination with its score breakdown and the blocked ones',
     expect(wrapper.text()).toContain('常规场景')
     expect(wrapper.text()).toContain('未做分桶验证')
     expect(wrapper.text()).toContain('未安装：中心区域裁剪放大')
-    expect(wrapper.get('[aria-label="路由候选"]').text()).toContain('路由候选')
+    expect(wrapper.get('[aria-label="模型组合"]').text()).toContain('模型组合')
   } finally { wrapper.unmount() }
 })
 
@@ -72,15 +79,15 @@ it('opens route evaluation from the task monitor only for a real bound channel',
   const wrapper = mount(MonitorPanel, {
     props: { agentId: 'task', sources: [{ id: 'one', name: '一号录像' }] as unknown as Source[],
       canWrite: false, workspace, revision },
-    global: { stubs: { EventsPanel: true, MediaPlayer: true, VideoWall: true } },
+    global: { stubs: { EventsPanel: true, MediaPlayer: true, VideoWall: true, TaskSummaryStrip: true } },
   })
   try {
     await flushPromises()
     expect(request).not.toHaveBeenCalled()
-    await wrapper.get('button[aria-label="路由候选"]').trigger('click')
+    await wrapper.get('button[aria-label="模型组合"]').trigger('click')
     await flushPromises()
     expect(request).toHaveBeenCalledWith('one', { rule: 'absence', duration_seconds: 30 })
-    expect(wrapper.find('[aria-label="路由候选"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="模型组合"]').exists()).toBe(true)
   } finally { wrapper.unmount() }
 })
 
@@ -97,7 +104,7 @@ const routeState: RouteState = {
   notices: ['无法局部修复，已退化为全图重算：漂移覆盖全部需求'], updated_at: '2026-11-17T00:00:00Z',
 }
 
-it('shows the active route version, the pending candidate and the drift that caused it', async () => {
+it('shows the active combination, pending candidate and parts needing adjustment', async () => {
   vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
   const states = vi.spyOn(agentApi, 'routeStates').mockResolvedValue([routeState])
   const wrapper = mount(RoutePanel, {
@@ -106,12 +113,14 @@ it('shows the active route version, the pending candidate and the drift that cau
   try {
     await flushPromises()
     expect(states).toHaveBeenCalledWith('task')
-    expect(wrapper.get('[aria-label="路由状态"]').text()).toContain('当前路由 route-v1')
+    expect(wrapper.get('[aria-label="当前模型组合"]').text()).toContain('当前组合 route-v1')
     expect(wrapper.text()).toContain('候选验证中')
-    expect(wrapper.text()).toContain('候选：yolo11s-person')
-    expect(wrapper.text()).toContain('有效窗口 1')
-    expect(wrapper.text()).toContain('lighting：daylight → strong_glare')
-    expect(wrapper.text()).toContain('已退化为全图重算')
+    expect(wrapper.text()).toContain('候选组合：yolo11s-person')
+    expect(wrapper.text()).toContain('有效观察窗口 1')
+    expect(wrapper.text()).toContain('评分增益 0.090')
+    expect(wrapper.get('[aria-label="需要调整的部分"]').text()).toContain('lighting：daylight → strong_glare')
+    expect(wrapper.text()).toContain('需要调整的部分：person_detect')
+    expect(wrapper.text()).toContain('本次需重新评估整个组合')
   } finally { wrapper.unmount() }
 })
 
@@ -133,7 +142,7 @@ it('can propose a candidate from the panel', async () => {
       rule: 'absence', duration_seconds: 30 })
   } finally { wrapper.unmount() }
 })
-it('plots the merged profile and routing timeline', async () => {
+it('plots the merged observation and model combination timeline in business language', async () => {
   vi.spyOn(agentApi, 'routes').mockResolvedValue(view)
   vi.spyOn(agentApi, 'routeStates').mockResolvedValue([routeState])
   vi.spyOn(agentApi, 'routeTimeline').mockResolvedValue([
@@ -148,10 +157,42 @@ it('plots the merged profile and routing timeline', async () => {
   })
   try {
     await flushPromises()
-    const history = wrapper.get('[aria-label="路由版本时间线"]')
+    const history = wrapper.get('[aria-label="运行调整时间线"]')
     expect(history.text()).toContain('lighting：daylight → strong_glare')
-    expect(history.text()).toContain('切换版本')
-    expect(history.text()).toContain('ΔJ 0.120')
+    expect(history.text()).toContain('切换模型组合')
+    expect(history.text()).toContain('评分增益 0.120')
+    expect(history.text()).not.toContain('ΔJ')
+  } finally { wrapper.unmount() }
+})
+
+it('puts current status, evidence and the chosen combination before secondary disclosures', async () => {
+  vi.spyOn(agentApi, 'routes').mockResolvedValue({ ...view,
+    evidence: { observation_id: 'obs-1', verdict: 'not_detected', window_start: 0,
+      window_end: 30, usable: true, confidence: 'confirmed' } })
+  vi.spyOn(agentApi, 'routeStates').mockResolvedValue([routeState])
+  vi.spyOn(agentApi, 'routeTimeline').mockResolvedValue([
+    { id: 't1', at: '2026-11-17T00:00:00Z', origin: 'route', kind: 'window', version: 'route-v2',
+      summary: '候选已取得 2 个有效观察窗口，满足切换要求', action: 'switch', delta_j: 0.12 },
+  ])
+  vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({ items: [], active: 'heuristic-iou',
+    resolved: { spec: 'heuristic-iou', available: true, name: 'heuristic-iou',
+      label: '固定机位 IoU/中心距关联', kind: 'heuristic', external: false, detail: {} }, notice: '' })
+  const wrapper = mount(RoutePanel, {
+    props: { sourceId: 'one', rule: 'absence', agentId: 'task', channelId: 'channel' },
+  })
+  try {
+    await flushPromises()
+    const state = wrapper.get('[aria-label="当前模型组合"]')
+    const evidence = wrapper.get('[aria-label="场景证据来源"]')
+    const chosen = wrapper.get('.route-chosen')
+    const secondary = wrapper.get('details.route-secondary')
+    expect(state.element.compareDocumentPosition(evidence.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(evidence.element.compareDocumentPosition(chosen.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(chosen.element.compareDocumentPosition(secondary.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(secondary.attributes('open')).toBeUndefined()
+    expect(secondary.text()).toContain('策略与变更记录')
+    await secondary.get('summary').trigger('click')
+    expect(secondary.attributes('open')).toBe('')
   } finally { wrapper.unmount() }
 })
 it('shows the tracker policy registry so the missing MARL slot is visible', async () => {

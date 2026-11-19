@@ -8,7 +8,7 @@ import { useResource } from '../../shared/ui/resource'
 const props = defineProps<{ agentId: string; sourceId?: string | null; channelId?: string | null
   real: boolean }>()
 
-// 三块数据各取所需：观察结论分布、当前路由版本、画像版本
+// 三块数据各取所需：观察结论分布、当前组合版本、场景记录版本
 const observations = useResource(() => props.real
   ? agentApi.observations(props.agentId, {}, undefined)
   : Promise.resolve(null))
@@ -36,7 +36,7 @@ function count(key: string) {
 <template>
   <section v-if="real" class="task-summary" aria-label="任务可观察性摘要">
     <div class="task-summary-item">
-      <span class="task-summary-label">画像版本</span>
+      <span class="task-summary-label">场景记录</span>
       <NTag v-if="profileVersion !== null" size="small" :bordered="false">v{{ profileVersion }}</NTag>
       <span v-else class="muted">未知</span>
     </div>
@@ -50,7 +50,7 @@ function count(key: string) {
       <span v-else class="muted">未知</span>
     </div>
     <div class="task-summary-item">
-      <span class="task-summary-label">当前路由</span>
+      <span class="task-summary-label">当前组合</span>
       <template v-if="route">
         <NTag size="small" :bordered="false">{{ route.active_version }}</NTag>
         <NTag size="small" :bordered="false" :type="route.mode === 'candidate' ? 'warning' : 'default'">

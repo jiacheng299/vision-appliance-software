@@ -39,11 +39,16 @@ function glare(row: Observation) {
   const ratio = row.metrics.overexposure_ratio
   return ratio == null ? '未测定' : `${(ratio * 100).toFixed(1)}%`
 }
+const storedReasonLabels: Record<string, string> = {
+  '路由、画像或模型版本与当前不一致。': '模型组合、场景记录或模型版本与当前不一致。',
+}
 function reasons(row: Observation) {
-  return row.reasons.length ? row.reasons.join('；') : '观察条件全部满足'
+  return row.reasons.length
+    ? row.reasons.map(reason => storedReasonLabels[reason] ?? reason).join('；')
+    : '观察条件全部满足'
 }
 
-// 门禁逐项明细：这是"观察不足"与"未检出"分界线的具体依据
+// 观察条件逐项明细：这是"观察不足"与"未检出"分界线的具体依据
 const selected = ref<Observation | null>(null)
 const gateLabels: Record<string, string> = {
   frame_count: '成功解码帧数', time_continuous: '帧时间连续', actual_fps: '实际帧率',
@@ -62,7 +67,7 @@ const gateReasons: Record<string, string> = {
   roi_not_visible: '区域可见比例不足', overexposed: '过曝比例超过门槛',
   blurred: '清晰度低于门槛', occluded: '遮挡比例超过门槛',
   target_too_small: '可辨目标尺度不足', path_incomplete: '执行路径不完整或输出不可解析',
-  version_mismatch: '路由、画像或模型版本不一致',
+  version_mismatch: '模型组合、场景记录或模型版本不一致',
   unverified_frame: '帧时间指标未测定', unverified_roi: '区域可见比例未测定',
   unverified_quality: '画面质量指标未测定', unverified_scale: '目标尺度未测定',
 }
@@ -87,14 +92,14 @@ function metricRows(row: Observation) {
 </script>
 
 <template>
-  <section class="panel observation-panel" aria-label="有效观察记录">
-    <div class="panel-title"><h2>有效观察</h2><small>近期最多 30 条</small></div>
-    <p class="muted">只展示实际帧窗口的判定结果。观察不足不等于事件未发生，未检出也不外推到其他时段或区域。</p>
+  <section class="panel observation-panel" aria-label="观察记录">
+    <div class="panel-title"><h2>观察记录</h2><small>近期最多 30 条</small></div>
+    <p class="muted">只展示实际画面时段的判定结果。观察不足不等于事件未发生，未检出也不外推到其他时段或区域。</p>
     <div class="toolbar observation-filter">
       <NSelect v-model:value="sourceId" :options="sourceOptions" clearable placeholder="全部视频源"
-        aria-label="按视频源筛选有效观察"/>
+        aria-label="按视频源筛选观察记录"/>
       <NSelect v-model:value="verdict" :options="verdictOptions" clearable placeholder="全部结论"
-        aria-label="按结论筛选有效观察"/>
+        aria-label="按结论筛选观察记录"/>
       <NButton size="small" :loading="loading" @click="refresh">刷新观察记录</NButton>
     </div>
     <ErrorBanner :error="error" @retry="refresh"/>
@@ -103,11 +108,11 @@ function metricRows(row: Observation) {
         {{ item.label }} {{ data.summary[item.value] ?? 0 }}
       </span>
     </div>
-    <p v-if="loading && !data" class="muted" role="status">正在读取有效观察记录…</p>
-    <p v-else-if="!error && !data?.items.length" class="muted" role="status">暂无有效观察记录</p>
+    <p v-if="loading && !data" class="muted" role="status">正在读取观察记录…</p>
+    <p v-else-if="!error && !data?.items.length" class="muted" role="status">暂无观察记录</p>
     <div v-else-if="!error && data?.items.length" class="table-wrap">
       <table>
-        <thead><tr><th>视频源</th><th>结论</th><th>帧窗口</th><th>实际帧率</th><th>过曝</th><th>路由版本</th><th>说明</th><th></th></tr></thead>
+        <thead><tr><th>视频源</th><th>结论</th><th>观察时段</th><th>实际帧率</th><th>过曝</th><th>模型组合版本</th><th>需要调整的部分</th><th>操作</th></tr></thead>
         <tbody><tr v-for="row in data.items" :key="row.id"
           :class="{ picked: selected?.id === row.id }">
           <td class="wrap">{{ names.get(row.source_id) ?? row.source_id }}</td>
@@ -118,17 +123,17 @@ function metricRows(row: Observation) {
           <td>{{ row.route_version ?? '—' }}</td>
           <td class="wrap">{{ reasons(row) }}</td>
           <td class="observation-actions">
-            <NButton text type="primary" size="small" aria-label="查看该条观察的门禁明细"
-              @click="selected = row">门禁</NButton>
-            <NButton text type="primary" size="small" aria-label="查看该视频源的路由"
-              @click="emit('openRoute', row.source_id)">路由</NButton>
+            <NButton text type="primary" size="small" aria-label="查看该条观察的观察条件"
+              @click="selected = row">观察条件</NButton>
+            <NButton text type="primary" size="small" aria-label="查看该视频源的模型组合"
+              @click="emit('openRoute', row.source_id)">模型组合</NButton>
           </td>
         </tr></tbody>
       </table>
       <p class="muted">最近一条记录时间 {{ formatDate(data.items[0]?.created_at ?? null) }}</p>
     </div>
 
-    <section v-if="selected" class="observation-detail" aria-label="观察门禁明细">
+    <section v-if="selected" class="observation-detail" aria-label="观察条件明细">
       <div class="observation-detail-head">
         <h3>{{ labels[selected.verdict] }} · {{ window(selected) }}</h3>
         <NButton size="tiny" @click="selected = null">关闭</NButton>
@@ -136,7 +141,7 @@ function metricRows(row: Observation) {
       <p class="muted">{{ reasons(selected) }}</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>门禁</th><th>结果</th><th>实测</th><th>门槛</th><th>说明</th></tr></thead>
+          <thead><tr><th>观察条件</th><th>结果</th><th>实测</th><th>要求</th><th>说明</th></tr></thead>
           <tbody><tr v-for="gate in selected.gates" :key="gate.name">
             <td>{{ gateLabels[gate.name] ?? gate.name }}</td>
             <td><span :class="['observation-gate', gate.status]">{{ statusLabels[gate.status] ?? gate.status }}</span></td>
@@ -151,10 +156,10 @@ function metricRows(row: Observation) {
         <li v-for="[label, value] in metricRows(selected)" :key="label">{{ label }}：{{ value }}</li>
       </ul>
       <p class="muted">
-        路由版本 {{ selected.route_version ?? '—' }} · 画像版本 {{ selected.profile_version ?? '—' }}
-        · 模型版本 {{ selected.model_version ?? '—' }} · 路径 {{ selected.path_id ?? '—' }}
+        模型组合版本 {{ selected.route_version ?? '—' }} · 场景记录版本 {{ selected.profile_version ?? '—' }}
+        · 模型版本 {{ selected.model_version ?? '—' }} · 执行路径 {{ selected.path_id ?? '—' }}
       </p>
-      <p class="muted">同一窗口内的门禁必须全部通过，空结果才允许写成"限定窗口未检出"；未测定的门禁只阻止未检出，不阻止检测到。</p>
+      <p class="muted">同一观察时段内的条件必须全部满足，空结果才允许写成“限定窗口未检出”；未测定的条件只阻止未检出，不阻止检测到。</p>
     </section>
   </section>
 </template>
@@ -170,6 +175,7 @@ function metricRows(row: Observation) {
 .observation-verdict.not_detected { color: #2080f0; }
 .observation-verdict.insufficient { color: #d03050; }
 .observation-actions { display: flex; gap: 8px; }
+.observation-actions :deep(.n-button), .observation-detail-head :deep(.n-button) { min-width: 24px; min-height: 24px; }
 tr.picked { background: rgba(32, 128, 240, .08); }
 .observation-detail { margin-top: 16px; border-top: 1px solid rgba(128, 128, 128, .3); padding-top: 12px; }
 .observation-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }

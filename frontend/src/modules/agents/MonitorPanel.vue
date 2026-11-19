@@ -21,7 +21,7 @@ const props=defineProps<{agentId:string;workspace:Workspace|null;revision:Revisi
 const emit=defineEmits<{operation:[value:Operation];retry:[value:Run]}>()
 const selectedRunId=ref<string|null>(null),stopping=ref(''),error=ref('')
 const trustChecksOpen = ref(false)
-// 任务视图按交底书的链路排布：画面（采集）→ 观察（有效观察）→ 路由（组合）→ 事件（结果）
+// 任务视图按使用流程排布：画面 → 观察记录 → 模型组合 → 事件
 type Tab = 'live' | 'observation' | 'routing' | 'events'
 const tab = ref<Tab>('live')
 const real=computed(()=>props.workspace?.data_origin==='real')
@@ -36,8 +36,8 @@ const routeTarget = computed(() => {
 })
 const tabs = computed<{value:Tab;label:string;enabled:boolean}[]>(() => [
   {value:'live', label:'画面', enabled:true},
-  {value:'observation', label:'有效观察', enabled:real.value},
-  {value:'routing', label:'路由候选', enabled:real.value && !!routeTarget.value},
+  {value:'observation', label:'观察记录', enabled:real.value},
+  {value:'routing', label:'模型组合', enabled:real.value && !!routeTarget.value},
   {value:'events', label:'事件', enabled:true},
 ])
 watch(()=>props.workspace?.data_origin,()=>{

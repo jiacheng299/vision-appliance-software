@@ -75,8 +75,8 @@ def decide(*, state, delta_j, now, elapsed=None, thresholds=None, hard_infeasibl
     if state.mode == CANDIDATE:
         if delta_j is not None and delta_j <= -thresholds.epsilon_out:
             return Decision(CANCEL, State(mode=STABLE, active_since=state.active_since),
-                            f'评分增益回落到取消阈值以下（ΔJ={delta_j:.3f} ≤ '
-                            f'−{thresholds.epsilon_out:.3f}）')
+                            f'评分增益回落到取消阈值以下（当前评分增益 {delta_j:.3f} ≤ '
+                            f'取消阈值 −{thresholds.epsilon_out:.3f}）')
         windows = state.valid_windows + (1 if window_valid else 0)
         required = required_windows(state, thresholds)
         if windows >= required:
@@ -96,5 +96,6 @@ def decide(*, state, delta_j, now, elapsed=None, thresholds=None, hard_infeasibl
     if delta_j >= thresholds.epsilon_in:
         return Decision(ENTER, State(mode=CANDIDATE, active_since=state.active_since,
                                      candidate_since=now, valid_windows=1 if window_valid else 0),
-                        f'评分增益达到进入阈值（ΔJ={delta_j:.3f} ≥ {thresholds.epsilon_in:.3f}）')
-    return Decision(HOLD, state, f'评分增益未达到进入阈值（ΔJ={delta_j:.3f}）')
+                        f'评分增益达到进入阈值（当前评分增益 {delta_j:.3f} ≥ '
+                        f'进入阈值 {thresholds.epsilon_in:.3f}）')
+    return Decision(HOLD, state, f'评分增益未达到进入阈值（当前评分增益 {delta_j:.3f}）')

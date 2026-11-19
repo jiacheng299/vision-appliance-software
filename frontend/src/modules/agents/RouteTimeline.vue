@@ -5,14 +5,14 @@ import { formatDate } from '../../shared/ui/resource'
 
 const props = defineProps<{ entries: TimelineEntry[] }>()
 
-const originLabels: Record<string, string> = { profile: '画像', route: '路由' }
+const originLabels: Record<string, string> = { profile: '观察条件', route: '模型组合' }
 const actionLabels: Record<string, string> = {
-  hold: '保持', enter: '进入候选', cancel: '取消候选', switch: '切换版本',
+  hold: '保持当前组合', enter: '开始验证候选', cancel: '取消候选', switch: '切换模型组合',
 }
 const kindLabels: Record<string, string> = {
-  baseline: '建立基线', refresh: '无漂移刷新', drift: '属性漂移', expiry: '属性过期',
-  blocked: '无可行组合', window: '观察窗口',
-  intrinsic: '固有层更新', attribute_write: '写入属性', attribute_delete: '删除属性',
+  baseline: '建立初始记录', refresh: '观察条件未变', drift: '观察条件变化', expiry: '观察条件过期',
+  blocked: '无可用模型组合', window: '有效观察窗口',
+  intrinsic: '基础能力更新', attribute_write: '更新观察条件', attribute_delete: '删除观察条件',
   cancel: '人工取消',
 }
 
@@ -26,7 +26,7 @@ function label(entry: TimelineEntry) {
   return kindLabels[entry.kind] ?? entry.kind
 }
 
-/** 同一来源（画像或路由）的版本真的换了，才标一次 */
+/** 同一来源（观察条件或模型组合）的版本真的换了，才标一次 */
 function versionChanged(index: number) {
   const current = ordered.value[index]
   if (!current) return false
@@ -41,13 +41,16 @@ function versionChanged(index: number) {
 function delta(entry: TimelineEntry) {
   return entry.delta_j == null ? null : entry.delta_j.toFixed(3)
 }
+function summary(entry: TimelineEntry) {
+  return entry.summary.replace(/ΔJ\s*=\s*/g, '当前评分增益 ')
+}
 </script>
 
 <template>
-  <section class="route-timeline-panel" aria-label="路由版本时间线">
-    <h3>画像与路由时间线</h3>
-    <p class="muted">把画像版本与路由版本画在同一条轴上；标绿的节点表示该来源的版本真的变了。</p>
-    <p v-if="!ordered.length" class="muted" role="status">还没有画像或路由记录。</p>
+  <section class="route-timeline-panel" aria-label="运行调整时间线">
+    <h3>观察与组合记录</h3>
+    <p class="muted">按时间查看观察条件与模型组合的变化；绿色节点表示对应记录已更新版本。</p>
+    <p v-if="!ordered.length" class="muted" role="status">还没有观察条件或模型组合记录。</p>
     <ol v-else class="route-timeline">
       <li v-for="(entry, index) in ordered" :key="entry.id"
         :class="{ changed: versionChanged(index), [entry.origin]: true }">
@@ -58,10 +61,10 @@ function delta(entry: TimelineEntry) {
             <strong>{{ label(entry) }}</strong>
             <span v-if="entry.origin === 'route'" class="route-kind">{{ kindLabels[entry.kind] ?? entry.kind }}</span>
             <span class="route-version">{{ entry.version }}</span>
-            <small>{{ formatDate(entry.at) }}<template v-if="delta(entry)"> · ΔJ {{ delta(entry) }}</template></small>
+            <small>{{ formatDate(entry.at) }}<template v-if="delta(entry)"> · 评分增益 {{ delta(entry) }}</template></small>
           </div>
-          <p class="route-reason">{{ entry.summary }}</p>
-          <p v-if="entry.attribute" class="route-drift-line" aria-label="属性变化">
+          <p class="route-reason">{{ summary(entry) }}</p>
+          <p v-if="entry.attribute" class="route-drift-line" aria-label="观察条件变化">
             {{ entry.attribute }}：{{ entry.previous ?? '未知' }} → {{ entry.current ?? '未知' }}
           </p>
         </div>

@@ -1,0 +1,37 @@
+{
+  "change_id": "2026-11-19-business-ui-language",
+  "base_commit": "67f88574cbc0215c3085894124ba5e691cafac5d",
+  "implementer": "agent-9",
+  "reviewer": "agent-10",
+  "reviewer_independent": true,
+  "patch_sha256": "2617f78132856b4949649c5c14e463c798651032b112214ab16e5c7cfa1a2359",
+  "approved_at": "2026-11-19T17:43:37+08:00",
+  "decision": "approved",
+  "verification": {
+    "red": "15 frontend assertions and 1 backend assertion failed on the old terminology and hierarchy",
+    "frontend_focused": "30 passed; historical-data compatibility tests 6/6 and 17/17",
+    "backend_focused": "19 passed",
+    "python_full": "553 passed, 6 skipped; covers tests/backend and tests/deploy",
+    "frontend_full_after_final_fixes": "200 passed",
+    "frontend_build_after_final_fixes": "passed",
+    "browser": "1440x900 and 390x844 screenshots reviewed; Enter disclosure and focus verified",
+    "diff_check": "passed"
+  },
+  "design_skills": [
+    "anthropics/skills frontend-design at commit 41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f",
+    "affaan-m/ECC frontend-design-direction at commit 1c0511928142879033a49a0e67500dce6a388566"
+  ],
+  "findings": {
+    "critical": 0,
+    "important": 0,
+    "minor": [
+      "Empty, error and loading states were not separately exercised in the real browser.",
+      "No screen reader or axe run; computed target pixel sizes were not measured."
+    ]
+  },
+  "limitations": [
+    "The display layer translates legacy terminology without changing stored audit records or API fields.",
+    "Unrelated source-profile pages retain their existing terminology.",
+    "Candidate model shadow execution and real model switching remain unimplemented."
+  ]
+}

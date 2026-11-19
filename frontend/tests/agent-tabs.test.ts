@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { agentApi, type Revision, type Workspace } from '../src/modules/agents/api'
+import { profileApi } from '../src/modules/sources/profileApi'
 import type { Source } from '../src/shared/api/types'
 import MonitorPanel from '../src/modules/agents/MonitorPanel.vue'
 import EventsPanel from '../src/modules/agents/EventsPanel.vue'
@@ -29,6 +30,9 @@ function mountPanel(props: Partial<{ workspace: Workspace }> = {}) {
     blocked: [], weights: {}, budgets: {}, min_quality: 0.6, notices: [] })
   vi.spyOn(agentApi, 'routeStates').mockResolvedValue([])
   vi.spyOn(agentApi, 'routeDecisions').mockResolvedValue([])
+  vi.spyOn(agentApi, 'routeTimeline').mockResolvedValue([])
+  vi.spyOn(profileApi, 'read').mockResolvedValue({ source_id: 'one', view_version: '1', version: 1,
+    intrinsic: {}, runtime: {}, attributes: [], evaluated_at: 0, updated_at: observedAt })
   vi.spyOn(agentApi, 'trackerPolicies').mockResolvedValue({ items: [], active: 'heuristic-iou',
     resolved: { spec: 'heuristic-iou', available: true, name: 'heuristic-iou',
       label: '固定机位 IoU/中心距关联', kind: 'heuristic', external: false, detail: {} },
@@ -36,18 +40,23 @@ function mountPanel(props: Partial<{ workspace: Workspace }> = {}) {
   return mount(MonitorPanel, {
     props: { agentId: 'task', sources, canWrite: false, revision,
       workspace: props.workspace ?? workspace },
-    global: { stubs: { MediaPlayer: true, VideoWall: true } },
+    global: { stubs: { EventsPanel: true, MediaPlayer: true, VideoWall: true } },
   })
 }
 
 afterEach(() => vi.restoreAllMocks())
 
-it('orders the task view along the patent chain: 画面 → 有效观察 → 路由候选 → 事件', async () => {
+it('orders the task view in business language without internal identifiers', async () => {
   const wrapper = mountPanel()
   try {
     await flushPromises()
-    const labels = wrapper.get('[role="tablist"]').findAll('button').map(button => button.text())
-    expect(labels).toEqual(['画面', '有效观察', '路由候选', '事件'])
+    const tablist = wrapper.get('[role="tablist"]')
+    const labels = tablist.findAll('button').map(button => button.text())
+    expect(labels).toEqual(['画面', '观察记录', '模型组合', '事件'])
+    expect(tablist.text()).not.toMatch(/\b[SMF]\d+\b|ΔJ/)
+    expect(wrapper.text()).not.toMatch(/画像版本|当前路由/)
+    expect(wrapper.text()).toContain('场景记录')
+    expect(wrapper.text()).toContain('当前组合')
     expect(wrapper.get('button[aria-label="画面"]').attributes('aria-selected')).toBe('true')
   } finally { wrapper.unmount() }
 })
@@ -69,12 +78,12 @@ it('switching tabs unmounts the panels of the previous tab', async () => {
   const wrapper = mountPanel()
   try {
     await flushPromises()
-    await wrapper.get('button[aria-label="路由候选"]').trigger('click')
+    await wrapper.get('button[aria-label="模型组合"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[aria-label="路由候选"]').exists()).toBe(true)
-    await wrapper.get('button[aria-label="有效观察"]').trigger('click')
+    expect(wrapper.find('[aria-label="模型组合"]').exists()).toBe(true)
+    await wrapper.get('button[aria-label="观察记录"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[aria-label="有效观察记录"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="观察记录"]').exists()).toBe(true)
   } finally { wrapper.unmount() }
 })
 

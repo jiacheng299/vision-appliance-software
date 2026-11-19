@@ -10,11 +10,15 @@ it('groups the navigation along the patent chain, in order', () => {
   expect(navigationGroups[3].items.map(item => item.label)).toEqual(['运行状态', '模型管理', '系统设置'])
 })
 
-it('every group states which part of the flow it covers', () => {
-  expect(navigationGroups[0].note).toContain('S1')
-  expect(navigationGroups[1].note).toContain('S6')
-  expect(navigationGroups[2].note).toContain('S8')
-  for (const group of navigationGroups) expect(group.note.length).toBeGreaterThan(4)
+it('explains the operating flow without patent-internal identifiers', () => {
+  expect(navigationGroups[0].note).toBe('接入视频源并建立监测任务')
+  expect(navigationGroups[1].note).toBe('查看实际画面、观察条件与模型组合')
+  expect(navigationGroups[2].note).toBe('查看检测到、限定窗口未检出与观察不足')
+  for (const group of navigationGroups) {
+    expect(group.note.length).toBeGreaterThan(4)
+    expect(`${group.label} ${group.note} ${group.items.map(item => `${item.label} ${item.hint}`).join(' ')}`)
+      .not.toMatch(/\b[SMF]\d+\b|ΔJ/)
+  }
 })
 
 it('keeps every previously reachable entry and adds the event page', () => {

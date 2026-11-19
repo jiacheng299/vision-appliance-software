@@ -75,6 +75,19 @@ def test_gain_below_the_entry_threshold_never_enters():
     assert decision.action == hysteresis.HOLD
 
 
+def test_gain_summaries_use_business_language_without_formula_symbols():
+    stable = hysteresis.State(mode=hysteresis.STABLE)
+    entered = hysteresis.decide(state=stable, delta_j=0.5, now=200.0, elapsed=200.0)
+    held = hysteresis.decide(state=stable, delta_j=0.01, now=200.0, elapsed=200.0)
+    candidate = hysteresis.State(mode=hysteresis.CANDIDATE, candidate_since=10.0, valid_windows=1)
+    cancelled = hysteresis.decide(state=candidate, delta_j=-0.2, now=20.0, window_valid=True)
+
+    assert entered.reason == '评分增益达到进入阈值（当前评分增益 0.500 ≥ 进入阈值 0.060）'
+    assert held.reason == '评分增益未达到进入阈值（当前评分增益 0.010）'
+    assert cancelled.reason == '评分增益回落到取消阈值以下（当前评分增益 -0.200 ≤ 取消阈值 −0.060）'
+    assert all('ΔJ' not in decision.reason for decision in (entered, held, cancelled))
+
+
 def test_a_falling_gain_cancels_the_candidate():
     candidate = hysteresis.State(mode=hysteresis.CANDIDATE, candidate_since=10.0, valid_windows=1)
     decision = hysteresis.decide(state=candidate, delta_j=-0.2, now=20.0, window_valid=True)
