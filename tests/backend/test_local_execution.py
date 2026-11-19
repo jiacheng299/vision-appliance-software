@@ -5,6 +5,7 @@ from threading import Event
 import json
 import sqlite3
 
+import numpy as np
 import pytest
 from sqlalchemy import select
 
@@ -13,6 +14,7 @@ from app.shared.db import make_engine, migrate, session_factory
 from app.shared.errors import Error
 from app.shared.models import Source
 from app.modules.agents.contracts import RuntimeCommand, SourceSnapshot
+from app.modules.agents.models import Agent
 from app.modules.agents.schemas import RevisionConfig
 from app.modules.local_execution.service import LocalAgentServices
 
@@ -23,13 +25,21 @@ class Adapter:
     def deployments(self): return []
 
 
+class Frame(np.ndarray):
+    def __new__(cls, boxes):
+        image = np.random.default_rng(7).integers(0, 255, (48, 64, 3), dtype=np.uint8)
+        instance = image.view(cls)
+        instance.boxes = boxes
+        return instance
+
+
 class Detector:
     def __init__(self, path, confidence=.5): pass
-    def detect(self, frame): return frame
+    def detect(self, frame): return frame.boxes if isinstance(frame, Frame) else frame
 
 
 class Reader:
-    frames_to_read = [(0., []), (15., []), (30., []), (45., [])]
+    frames_to_read = [(float(second), []) for second in range(60)]
     failure = False
     def __init__(self, *args, **kwargs): self.stop = kwargs['stop']
     def __enter__(self): return self
@@ -37,13 +47,14 @@ class Reader:
     def frames(self):
         for timestamp, frame in self.frames_to_read:
             if self.stop.is_set(): return
-            yield timestamp, frame
+            yield timestamp, Frame(frame)
         if self.failure: raise RuntimeError('private path or credentials must never escape')
 
 
 @pytest.fixture
 def runtime(tmp_path, request):
-    config = Config(var_root=tmp_path, agent_demo=False, model_safety_observe=getattr(request, 'param', False))
+    config = Config(var_root=tmp_path, agent_demo=False, model_safety_observe=getattr(request, 'param', False),
+                    observation_window_seconds=2.0)
     config.prepare()
     engine = make_engine(config)
     migrate(engine)
@@ -53,6 +64,8 @@ def runtime(tmp_path, request):
         settings.initialize(db)
         db.add(Source(id='video', name='录像', kind='file', status='ready',
                       width=640, height=480, duration_ms=60000, sha256='abc', media_key='sample.mp4'))
+        db.add(Agent(id='agent', name='任务', description='', owner_id='actor'))
+        db.add(Agent(id='intrusion-agent', name='入侵任务', description='', owner_id='actor'))
         db.commit()
     (tmp_path / 'media' / 'sample.mp4').write_bytes(b'controlled fixture')
     class Frames(Reader): pass
@@ -101,15 +114,13 @@ def finish(service, operation):
 
 
 @pytest.mark.parametrize('runtime', [False, True], indirect=True)
-def test_safety_observation_preserves_alarms_when_samples_are_interrupted(runtime):
+def test_safety_observation_does_not_publish_alarms_from_interrupted_windows(runtime):
     service, _, frames, config = runtime
     frames.frames_to_read = [(0., []), (15., []), (30., []), (59., [])]
     run = finish(service, service.submit(command(), 'actor', 'safety-gap'))
     assert run.state == 'completed'
     events = service.events('agent', 'actor', {'limit': 100}).items
-    assert sorted((event.event_type, event.end_media_ms) for event in events) == [
-        ('person_absence', 30000), ('person_absence', 59000),
-    ]
+    assert events == []
     service.close()
     path = config.var_root / 'logs' / 'model-safety.jsonl'
     if config.model_safety_observe:
@@ -149,7 +160,7 @@ def test_safety_audit_links_failed_evidence_without_suppressing_alarms(runtime, 
 
     monkeypatch.setattr(service, '_save_evidence', fail_snapshot)
     if make_command is intrusion_command:
-        frames.frames_to_read = [(float(i), [] if i < 11 else [PERSON]) for i in range(20)]
+        frames.frames_to_read = [(float(i), [] if i < 11 else [PERSON]) for i in range(21)]
     request = make_command()
     run = finish(service, service.submit(request, 'actor', 'safety-evidence'))
     assert run.state == 'completed'
@@ -190,7 +201,7 @@ def test_real_absence_event_and_run_are_persistent_and_idempotent(runtime):
     op = service.submit(command(), 'actor', 'start-key')
     run = finish(service, op)
     assert run.state == 'completed' and run.data_origin == 'real'
-    assert run.processed_media_ms == 45000
+    assert run.processed_media_ms == 59000
     again = service.submit(command(), 'actor', 'start-key')
     assert again.id == op.id and len(service.runs('agent','actor')) == 1
     page = service.events('agent','actor',{'limit':100})
@@ -230,7 +241,7 @@ def test_one_task_runs_two_sources_concurrently_with_independent_events_and_fail
         def frames(self):
             started.wait(timeout=3)  # Both sources must actually enter execution together.
             if not self.second and first_fails:raise RuntimeError('one source failed')
-            for stamp in [0,15,30,45]:yield stamp,[PERSON] if self.second else []
+            for stamp in range(60):yield float(stamp),Frame([PERSON] if self.second else [])
     service.reader_factory=TwoReaders
     finish(service,service.submit(cmd,'actor','two-sources'))
     runs={r.source_id:r for r in service.runs('agent','actor')}
@@ -245,9 +256,12 @@ def test_one_task_runs_two_sources_concurrently_with_independent_events_and_fail
     if config.model_safety_observe:
         service.close()
         path = config.var_root / 'logs' / 'model-safety.jsonl'
-        record = json.loads(path.read_text(encoding='utf-8'))
-        assert record['source_id'] == 'video' and record['run_id'] == runs['video'].id
-        assert record['reason'] == ('observation_interrupted' if first_fails else 'evidence_unavailable')
+        if first_fails:
+            record = json.loads(path.read_text(encoding='utf-8'))
+            assert record['source_id'] == 'video' and record['run_id'] == runs['video'].id
+            assert record['reason'] == 'observation_interrupted'
+        else:
+            assert not path.exists()
 
 
 def test_absence_and_recovery_are_persisted_once(runtime):
@@ -287,9 +301,9 @@ def test_live_run_persists_absence_state_independently_of_event_page(runtime):
     service, _, reader, _ = runtime
     entered = Event()
     def live_frames(self):
-        yield 0., []
-        yield 1., []
-        yield 2., []
+        yield 0., Frame([])
+        yield 1., Frame([])
+        yield 2., Frame([])
         entered.set()
         while not self.stop.wait(.02):
             pass
@@ -341,7 +355,8 @@ def test_failed_event_transaction_rolls_back_alert_and_removes_evidence(runtime,
 def test_real_intrusion_waits_for_clear_and_confirmation_then_records_one_event(runtime):
     service, _, reader, _ = runtime
     person = {'label':'person','x':.4,'y':.2,'width':.2,'height':.6,'confidence':.9}
-    reader.frames_to_read = [(0., []), (10., [])] + [(float(second), [person]) for second in range(11,21)]
+    reader.frames_to_read = [(float(second), []) for second in range(11)] + [
+        (float(second), [person]) for second in range(11,21)]
     run = finish(service, service.submit(intrusion_command(),'actor','intrusion-start'))
     assert run.state == 'completed' and run.processed_media_ms == 20000
     page = service.events('intrusion-agent','actor',{'limit':100})
@@ -390,7 +405,7 @@ def test_runtime_source_check_ignores_probe_versions_but_checks_real_input(runti
 def test_running_executor_survives_source_probe_version_update(runtime):
     service,sessions,reader,_=runtime
     def frames(self):
-        yield 0.,[]
+        yield 0.,Frame([])
         with sessions() as db:
             source=db.get(Source,'video')
             source.row_version+=1
@@ -398,9 +413,8 @@ def test_running_executor_survives_source_probe_version_update(runtime):
             db.commit()
         # Exercise the periodic check in _execute, not only the helper directly.
         time.sleep(2.1)
-        yield 15.,[]
-        yield 30.,[]
-        yield 45.,[]
+        for stamp in range(1,60):
+            yield float(stamp),Frame([])
     reader.frames=frames
     run=finish(service,service.submit(command(),'actor','probe-during-execution'))
     assert run.state=='completed',(run.error_code,run.message)
@@ -583,7 +597,6 @@ def test_delete_running_task_stops_inference_and_cleans_only_owned_records(runti
     evidence=config.var_root/'media/local-evidence/delete-test.jpg'
     evidence.parent.mkdir(parents=True,exist_ok=True);evidence.write_bytes(b'test evidence')
     with sessions() as db:
-        db.add(Agent(id='agent',name='delete me',description='',owner_id='actor'));db.flush()
         db.add(AgentRevision(id='revision',agent_id='agent',revision_no=1,state='published',config=command().config.model_dump(mode='json')))
         db.add(AgentTemplate(id='template',name='keep template',description=''));db.flush()
         db.add(AgentTemplateRevision(id='template-revision',template_id='template',revision_no=1,state='published',config={}));db.flush()

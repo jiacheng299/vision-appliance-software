@@ -1,4 +1,4 @@
-"""执行器影子接入：窗口结束时写观察记录，但报警行为完全不变。"""
+"""执行器观察门控：只有已关闭且结论兼容的窗口才能发布业务事件。"""
 import time
 from pathlib import Path
 
@@ -110,7 +110,7 @@ def records(sessions):
         return list(db.scalars(select(ObservationRecord).order_by(ObservationRecord.sequence)))
 
 
-def test_clean_window_records_not_detected_and_keeps_alarms_unchanged(runtime):
+def test_clean_window_records_not_detected_and_publishes_absence(runtime):
     service, sessions = runtime
     run = finish(service, service.submit(command(), 'actor', 'observation-clean'))
     assert run.state == 'completed'
@@ -146,10 +146,9 @@ def test_saturated_frames_cannot_be_claimed_as_absence(runtime):
     stored = records(sessions)
     assert stored and all(item.verdict == 'insufficient' for item in stored)
     assert any('过曝' in reason for item in stored for reason in item.reasons)
-    # The alarm logic is untouched: glare still means "no person counted", as before.
     with sessions() as db:
         events = list(db.scalars(select(LocalEvent)))
-    assert [event.payload['event_type'] for event in events] == ['person_absence']
+    assert events == []
 
 
 def test_observation_failure_never_breaks_monitoring(runtime, monkeypatch):
@@ -163,7 +162,7 @@ def test_observation_failure_never_breaks_monitoring(runtime, monkeypatch):
     assert records(sessions) == []
     with sessions() as db:
         events = list(db.scalars(select(LocalEvent)))
-    assert [event.payload['event_type'] for event in events] == ['person_absence']
+    assert events == []
 
 
 def test_disabling_the_feature_writes_nothing(tmp_path):

@@ -20,7 +20,7 @@ class Config(BaseSettings):
     agent_demo: bool = False
     manual_review_enabled: bool = False
     model_safety_observe: bool = False
-    # Valid-observation records are additive evidence; they never change alarms.
+    # Disabling persistence also leaves no decidable window for business events.
     observation_records: bool = True
     observation_window_seconds: float = Field(default=30.0, gt=0, le=3600, allow_inf_nan=False)
     # Built-in policy name, or module:attribute for an externally trained policy.

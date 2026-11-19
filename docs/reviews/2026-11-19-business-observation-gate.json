@@ -1,0 +1,42 @@
+{
+  "change_id": "2026-11-19-business-observation-gate",
+  "base_commit": "09b234e3bab97f095a5de4c9f5d98e98c7b1e053",
+  "implementer": "agent-7",
+  "reviewer": "agent-8",
+  "reviewer_independent": true,
+  "patch_sha256": "ed9e41da7e2187b7e75911a883386365c6b1fe3642055533d873ae541991ad9c",
+  "approved_at": "2026-11-19T12:45:51+08:00",
+  "decision": "approved",
+  "verification": {
+    "red": "Invalid absence and storage-failure tests failed before implementation; mixed-transition regression failed before the review fix",
+    "focused": "74 passed before review fix; 13 passed for the amended gate; reviewer reran the mixed-transition test with 1 passed",
+    "backend_full": "517 passed, 6 skipped in 270.39s",
+    "frontend_full": "197 passed",
+    "frontend_build": "passed",
+    "deploy_full": "12 passed",
+    "diff_check": "passed"
+  },
+  "review_history": [
+    {
+      "patch_sha256": "d17cf6df32564fb626abbf3c76a13a09a92873d99a7ad53e08c7e5dafad1dd67",
+      "decision": "rejected",
+      "reason": "Partially compatible event queues could leave rule state inconsistent with published events."
+    },
+    {
+      "patch_sha256": "ed9e41da7e2187b7e75911a883386365c6b1fe3642055533d873ae541991ad9c",
+      "decision": "approved",
+      "reason": "Window event publication is atomic and the mixed-transition regression passes."
+    }
+  ],
+  "findings": {
+    "critical": 0,
+    "important_open": 0,
+    "important_resolved": 1,
+    "minor": []
+  },
+  "limitations": [
+    "Business events intentionally wait for their observation window to close.",
+    "Disabling observation records disables business event publication rather than bypassing validity checks.",
+    "Candidate model shadow execution and real model switching remain unimplemented."
+  ]
+}

@@ -35,7 +35,7 @@
 | S5 | 发布带版本的组合配置 | `route_states.active_version` + 观察记录按版本盖章 | 部分：不向执行器下发组合 |
 | S6 | 运行并采集观察指标 | `local_execution/service.py` + `semantics/window.py` | 完成 |
 | S7 | 判定有效观察 | `semantics/observe.evaluate`（五门禁） | 完成 |
-| S8 | 输出结果（三态） | `observation_records.verdict` = `detected / not_detected / insufficient` | 完成（记录层） |
+| S8 | 输出结果（三态） | `observation_records.verdict` = `detected / not_detected / insufficient`；执行器按窗口结论发布或丢弃业务事件 | 完成（记录与事件门控） |
 | S9 | 输出观察不足 | 同上 + `reasons` 逐条原因 | 完成 |
 | S10 | 判断更新条件 | `drift.detect`（只认新证据，过期不算反向变化） | 完成（属性层） |
 | S11 | 定位受影响子图 | `graph.affected_requirements` + `solver.solve_local` | 完成 |
@@ -121,7 +121,6 @@
 | 未实现 | 影响 | 说明位置 |
 | --- | --- | --- |
 | 候选组合真实并行推理 | 已实测并存成本（+85 MB / ~90 ms），但执行器仍只加载一项能力 | 验收记录第 9 节第 2 条 |
-| 观察结论改变业务报警 | 观察目前只记录，不抑制报警 | 第 1 条 |
 | 能力质量分桶标定 | 质量数字是保守示例值，不是准确率 | 第 3 条 |
 | 遮挡比例测量 | 单帧不可测，保持"未测定" | 第 5 条 |
 | 设备报文推理服务 | 无真实设备平台 | 第 7 条 |

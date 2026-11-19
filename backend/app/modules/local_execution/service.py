@@ -502,6 +502,8 @@ class LocalAgentServices(RegistryAgentServices):
                 resources = settings.values_for(db,'resources')
                 self._refresh_operations(db)
             failures, observed = 0, False
+            pending_events = []
+            window_rule_state = rule.state if isinstance(rule, PresenceRule) else None
             while not stop.is_set():
                 try:
                     with self.sessions() as db:
@@ -552,6 +554,11 @@ class LocalAgentServices(RegistryAgentServices):
                                 )
                                 safety.inspect(safety.check_detection, timestamp, observation.count, region_boxes,
                                     threshold=parameters['confidence'], required_count=parameters.get('min_count', 1))
+                            if window is not None and not stop.is_set():
+                                if channel.rule == 'absence' and (observation.transition or observation.alarm):
+                                    pending_events.append((observation,timestamp,frame,boxes))
+                                elif channel.rule == 'intrusion' and observation.alarm:
+                                    pending_events.append((observation,timestamp,frame,boxes))
                             stamp = now()
                             if channel.rule == 'absence':
                                 message = f'区域内 {observation.count} 人；已连续缺岗 {observation.absent_seconds:.1f} 秒。'
@@ -564,6 +571,7 @@ class LocalAgentServices(RegistryAgentServices):
                                 message = f'区域内 {observation.count} 人；{labels[observation.phase]}；有效确认 {observation.confirmed_seconds:.1f} 秒。'
                                 targets = [{key:target.box[key] for key in ('label','x','y','width','height')}|{'id':target.id}
                                            for target in observation.targets]
+                            ready_events = []
                             with self.writing() as db:
                                 row = db.get(LocalRun,identifier)
                                 if row.state not in ACTIVE_STATES or row.state=='stopping': stop.set(); break
@@ -575,22 +583,37 @@ class LocalAgentServices(RegistryAgentServices):
                                 self._refresh_operations(db)
                                 if window is not None and window.due(timestamp):
                                     try:
-                                        self._close_observation_window(db, run, channel, binding, window,
-                                                                       timestamp, row.actor_id, thresholds,
-                                                                       profile_version, route_version)
+                                        view = self._close_observation_window(db, run, channel, binding, window,
+                                                                              timestamp, row.actor_id, thresholds,
+                                                                              profile_version, route_version)
+                                        if view.verdict == 'insufficient':
+                                            self._reset_window_rule(rule, window_rule_state, timestamp)
+                                        else:
+                                            ready_events = [pending for pending in pending_events
+                                                if view.verdict == ('detected' if channel.rule == 'intrusion'
+                                                    or pending[0].transition == 'restored' else 'not_detected')]
+                                            if len(ready_events) != len(pending_events):
+                                                ready_events = []
+                                                self._reset_window_rule(rule, window_rule_state, timestamp)
+                                            elif isinstance(rule, PresenceRule):
+                                                window_rule_state = rule.state
                                     except Exception:
-                                        # Evidence recording must never stop monitoring.
+                                        # An unrecorded verdict cannot release a business event.
+                                        self._reset_window_rule(rule, window_rule_state, timestamp)
                                         logging.getLogger(__name__).warning('Observation record failed')
                                     finally:
+                                        pending_events.clear()
                                         window.reset(timestamp)
                             observed, failures, last_timestamp = True, 0, timestamp
-                            event = None
-                            if channel.rule == 'absence' and (observation.transition or observation.alarm) and not stop.is_set():
-                                event = self._record_transition_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
-                            elif channel.rule == 'intrusion' and observation.alarm and not stop.is_set():
-                                event = self._record_intrusion_event(run,observation,timestamp,frame,boxes,binding,stop,source_identity)
-                            if safety is not None and event is not None:
-                                safety.inspect(safety.check_event, event, binding)
+                            for pending_observation,pending_timestamp,pending_frame,pending_boxes in ready_events:
+                                if channel.rule == 'absence':
+                                    event = self._record_transition_event(run,pending_observation,pending_timestamp,
+                                        pending_frame,pending_boxes,binding,stop,source_identity)
+                                else:
+                                    event = self._record_intrusion_event(run,pending_observation,pending_timestamp,
+                                        pending_frame,pending_boxes,binding,stop,source_identity)
+                                if safety is not None and event is not None:
+                                    safety.inspect(safety.check_event, event, binding)
                     if stop.is_set(): break
                     if run.source_kind=='file':
                         if not observed or last_timestamp is None or (binding.end_media_ms is not None
@@ -635,6 +658,13 @@ class LocalAgentServices(RegistryAgentServices):
                     '视频读取或人员检测失败，请检查视频源与模型后重试。')
                 self._finish(identifier,'failed',message,code if code in allowed else 'local_inference_failed')
 
+    @staticmethod
+    def _reset_window_rule(rule, window_rule_state, timestamp):
+        rule.mark_unavailable()
+        if isinstance(rule, PresenceRule):
+            rule.state = window_rule_state
+            if rule.state == 'absence': rule.last_alarm = timestamp
+
     def _sample_evidence(self, frame, boxes, observation, rule, binding):
         """Measure only what this frame can actually tell us; never guess the rest."""
         try:
@@ -650,7 +680,7 @@ class LocalAgentServices(RegistryAgentServices):
 
     def _close_observation_window(self, db, run, channel, binding, window, timestamp,
                                   actor_id, thresholds, profile_version, route_version=None):
-        """Judge one closed window and persist the verdict. Alarms are untouched."""
+        """Judge and persist one closed window before its business events may publish."""
         roi = [list(point) for point in binding.regions[0].points] if binding.regions else []
         versions = Versions(route_version=route_version or f'local-r{run.revision_no}',
                             profile_version=profile_version,
