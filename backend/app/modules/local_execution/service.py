@@ -484,6 +484,7 @@ class LocalAgentServices(RegistryAgentServices):
                 max_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
                 safety = RunSafetyAudit(self.safety_audit, run, max_gap_seconds=max_gap)
             window, thresholds, profile_version, route_version = None, None, None, None
+            quiet_until = None
             if self.config.observation_records:
                 window_seconds = self.config.observation_window_seconds
                 gate_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
@@ -537,14 +538,19 @@ class LocalAgentServices(RegistryAgentServices):
                             if shadow is not None:
                                 shadow.observe(timestamp, frame, process_rule=not preview_only)
                             if window is not None:
-                                window.add_frame(timestamp)
+                                if quiet_until is not None:
+                                    if timestamp >= quiet_until:
+                                        quiet_until = None
+                                        window.reset(timestamp)
+                                else:
+                                    window.add_frame(timestamp)
                             boxes = rule.targets_in_regions(detected) if channel.rule == 'absence' else detected
                             if stop.is_set(): break
                             if not preview_only:
                                 if safety is not None:
                                     safety.inspect(safety.check_time, timestamp)
                                 observation = rule.observe(timestamp,boxes)
-                                if window is not None:
+                                if window is not None and quiet_until is None:
                                     window.add_sample(*self._sample_evidence(frame,boxes,observation,rule,binding))
                                 # Keep a fixed business clock; frame quantization must not accumulate drift.
                                 if next_rule_timestamp is None:
@@ -595,6 +601,7 @@ class LocalAgentServices(RegistryAgentServices):
                                     'targets':targets}
                                 self._refresh_operations(db)
                                 if window is not None and window.due(timestamp):
+                                    view, ready_events = None, []
                                     try:
                                         view = self._close_observation_window(db, run, channel, binding, window,
                                                                               timestamp, row.actor_id, thresholds,
@@ -622,7 +629,13 @@ class LocalAgentServices(RegistryAgentServices):
                                         logging.getLogger(__name__).warning('Observation record failed')
                                     finally:
                                         pending_events.clear()
-                                        window.reset(timestamp)
+                                        if (view is None or view.verdict == 'insufficient' or ready_events
+                                                or float(self.config.observation_quiet_seconds) <= 0):
+                                            window.reset(timestamp)
+                                        else:
+                                            # Nothing happened in this window: rest before sampling again.
+                                            quiet_until = timestamp + float(self.config.observation_quiet_seconds)
+                                            window.reset()
                             observed, failures, last_timestamp = True, 0, timestamp
                             for pending_observation,pending_timestamp,pending_frame,pending_boxes in ready_events:
                                 if channel.rule == 'absence':
@@ -646,6 +659,7 @@ class LocalAgentServices(RegistryAgentServices):
                     pending_events.clear()
                     if shadow is not None:
                         shadow.reset_observation()
+                    quiet_until = None
                     if window is not None:
                         window.reset()
                     self._reset_window_rule(rule, window_rule_state,

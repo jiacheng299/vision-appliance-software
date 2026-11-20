@@ -54,9 +54,10 @@ def saturated():
     return np.full((48, 64, 3), 255, dtype=np.uint8)
 
 
-@pytest.fixture
-def runtime(tmp_path):
-    config = Config(var_root=tmp_path, agent_demo=False, observation_window_seconds=10.0)
+def make_runtime(tmp_path, **overrides):
+    overrides.setdefault('observation_quiet_seconds', 0.0)
+    config = Config(var_root=tmp_path, agent_demo=False, observation_window_seconds=10.0,
+                    **overrides)
     config.prepare()
     engine = make_engine(config)
     migrate(engine)
@@ -74,6 +75,20 @@ def runtime(tmp_path):
     service = LocalAgentServices(config, sessions, Adapter(), detector_factory=Detector,
                                  reader_factory=Reader)
     service.start()
+    return service, sessions, engine
+
+
+@pytest.fixture
+def runtime(tmp_path):
+    service, sessions, engine = make_runtime(tmp_path)
+    yield service, sessions
+    service.close()
+    engine.dispose()
+
+
+@pytest.fixture
+def quiet_runtime(tmp_path):
+    service, sessions, engine = make_runtime(tmp_path, observation_quiet_seconds=50.0)
     yield service, sessions
     service.close()
     engine.dispose()
@@ -151,6 +166,38 @@ def test_saturated_frames_cannot_be_claimed_as_absence(runtime):
     with sessions() as db:
         events = list(db.scalars(select(LocalEvent)))
     assert events == []
+
+
+def test_valid_window_waits_quiet_seconds_before_next_window(quiet_runtime):
+    service, sessions = quiet_runtime
+    Reader.timestamps = [float(index) for index in range(121)]
+    try:
+        run = finish(service, service.submit(command(), 'actor', 'observation-quiet'))
+        assert run.state == 'completed'
+        stored = records(sessions)
+        assert len(stored) >= 2
+        assert (stored[0].window_start, stored[0].window_end) == (0, 10)
+        # First close at t=10 rested 50s; the next window only starts at t=60.
+        assert stored[1].window_start == 60
+    finally:
+        Reader.timestamps = [float(index) for index in range(31)]
+
+
+def test_insufficient_window_retries_immediately_without_quiet(quiet_runtime):
+    service, sessions = quiet_runtime
+    Reader.frame = saturated()
+    Reader.timestamps = [float(index) for index in range(41)]
+    try:
+        run = finish(service, service.submit(command(), 'actor', 'observation-glare-retry'))
+        assert run.state == 'completed'
+        stored = records(sessions)
+        assert len(stored) >= 2
+        assert all(item.verdict == 'insufficient' for item in stored[:2])
+        # Insufficient windows retry back-to-back: the second window starts at t=10.
+        assert stored[1].window_start == 10
+    finally:
+        Reader.timestamps = [float(index) for index in range(31)]
+        Reader.frame = textured()
 
 
 def test_observation_failure_never_breaks_monitoring(runtime, monkeypatch):

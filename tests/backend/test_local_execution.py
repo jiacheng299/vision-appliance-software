@@ -54,7 +54,7 @@ class Reader:
 @pytest.fixture
 def runtime(tmp_path, request):
     config = Config(var_root=tmp_path, agent_demo=False, model_safety_observe=getattr(request, 'param', False),
-                    observation_window_seconds=2.0)
+                    observation_window_seconds=2.0, observation_quiet_seconds=0.0)
     config.prepare()
     engine = make_engine(config)
     migrate(engine)
