@@ -18,11 +18,29 @@ const verdictOptions: { label: string; value: ObservationVerdict }[] = [
   { label: '限定窗口未检出', value: 'not_detected' },
   { label: '观察不足', value: 'insufficient' },
 ]
+const PAGE_SIZE = 10
+const pageStartCursors = ref<(string | undefined)[]>([undefined])
+const pageIndex = ref(0)
+const canPrev = computed(() => pageIndex.value > 0)
+const canNext = computed(() => !!data.value?.next_cursor)
+function resetPages() { pageStartCursors.value = [undefined]; pageIndex.value = 0 }
+function nextPage() {
+  const cursor = data.value?.next_cursor
+  if (!cursor) return
+  pageStartCursors.value = [...pageStartCursors.value.slice(0, pageIndex.value + 1), cursor]
+  pageIndex.value += 1
+  void refresh()
+}
+function prevPage() {
+  if (pageIndex.value === 0) return
+  pageIndex.value -= 1
+  void refresh()
+}
 const { data, loading, error, refresh } = useResource(() => agentApi.observations(props.agentId, {
   source_id: sourceId.value ?? undefined,
   verdict: verdict.value ?? undefined,
-}))
-watch([sourceId, verdict], () => { data.value = null; void refresh() })
+}, pageStartCursors.value[pageIndex.value] ?? undefined, PAGE_SIZE))
+watch([sourceId, verdict], () => { resetPages(); data.value = null; void refresh() })
 
 const labels: Record<ObservationVerdict, string> = {
   detected: '检测到', not_detected: '限定窗口未检出', insufficient: '观察不足',
@@ -93,7 +111,7 @@ function metricRows(row: Observation) {
 
 <template>
   <section class="panel observation-panel" aria-label="观察记录">
-    <div class="panel-title"><h2>观察记录</h2><small>近期最多 30 条</small></div>
+    <div class="panel-title"><h2>观察记录</h2><small>分页显示 · 每页 {{ PAGE_SIZE }} 条</small></div>
     <p class="muted">只展示实际画面时段的判定结果。观察不足不等于事件未发生，未检出也不外推到其他时段或区域。</p>
     <div class="toolbar observation-filter">
       <NSelect v-model:value="sourceId" :options="sourceOptions" clearable placeholder="全部视频源"
@@ -131,6 +149,11 @@ function metricRows(row: Observation) {
         </tr></tbody>
       </table>
       <p class="muted">最近一条记录时间 {{ formatDate(data.items[0]?.created_at ?? null) }}</p>
+      <div class="observation-pager" aria-label="观察记录分页">
+        <NButton size="small" :disabled="!canPrev" @click="prevPage">上一页</NButton>
+        <span>第 {{ pageIndex + 1 }} 页</span>
+        <NButton size="small" :disabled="!canNext" @click="nextPage">下一页</NButton>
+      </div>
     </div>
 
     <section v-if="selected" class="observation-detail" aria-label="观察条件明细">
@@ -169,6 +192,7 @@ function metricRows(row: Observation) {
 .observation-filter { margin: 12px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .observation-filter .n-select { width: min(100%, 220px); }
 .observation-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.observation-pager { display: flex; gap: 12px; align-items: center; margin-top: 8px; font-size: 12px; }
 .observation-chip { border: 1px solid rgba(128, 128, 128, .35); border-radius: 12px; padding: 2px 10px; font-size: 12px; }
 .observation-verdict { font-weight: 600; }
 .observation-verdict.detected { color: #18a058; }

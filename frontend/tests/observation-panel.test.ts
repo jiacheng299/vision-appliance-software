@@ -243,6 +243,40 @@ it('translates stored version-mismatch reasons into the same business language',
   } finally { wrapper.unmount() }
 })
 
+it('paginates observation records ten per page with cursor and resets on filter change', async () => {
+  const request = vi.spyOn(agentApi, 'observations').mockImplementation(
+    async (_id, filters, cursor) => cursor === 'c2'
+      ? { items: [blocked], next_cursor: null, summary: {} }
+      : { items: [empty], next_cursor: filters?.verdict ? null : 'c2', summary: {} })
+  const wrapper = mount(ObservationPanel, {
+    props: { agentId: 'task', sources, runs: sources.map(source => ({ source_id: source.id })) },
+  })
+  try {
+    await flushPromises()
+    expect(request).toHaveBeenLastCalledWith('task', {}, undefined, 10)
+    expect(wrapper.text()).toContain('第 1 页')
+    const prev = () => wrapper.findAll('button').find(b => b.text() === '上一页')!
+    const next = () => wrapper.findAll('button').find(b => b.text() === '下一页')!
+    expect(prev().attributes('disabled')).toBeDefined()
+    await next().trigger('click')
+    await flushPromises()
+    expect(request).toHaveBeenLastCalledWith('task', {}, 'c2', 10)
+    expect(wrapper.text()).toContain('第 2 页')
+    expect(next().attributes('disabled')).toBeDefined()
+    await prev().trigger('click')
+    await flushPromises()
+    expect(request).toHaveBeenLastCalledWith('task', {}, undefined, 10)
+    expect(wrapper.text()).toContain('第 1 页')
+    await next().trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('第 2 页')
+    wrapper.findAllComponents(NSelect)[1].vm.$emit('update:value', 'insufficient')
+    await flushPromises()
+    expect(request).toHaveBeenLastCalledWith('task', { verdict: 'insufficient' }, undefined, 10)
+    expect(wrapper.text()).toContain('第 1 页')
+  } finally { wrapper.unmount() }
+})
+
 const withGates: Observation = {
   ...blocked,
   gates: [

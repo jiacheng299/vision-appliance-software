@@ -68,7 +68,7 @@ export const agentApi = {
   confirm: (revision: Revision, validation: Validation, key: string) => client.post<Revision>(`/revisions/${encodeURIComponent(revision.id)}/confirmations`, { row_version: revision.row_version, validation_id: validation.id, config_hash: validation.config_hash, limitations_acknowledged: true }, keyOptions(key)).then(r => r.data),
   workspace: (id: string) => client.get<Workspace>(`${base(id)}/workspace`).then(r => r.data),
   trustChecks: (id: string, source_id?: string) => client.get<TrustCheck[]>(`${base(id)}/trust-checks`, {params:{source_id}}).then(r => r.data),
-  observations: (id: string, filters: { source_id?: string; verdict?: ObservationVerdict; run_id?: string } = {}, cursor?: string) => client.get<ObservationPage>(`${base(id)}/observations`, {params:{...filters, cursor, limit:30}}).then(r => r.data),
+  observations: (id: string, filters: { source_id?: string; verdict?: ObservationVerdict; run_id?: string } = {}, cursor?: string, limit = 10) => client.get<ObservationPage>(`${base(id)}/observations`, {params:{...filters, cursor, limit}}).then(r => r.data),
   routeTimeline: (id: string, params: { channel_id: string; source_id: string; limit?: number }) => client.get<TimelineEntry[]>(`${base(id)}/routing/timeline`, {params}).then(r => r.data),
   routes: (sourceId: string, params: { rule: string; duration_seconds?: number }) => client.get<RouteView>(`/sources/${encodeURIComponent(sourceId)}/routes`, {params}).then(r => r.data),
   routeStates: (id: string) => client.get<RouteState[]>(`${base(id)}/routing`).then(r => r.data),
