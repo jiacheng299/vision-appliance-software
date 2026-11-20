@@ -4,7 +4,6 @@ import { NButton } from 'naive-ui'
 import { agentApi, type RouteEvaluation, type RouteState, type TimelineEntry } from './api'
 import { useResource } from '../../shared/ui/resource'
 import ErrorBanner from '../../shared/ui/ErrorBanner.vue'
-import PatentPointsPanel from './PatentPointsPanel.vue'
 import RouteTimeline from './RouteTimeline.vue'
 
 const props = defineProps<{ sourceId: string; rule: string; durationSeconds?: number | null
@@ -112,7 +111,6 @@ async function cancel() {
       <ul v-if="data.notices.length" class="route-notices" aria-label="组合评估说明">
         <li v-for="notice in data.notices" :key="notice">{{ notice }}</li>
       </ul>
-      <PatentPointsPanel :rule="rule" :evaluation="data" :state="routeState"/>
       <div class="route-chosen" :class="data.chosen ? 'ok' : 'blocked'">
         <template v-if="data.chosen">
           <strong>评估首选：{{ data.chosen.label }}</strong>
