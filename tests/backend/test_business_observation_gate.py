@@ -66,8 +66,7 @@ class Reader:
 
 @pytest.fixture
 def runtime(tmp_path):
-    config = Config(var_root=tmp_path, agent_demo=False, observation_window_seconds=5.0,
-                    observation_quiet_seconds=0.0)
+    config = Config(var_root=tmp_path, agent_demo=False, observation_window_seconds=5.0)
     config.prepare()
     engine = make_engine(config)
     migrate(engine)

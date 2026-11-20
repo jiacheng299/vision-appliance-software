@@ -26,6 +26,7 @@ class RouteState(Base):
     hard_failure: Mapped[int] = mapped_column(Integer, default=0)
     drift_cursor: Mapped[float | None] = mapped_column(Float, nullable=True)
     attribute_labels: Mapped[dict] = mapped_column(JSON, default=dict)
+    last_eval_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[str] = mapped_column(String, default=now)
 
 

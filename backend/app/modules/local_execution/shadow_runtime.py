@@ -39,7 +39,6 @@ class _CandidateContext:
     profile_version: int | None
     model_version: str
     window_rule_state: str | None
-    quiet_until: float | None = None
 
 
 class ShadowRuntime:
@@ -140,11 +139,6 @@ class ShadowRuntime:
             if self._context is None or self._context.candidate != candidate:
                 self._start(candidate)
             context = self._context
-            if context.quiet_until is not None:
-                if timestamp < context.quiet_until:
-                    return
-                context.quiet_until = None
-                context.window.reset(timestamp)
             detected = context.detector.detect(frame)
             context.window.add_frame(timestamp)
             boxes = (context.rule.targets_in_regions(detected)
@@ -157,7 +151,6 @@ class ShadowRuntime:
             if not context.window.due(timestamp):
                 return
             try:
-                view = None
                 with self.sessions() as db:
                     db.execute(text('BEGIN IMMEDIATE'))
                     try:
@@ -175,12 +168,7 @@ class ShadowRuntime:
                 elif isinstance(context.rule, PresenceRule):
                     context.window_rule_state = context.rule.state
             finally:
-                if (view is not None and view.verdict != 'insufficient'
-                        and float(self.config.observation_quiet_seconds) > 0):
-                    context.quiet_until = timestamp + float(self.config.observation_quiet_seconds)
-                    context.window.reset()
-                else:
-                    context.window.reset(timestamp)
+                context.window.reset(timestamp)
         except Exception as error:
             candidate = locals().get('candidate')
             self._unavailable(candidate, error)

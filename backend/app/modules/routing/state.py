@@ -22,6 +22,7 @@ from .schemas import (DriftView, RouteDecisionView, RouteStateView, ScenarioView
 
 ACTIVE_FALLBACK = 'local-r{revision}'
 ENTRY_KINDS = ('baseline', 'enter', 'switch', 'cancel', 'hold')
+DEFAULT_EVAL_INTERVAL_SECONDS = 600.0
 
 
 @dataclass(frozen=True)
@@ -226,6 +227,7 @@ def propose(db, agent_id, actor_id, *, channel_id, source_id, rule, duration_sec
                 else 'expiry' if drift_module.expired_keys(findings)
                 else 'baseline' if first_time else 'refresh')
     _apply(row, decision.state)
+    row.last_eval_at = _epoch()
     if row.mode == hysteresis.CANDIDATE and solution.chosen is not None:
         row.candidate_members = list(solution.chosen.combination.members)
         row.candidate_score = solution.chosen.score
@@ -272,8 +274,13 @@ def cancel_candidate(db, agent_id, actor_id, *, channel_id, source_id):
 
 def advance_window(db, agent_id, actor_id, *, channel_id, source_id, rule, verdict,
                    duration_seconds=None, table=None, weights=None, budgets=None,
-                   min_quality=solver.MIN_QUALITY):
-    """Feed one closed observation window into the routing state machine."""
+                   min_quality=solver.MIN_QUALITY, eval_interval_seconds=None):
+    """Feed one closed observation window into the routing state machine.
+
+    Windows always count as evidence, but the enter/cancel/switch judgment runs
+    at most once per eval_interval_seconds (default 600). A hard failure of the
+    active combination bypasses the cadence and reacts immediately.
+    """
     row = _find(db, agent_id, actor_id, channel_id, source_id)
     if row is None:
         return None
@@ -288,24 +295,43 @@ def advance_window(db, agent_id, actor_id, *, channel_id, source_id, rule, verdi
     delta = None
     if current is not None and current.feasible and solution.chosen is not None:
         delta = solution.chosen.score - current.score
-    current_state = state_of(row)
+    now = _epoch()
+    interval = (DEFAULT_EVAL_INTERVAL_SECONDS if eval_interval_seconds is None
+                else float(eval_interval_seconds))
     window_valid = verdict != 'insufficient'
-    decision = hysteresis.decide(state=current_state, delta_j=delta, now=_epoch(),
-                                 thresholds=_thresholds(), hard_infeasible=hard_failure,
-                                 window_valid=window_valid)
-    if decision.action == hysteresis.SWITCH:
+    current_state = state_of(row)
+    due = (interval <= 0 or row.last_eval_at is None or now - row.last_eval_at >= interval
+           or hard_failure)
+    if due:
+        row.last_eval_at = now
+        decision = hysteresis.decide(state=current_state, delta_j=delta, now=now,
+                                     thresholds=_thresholds(), hard_infeasible=hard_failure,
+                                     window_valid=window_valid)
+        if decision.action == hysteresis.SWITCH:
+            decision = hysteresis.Decision(
+                hysteresis.HOLD,
+                hysteresis.State(mode=hysteresis.CANDIDATE,
+                                 active_since=current_state.active_since,
+                                 candidate_since=current_state.candidate_since,
+                                 valid_windows=current_state.valid_windows + int(window_valid),
+                                 hard_failure=current_state.hard_failure),
+                '影子验证已满足，等待接管能力')
+    else:
+        # 节奏未到：只累计证据，不改变模式。
+        counted = (current_state.valid_windows + (1 if window_valid else 0)
+                   if current_state.mode == hysteresis.CANDIDATE else current_state.valid_windows)
         decision = hysteresis.Decision(
             hysteresis.HOLD,
-            hysteresis.State(mode=hysteresis.CANDIDATE,
-                             active_since=current_state.active_since,
+            hysteresis.State(mode=current_state.mode, active_since=current_state.active_since,
                              candidate_since=current_state.candidate_since,
-                             valid_windows=current_state.valid_windows + int(window_valid),
+                             valid_windows=counted,
                              hard_failure=current_state.hard_failure),
-            '影子验证已满足，等待接管能力')
+            f'按每 {interval:.0f} 秒一次的节奏评估切换，本次窗口仅累计证据')
     _apply(row, decision.state)
     _decision_row(db, row, kind='window', action=decision.action, reason=decision.reason,
                   delta_j=delta, payload={'verdict': verdict,
-                                          'affected': report.get('affected', [])})
+                                          'affected': report.get('affected', []),
+                                          'evaluated': due})
     db.flush()
     return _view(row, delta_j=delta, report=report, chosen=solution.chosen)
 

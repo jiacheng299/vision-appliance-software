@@ -23,10 +23,9 @@ class Config(BaseSettings):
     # Disabling persistence also leaves no decidable window for business events.
     observation_records: bool = True
     observation_window_seconds: float = Field(default=30.0, gt=0, le=3600, allow_inf_nan=False)
-    # After a valid window that published no business event, wait this long
-    # before sampling the next window; insufficient windows retry immediately.
-    # 0 disables the rest and keeps back-to-back windows.
-    observation_quiet_seconds: float = Field(default=600.0, ge=0, le=86400, allow_inf_nan=False)
+    # 模型组合的自动切换判断节奏：每个观察窗仍照常关闭，
+    # 但“是否进入/取消候选”的评估最多每这么久执行一次。
+    route_eval_interval_seconds: float = Field(default=600.0, ge=0, le=86400, allow_inf_nan=False)
     # Built-in policy name, or module:attribute for an externally trained policy.
     tracker_policy: str = Field(default='heuristic-iou', min_length=1, max_length=200)
     deepseek_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('VISION_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY', 'deepseek_api_key'))

@@ -484,7 +484,6 @@ class LocalAgentServices(RegistryAgentServices):
                 max_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
                 safety = RunSafetyAudit(self.safety_audit, run, max_gap_seconds=max_gap)
             window, thresholds, profile_version, route_version = None, None, None, None
-            quiet_until = None
             if self.config.observation_records:
                 window_seconds = self.config.observation_window_seconds
                 gate_gap = rule.max_gap if isinstance(rule, PresenceRule) else rule.max_gap_seconds
@@ -538,19 +537,14 @@ class LocalAgentServices(RegistryAgentServices):
                             if shadow is not None:
                                 shadow.observe(timestamp, frame, process_rule=not preview_only)
                             if window is not None:
-                                if quiet_until is not None:
-                                    if timestamp >= quiet_until:
-                                        quiet_until = None
-                                        window.reset(timestamp)
-                                else:
-                                    window.add_frame(timestamp)
+                                window.add_frame(timestamp)
                             boxes = rule.targets_in_regions(detected) if channel.rule == 'absence' else detected
                             if stop.is_set(): break
                             if not preview_only:
                                 if safety is not None:
                                     safety.inspect(safety.check_time, timestamp)
                                 observation = rule.observe(timestamp,boxes)
-                                if window is not None and quiet_until is None:
+                                if window is not None:
                                     window.add_sample(*self._sample_evidence(frame,boxes,observation,rule,binding))
                                 # Keep a fixed business clock; frame quantization must not accumulate drift.
                                 if next_rule_timestamp is None:
@@ -629,13 +623,7 @@ class LocalAgentServices(RegistryAgentServices):
                                         logging.getLogger(__name__).warning('Observation record failed')
                                     finally:
                                         pending_events.clear()
-                                        if (view is None or view.verdict == 'insufficient' or ready_events
-                                                or float(self.config.observation_quiet_seconds) <= 0):
-                                            window.reset(timestamp)
-                                        else:
-                                            # Nothing happened in this window: rest before sampling again.
-                                            quiet_until = timestamp + float(self.config.observation_quiet_seconds)
-                                            window.reset()
+                                        window.reset(timestamp)
                             observed, failures, last_timestamp = True, 0, timestamp
                             for pending_observation,pending_timestamp,pending_frame,pending_boxes in ready_events:
                                 if channel.rule == 'absence':
@@ -659,7 +647,6 @@ class LocalAgentServices(RegistryAgentServices):
                     pending_events.clear()
                     if shadow is not None:
                         shadow.reset_observation()
-                    quiet_until = None
                     if window is not None:
                         window.reset()
                     self._reset_window_rule(rule, window_rule_state,
@@ -744,7 +731,8 @@ class LocalAgentServices(RegistryAgentServices):
                 route_state.advance_window(db, run.agent_id, actor_id, channel_id=run.channel_id,
                                            source_id=run.source_id, rule=channel.rule,
                                            duration_seconds=channel.duration_seconds,
-                                           verdict=view.verdict)
+                                           verdict=view.verdict,
+                                           eval_interval_seconds=self.config.route_eval_interval_seconds)
             except Exception:
                 # Routing feedback is advisory; a failure must not affect the window record.
                 logging.getLogger(__name__).warning('Route window advance failed')

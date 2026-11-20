@@ -51,6 +51,7 @@ def set_active_since(app, seconds_ago):
 
 
 def advance(app, verdict='detected', **kwargs):
+    kwargs.setdefault('eval_interval_seconds', 0.0)
     with app.state.sessions() as db:
         view = routing_state.advance_window(db, 'agent', ACTOR, channel_id='ch', source_id='cam',
                                             rule='absence', verdict=verdict, **kwargs)
@@ -159,6 +160,29 @@ def test_pending_candidate_version_binds_active_version_and_member_digest(seeded
         assert routing_state.pending_candidate(row).version != candidate.version
         row.candidate_members = None
         assert routing_state.pending_candidate(row) is None
+
+
+def test_route_judgments_follow_the_eval_cadence(seeded):
+    """窗口照常累计证据，但进入/取消/切换的判断按节奏执行。"""
+    propose(seeded)
+    set_active_since(seeded, 1000.0)
+    table = strong_table()
+    entered = propose(seeded, table=table)
+    assert entered.mode == 'candidate'
+    early = advance(seeded, verdict='detected', table=table, eval_interval_seconds=600.0)
+    assert early.mode == 'candidate'
+    assert early.valid_windows == 1
+    with seeded.state.sessions() as db:
+        decision = db.query(RouteDecision).order_by(RouteDecision.sequence.desc()).first()
+        assert '仅累计证据' in decision.reason
+        row = db.query(RouteState).first()
+        row.last_eval_at = time.time() - 700
+        db.commit()
+    due = advance(seeded, verdict='detected', table=table, eval_interval_seconds=600.0)
+    assert due.valid_windows == 2
+    with seeded.state.sessions() as db:
+        decision = db.query(RouteDecision).order_by(RouteDecision.sequence.desc()).first()
+    assert decision.reason == '影子验证已满足，等待接管能力'
 
 
 def test_an_insufficient_window_does_not_count_towards_the_switch(seeded):
