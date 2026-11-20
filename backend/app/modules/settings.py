@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import ValidationError
 from sqlalchemy import update
-from ..schemas import General, Storage, Resources, Security, SettingsPatch, SettingsDTO
+from ..schemas import General, Storage, Resources, Security, Llm, SettingsPatch, SettingsDTO
 from ..shared.models import Setting, Log
 from ..shared.db import get_db
 from ..shared.errors import Error
 
 router = APIRouter(prefix='/settings',tags=['settings'])
-SECTIONS = {'general':General,'storage':Storage,'resources':Resources,'security':Security}
+SECTIONS = {'general':General,'storage':Storage,'resources':Resources,'security':Security,'llm':Llm}
 
 def initialize(db):
     for section, schema in SECTIONS.items():

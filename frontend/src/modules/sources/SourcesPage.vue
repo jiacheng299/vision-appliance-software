@@ -21,6 +21,8 @@ const {data,loading,error,refresh}=useResource(()=>api.sources(search.value,kind
 const selected=ref<Source|null>(null),detailError=ref(''),detailBusy=ref(false),saving=ref(false),testing=ref(false),testMessage=ref(''),testState=ref(''),clearCredentials=ref(false)
 const edit=reactive({name:'',address:'',username:'',password:''}),camera=reactive({name:'',address:'',username:'',password:''})
 const creating=ref(false),createError=ref(''),upload=ref<Upload|null>(null),uploading=ref(false),uploadError=ref(''),uploadFilename=ref('')
+const sourceTab=ref<'info'|'profile'>('info')
+watch(()=>selected.value?.id,()=>{sourceTab.value='info'})
 let abort:AbortController|undefined,stopped=false,searchTimer:ReturnType<typeof setTimeout>|undefined,detailGeneration=0
 const statusOptions=computed(()=>[{label:'全部状态',value:''},...((kind.value==='camera'?['unverified','online','disconnected','failed']:kind.value==='file'?['ready','probing','transcoding','failed']:['ready','online','unverified','probing','failed']).map(value=>({label:({ready:'就绪',online:'在线',unverified:'未验证',disconnected:'已断开',failed:'失败',probing:'探测中',transcoding:'转码中'} as Record<string,string>)[value]!,value})))])
 function fill(source:Source){selected.value=source;Object.assign(edit,{name:source.name,address:source.address??'',username:'',password:''});clearCredentials.value=false}
@@ -152,9 +154,13 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 <h2>视频源详情</h2>
 <StatusBadge v-if="selected" :value="selected.status"/>
 </div>
+<div v-if="selected" class="detail-tabs" role="tablist" aria-label="视频源详情页签">
+<button role="tab" :aria-selected="sourceTab==='info'" :class="{active:sourceTab==='info'}" @click="sourceTab='info'">基础信息</button>
+<button role="tab" :aria-selected="sourceTab==='profile'" :class="{active:sourceTab==='profile'}" @click="sourceTab='profile'">时效语义画像</button>
+</div>
 <ErrorBanner :error="detailError" @retry="loadDetail"/>
 <div v-if="detailBusy" class="loading-line"/>
-<div v-for="detail in selected ? [selected] : []" :key="detail.id">
+<div v-for="detail in selected ? [selected] : []" :key="detail.id" v-show="sourceTab==='info'">
 <div class="field">
 <label for="source-name">视频源名称</label>
 <NInput id="source-name" v-model:value="edit.name" placeholder="视频源名称"/>
@@ -225,8 +231,9 @@ onUnmounted(()=>{stopped=true;detailGeneration++;clearTimeout(searchTimer);abort
 </div>
 </div>
 <EmptyState v-if="!selected" title="选择一个视频源" description="从左侧列表打开详情，查看元信息、编辑连接或预览视频。" large icon="video"/>
+<ProfilePanel v-if="selected" v-show="sourceTab==='profile'" :key="selected.id" :source-id="selected.id"
+  :resolution="selected.width&&selected.height?`${selected.width} × ${selected.height}`:''"/>
 </section>
-<ProfilePanel v-if="selected" :key="selected.id" :source-id="selected.id"/>
 </div>
 <section id="source-import" class="panel import-section">
 <div class="import-tabs" role="tablist" aria-label="视频源接入方式">

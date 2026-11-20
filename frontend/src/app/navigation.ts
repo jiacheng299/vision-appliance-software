@@ -62,5 +62,5 @@ export function activeGroupLabel(path: string): string | null {
 }
 
 export function permittedRoutes(path: string): boolean {
-  return /^\/(dashboard(?:\/events)?|runtime|create|models(?:\/[^/]+)?|agents(?:\/[^/]+(?:\/(?:live|config|history|events|reports))?)?|sources(?:\/[^/]+)?|settings(?:\/(general|storage|resources|security|diagnostics))?)$/.test(path)
+  return /^\/(dashboard(?:\/events)?|runtime|create|models(?:\/[^/]+)?|agents(?:\/[^/]+(?:\/(?:live|config|history|events|reports))?)?|sources(?:\/[^/]+)?|settings(?:\/(general|storage|resources|security|llm|diagnostics))?)$/.test(path)
 }

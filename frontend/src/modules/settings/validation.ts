@@ -6,6 +6,7 @@ export function validateSettings(section: string, values: Record<string, unknown
   const ranges: Record<string,Record<string,[number,number]>> = {
     resources:{max_concurrent_jobs:[1,8],connection_timeout_seconds:[1,60],reconnect_attempts:[0,20]},
     storage:{retention_days:[1,3650],max_upload_mb:[1,102400]}, security:{},
+    llm:{timeout_seconds:[5,300]},
   }
   for (const [key,[min,max]] of Object.entries(ranges[section] ?? {})) {
     const number = values[key]
@@ -22,6 +23,11 @@ export function validateSettings(section: string, values: Record<string, unknown
       }
       return prefix>32||!/^\d{1,3}(\.\d{1,3}){3}$/.test(address)||address.split('.').some(v=>Number(v)>255)
     })) return '请填写有效的 IPv4 或 IPv6 CIDR 网段，每行一项。'
+  }
+  if (section === 'llm') {
+    if (values.provider !== 'kimi' && values.provider !== 'deepseek') return '大模型官方来源仅支持 Kimi 与 DeepSeek。'
+    if (typeof values.api_key !== 'string' || values.api_key.length > 300) return 'API Key 不能超过 300 个字符。'
+    if (typeof values.model !== 'string' || !values.model.trim() || values.model.length > 120) return '请选择或填写模型名称。'
   }
   return ''
 }

@@ -41,4 +41,13 @@ export const profileApi = {
       .then(response => response.data),
   bootstrap: (sourceId: string) =>
     client.post<BootstrapResult>(`${base(sourceId)}/bootstrap`, {}, json).then(response => response.data),
+  analyze: (sourceId: string) =>
+    client.post<AnalyzeResult>(`${base(sourceId)}/analyze`, {}, json).then(response => response.data),
+}
+
+export interface AnalyzeResult {
+  source_id: string
+  analyzed: string[]
+  profile: SemanticProfile
+  analyzed_at: string
 }

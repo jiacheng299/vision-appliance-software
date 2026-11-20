@@ -5,8 +5,10 @@ from ...shared.db import get_db
 from ...shared.storage import controlled_path
 from ..agents.workspace import WORKSPACE_ACTOR_ID
 from . import bootstrap as bootstrap_module, service
-from .schemas import (AttributeInput, BootstrapView, IntrinsicInput, ObservationInput,
-                      ObservationPage, ObservationView, ProfileEventView, ProfileView)
+from .assistant import analyze_profile
+from .schemas import (AnalyzeView, AttributeInput, BootstrapView, IntrinsicInput,
+                      ObservationInput, ObservationPage, ObservationView,
+                      ProfileEventView, ProfileView)
 
 router = APIRouter(tags=['semantics'])
 
@@ -75,6 +77,16 @@ def bootstrap_profile(source_id: str, request: Request,
     result = bootstrap_module.bootstrap(db, source_id, frame=frame)
     result['notices'] = notices_extra + result['notices']
     return BootstrapView(**result)
+
+@router.post('/sources/{source_id}/semantic-profile/analyze', response_model=AnalyzeView)
+def analyze(source_id: str, request: Request, db=Depends(get_db)):
+    """Sample consecutive frames and let the configured official LLM write dynamic attributes."""
+    from ...shared.models import now
+    profile, written = analyze_profile(db, request.app.state.config, source_id,
+                                       request.app.state.media_gateway)
+    return AnalyzeView(source_id=source_id, analyzed=written, profile=profile,
+                       analyzed_at=now())
+
 
 @router.get('/sources/{source_id}/semantic-profile/events', response_model=list[ProfileEventView])
 def list_profile_events(source_id: str,

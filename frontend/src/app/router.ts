@@ -13,6 +13,6 @@ export const router=createRouter({history:createWebHistory(),routes:[
   {path:'/agents/:id/:tab(live|config|history|events|reports)?',component:()=>import('../modules/agents/AgentDetailPage.vue')},
   {path:'/sources/:id?',component:()=>import('../modules/sources/SourcesPage.vue')},
   {path:'/settings',redirect:'/settings/general'},
-  {path:'/settings/:section(general|storage|resources|security|diagnostics)',component:()=>import('../modules/settings/SettingsPage.vue')},
+  {path:'/settings/:section(general|storage|resources|security|llm|diagnostics)',component:()=>import('../modules/settings/SettingsPage.vue')},
   {path:'/:pathMatch(.*)*',redirect:'/dashboard'},
 ]})

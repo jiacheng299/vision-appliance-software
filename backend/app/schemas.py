@@ -109,6 +109,13 @@ class Resources(DTO):
     connection_timeout_seconds: int = Field(default=10,ge=1,le=60,strict=True)
     reconnect_attempts: int = Field(default=3,ge=0,le=20,strict=True)
 
+class Llm(DTO):
+    """Official LLM APIs. The key is stored in plaintext by explicit product decision."""
+    provider: Literal['kimi','deepseek'] = 'kimi'
+    api_key: str = Field(default='',max_length=300)
+    model: str = Field(default='kimi-latest',min_length=1,max_length=120)
+    timeout_seconds: int = Field(default=60,ge=5,le=300,strict=True)
+
 class Security(DTO):
     camera_allowed_networks: list[str] = Field(default_factory=lambda:['127.0.0.0/8','::1/128'],max_length=32)
     @field_validator('camera_allowed_networks')

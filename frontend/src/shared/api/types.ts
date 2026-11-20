@@ -13,7 +13,7 @@ export interface RuntimeSample { observed_at: string; cpu_percent: number; memor
 export interface RuntimeModel { id:string; name:string; version:string; runtime_type:string; template_name:string; status:'ready'|'unavailable'|'pending'|'failed'; message:string; data_origin:'real'|'mock' }
 export interface Runtime extends RuntimeSample { disk: { used_bytes: number; total_bytes: number; free_bytes: number }; sources: { total: number; online: number }; runs: { running: number | null; completed: number | null; failed: number | null }; data_origin?: 'real' | 'mock'; runtime_available?: boolean; services: Service[]; models: RuntimeModel[]; trust_check_status?: components['schemas']['RuntimeDTO']['trust_check_status']; workers: unknown[]; history: RuntimeSample[] }
 export interface Log { id: string; occurred_at: string; level: string; module: string; message: string }
-export type SettingsSection = 'general' | 'storage' | 'resources' | 'security' | 'diagnostics'
+export type SettingsSection = 'general' | 'storage' | 'resources' | 'security' | 'llm' | 'diagnostics'
 export interface Settings { section: SettingsSection; values: Record<string, unknown>; row_version: number }
 export interface RealtimeEnvelope { schema_version: string; event_id: string; sequence: number; type: string; occurred_at: string; aggregate_id: string; payload: unknown }
 

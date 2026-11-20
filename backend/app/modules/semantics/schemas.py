@@ -183,6 +183,13 @@ class BootstrapView(DTO):
     bootstrapped_at: str
 
 
+class AnalyzeView(DTO):
+    source_id: str
+    analyzed: list[str]
+    profile: ProfileView
+    analyzed_at: str
+
+
 class ProfileEventView(DTO):
     id: str
     source_id: str
