@@ -12,8 +12,8 @@ export type TemplateSource=components['schemas']['TemplateSource']
 export type TemplateTaskInput=components['schemas']['TemplateTaskCreate']
 export type TemplateInput=components['schemas']['TemplateCreate']
 const options=(key?:string)=>({headers:{'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},transformRequest:[agentJson]})
-export interface TemplateMatcherStatus {configured:boolean;provider:'deepseek';model:string;threshold:number}
-export interface TemplateMatchResult {status:'matched'|'no_match';template_id:string|null;template_revision_id:string|null;confidence:number;reason:string;uncovered_requirements:string[];provider:'deepseek';model:string}
+export interface TemplateMatcherStatus {configured:boolean;provider:'kimi'|'deepseek';model:string;threshold:number}
+export interface TemplateMatchResult {status:'matched'|'no_match';template_id:string|null;template_revision_id:string|null;confidence:number;reason:string;uncovered_requirements:string[];provider:'kimi'|'deepseek';model:string}
 export const templatesApi={
   matcherStatus:()=>client.get<TemplateMatcherStatus>('/agent-template-matcher').then(r=>r.data),
   match:(body:{requirement_text:string})=>client.post<TemplateMatchResult>('/agent-templates/match',body,options()).then(r=>r.data),

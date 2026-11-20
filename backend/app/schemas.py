@@ -115,6 +115,8 @@ class Llm(DTO):
     api_key: str = Field(default='',max_length=300)
     model: str = Field(default='kimi-latest',min_length=1,max_length=120)
     timeout_seconds: int = Field(default=60,ge=5,le=300,strict=True)
+    # 模板自然语言匹配的置信度下限；低于此值或存在未覆盖需求时判为未匹配。
+    match_threshold: float = Field(default=.8,ge=0,le=1,allow_inf_nan=False)
 
 class Security(DTO):
     camera_allowed_networks: list[str] = Field(default_factory=lambda:['127.0.0.0/8','::1/128'],max_length=32)

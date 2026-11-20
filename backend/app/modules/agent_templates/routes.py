@@ -7,7 +7,7 @@ from ..agents.workspace import WORKSPACE_ACTOR_ID
 from ..agents import service as tasks
 from . import service
 from .schemas import *
-from .matching import DeepSeekTemplateMatcher, ensure_candidate_current, published_candidates
+from .matching import TemplateMatcher, ensure_candidate_current, matcher_values, published_candidates
 from .matching_schemas import TemplateMatchRequest, TemplateMatchResult, TemplateMatcherStatus
 
 router=APIRouter(tags=['agent-templates'])
@@ -25,17 +25,28 @@ def create(body:TemplateCreate,idempotency_key:str=Header(min_length=1,max_lengt
     return service.create_template(db,body,WORKSPACE_ACTOR_ID,idempotency_key,provider)
 
 @router.get('/agent-template-matcher',response_model=TemplateMatcherStatus)
-def matcher_status(request:Request):
-    return DeepSeekTemplateMatcher(request.app.state.config).status()
+def matcher_status(request:Request,db=Depends(get_db)):
+    return TemplateMatcher(matcher_values(db,request.app.state.config)).status()
 
 @router.post('/agent-templates/match',response_model=TemplateMatchResult)
 def match_template(body:TemplateMatchRequest,request:Request,db=Depends(get_db)):
-    matcher=DeepSeekTemplateMatcher(request.app.state.config)
+    values=matcher_values(db,request.app.state.config)
+    matcher=TemplateMatcher(values)
     # Missing configuration is explicit even when there are no candidates.
     if not matcher.status().configured:
         return matcher.match(body.requirement_text,[])
     result=matcher.match(body.requirement_text,published_candidates(db))
     ensure_candidate_current(db,result)
+    import hashlib, json as jsonlib
+    from ...shared.models import Log
+    if values.get('_legacy'):
+        db.add(Log(level='INFO',module='settings',
+                   message='模板匹配使用 VISION_DEEPSEEK_* 旧环境变量配置；请在系统设置的大模型接口中配置，后续版本将移除该回退。'))
+    db.add(Log(level='INFO',module='template_matcher',message=jsonlib.dumps({
+        'requirement_sha256':hashlib.sha256(body.requirement_text.encode('utf-8')).hexdigest()[:16],
+        'status':result.status,'template_id':result.template_id,
+        'template_revision_id':result.template_revision_id,'confidence':result.confidence,
+        'provider':result.provider,'model':result.model},ensure_ascii=False)))
     return result
 
 @router.get('/agent-templates/{template_id}',response_model=TemplateDetail)

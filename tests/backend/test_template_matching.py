@@ -269,3 +269,86 @@ def test_environment_alias_and_custom_model_threshold(monkeypatch):
     assert config.deepseek_model == 'deepseek-custom'
     assert config.deepseek_match_threshold == .9
     assert KEY not in repr(config)
+
+
+def configure_llm(client, **values):
+    current = client.get(API + '/settings/llm').json()
+    merged = {**current['values'], **values}
+    saved = client.patch(API + '/settings/llm',
+                         json={'row_version': current['row_version'], 'values': merged})
+    assert saved.status_code == 200
+    return saved.json()
+
+
+def test_llm_settings_take_precedence_and_hit_kimi_open_platform(matcher_app, monkeypatch):
+    app, client = matcher_app
+    ids = candidate(app)
+    seen = []
+    def handler(request):
+        seen.append((str(request.url), request.headers.get('Authorization')))
+        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps(decision(ids))}}]},
+                              request=request)
+    upstream(monkeypatch, handler=handler)
+    # 环境变量仍配置着 DeepSeek，但系统设置 llm 分类优先。
+    configure_llm(client, provider='kimi', api_key='sk-open-platform', model='kimi-k3',
+                  match_threshold=.8)
+    response = match(client)
+    assert response.status_code == 200
+    body = response.json()
+    assert body['provider'] == 'kimi' and body['model'] == 'kimi-k3'
+    assert seen[0][0].startswith('https://api.moonshot.cn/v1/chat/completions')
+    assert seen[0][1] == 'Bearer sk-open-platform'
+
+
+def test_kimi_subscription_key_routes_to_anthropic_endpoint(matcher_app, monkeypatch):
+    app, client = matcher_app
+    ids = candidate(app)
+    seen = []
+    def handler(request):
+        seen.append((str(request.url), request.headers.get('x-api-key'),
+                     json.loads(request.content)['system'][:10]))
+        envelope = {'content': [{'type': 'text', 'text': json.dumps(decision(ids))}]}
+        return httpx.Response(200, json=envelope, request=request)
+    upstream(monkeypatch, handler=handler)
+    configure_llm(client, provider='kimi', api_key='sk-kimi-subscription')
+    response = match(client)
+    assert response.status_code == 200
+    assert response.json()['status'] == 'matched'
+    assert seen[0][0].startswith('https://api.kimi.com/coding/v1/messages')
+    assert seen[0][1] == 'sk-kimi-subscription'
+    assert '已有智能体模板' in seen[0][2]
+
+
+def test_match_threshold_comes_from_llm_settings(matcher_app, monkeypatch):
+    app, client = matcher_app
+    ids = candidate(app)
+    upstream(monkeypatch, result=decision(ids, confidence=.95))
+    configure_llm(client, provider='kimi', api_key='sk-open-platform', match_threshold=.99)
+    response = match(client)
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'no_match'
+    assert body['template_id'] is None
+
+
+def test_unauthorized_settings_key_maps_to_auth_error(matcher_app, monkeypatch):
+    app, client = matcher_app
+    candidate(app)
+    upstream(monkeypatch, status=401, result={'error': {'message': 'Invalid Authentication'}})
+    configure_llm(client, provider='kimi', api_key='sk-open-invalid')
+    response = match(client)
+    assert response.status_code == 401
+    assert response.json()['error']['code'] == 'template_matcher_auth_invalid'
+
+
+def test_legacy_env_fallback_still_matches_and_logs_deprecation(matcher_app, monkeypatch):
+    app, client = matcher_app
+    ids = candidate(app)
+    upstream(monkeypatch, result=decision(ids))
+    response = match(client)
+    assert response.status_code == 200
+    assert response.json()['provider'] == 'deepseek'
+    from app.shared.models import Log
+    with app.state.sessions() as db:
+        row = db.query(Log).filter(Log.module == 'settings').order_by(Log.occurred_at.desc()).first()
+    assert row is not None and 'VISION_DEEPSEEK' in row.message

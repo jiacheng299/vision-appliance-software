@@ -38,17 +38,18 @@ async function choose(w:ReturnType<typeof mount>){await w.get('[aria-label="选�
 async function configure(w:ReturnType<typeof mount>){await choose(w);picker(w,'检测视频源').vm.$emit('update:value','source-1');await nextTick()}
 async function returnConfig(w:ReturnType<typeof mount>){await press(w,'返回修改配置')}
 
-it('requires selecting and confirming a template before video configuration and never calls matching APIs',async()=>{
+it('requires selecting and confirming a template before video configuration and never calls the match API in the manual flow',async()=>{
   const w=await page()
   expect(w.get('[aria-label="确认模板，下一步"]').attributes('disabled')).toBeDefined()
-  expect(w.get('button[aria-label="自然语言匹配"]').attributes('disabled')).toBeDefined()
+  expect(w.get('button[aria-label="自然语言匹配"]').attributes('disabled')).toBeUndefined()
   expect(w.find('[aria-label="任务名称"]').isVisible()).toBe(false)
   await w.get('[aria-label="选择模板：火灾检测"]').trigger('click')
   expect(w.find('[aria-label="任务名称"]').isVisible()).toBe(false)
   expect(templatesApi.instantiate).not.toHaveBeenCalled()
   await press(w,'确认模板，下一步')
   expect(w.get('[aria-label="任务名称"]').isVisible()).toBe(true)
-  expect(templatesApi.matcherStatus).not.toHaveBeenCalled();expect(templatesApi.match).not.toHaveBeenCalled()
+  expect(templatesApi.matcherStatus).toHaveBeenCalled()
+  expect(templatesApi.match).not.toHaveBeenCalled()
 })
 it('keeps the chosen template and source configuration when returning to the first step',async()=>{
   const w=await page();await configure(w);await press(w,'上一步')

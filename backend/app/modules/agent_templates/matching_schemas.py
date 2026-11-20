@@ -9,7 +9,7 @@ class TemplateMatchRequest(DTO):
 
 class TemplateMatcherStatus(DTO):
     configured: bool
-    provider: Literal['deepseek'] = 'deepseek'
+    provider: Literal['kimi','deepseek'] = 'kimi'
     model: str
     threshold: float
 
@@ -24,5 +24,5 @@ class TemplateMatchDecision(DTO):
 
 
 class TemplateMatchResult(TemplateMatchDecision):
-    provider: Literal['deepseek'] = 'deepseek'
+    provider: Literal['kimi','deepseek'] = 'kimi'
     model: str

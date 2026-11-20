@@ -24061,9 +24061,12 @@
           },
           "provider": {
             "type": "string",
-            "const": "deepseek",
+            "enum": [
+              "kimi",
+              "deepseek"
+            ],
             "title": "Provider",
-            "default": "deepseek"
+            "default": "kimi"
           },
           "model": {
             "type": "string",
@@ -24091,9 +24094,12 @@
           },
           "provider": {
             "type": "string",
-            "const": "deepseek",
+            "enum": [
+              "kimi",
+              "deepseek"
+            ],
             "title": "Provider",
-            "default": "deepseek"
+            "default": "kimi"
           },
           "model": {
             "type": "string",

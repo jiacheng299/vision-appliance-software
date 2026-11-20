@@ -201,7 +201,7 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(pollTimer);clearTimeout(validatio
   <section v-if="legacyDraft" class="panel"><h2>历史任务配置</h2><p>此任务创建于模板关联功能启用前，原配置与自然语言执行方案完整保留。</p><RouterLink :to="{path:'/create/legacy',query:{draft:legacyDraft}}">继续编辑历史任务</RouterLink></section>
   <template v-else>
   <nav class="tc-steps" aria-label="任务创建步骤"><button v-for="(title,index) in ['选择模板','配置视频与区域','验证并启动']" :key="title" :class="{active:step===index,complete:step>index}" :aria-current="step===index?'step':undefined" :disabled="busy||!!operation||loading||(index>0&&!version)||(index===2&&!validation&&revision?.state!=='published')" @click="goStep(index)"><span>{{index+1}}</span>{{title}}</button></nav>
-  <TemplateSelection v-show="step===0" :templates="templates" :selected-id="templateId" :version="version" :disabled="busy||!!agent||loading" @select="chooseTemplate"/>
+  <TemplateSelection v-show="step===0" :templates="templates" :selected-id="templateId" :version="version" :disabled="busy||!!agent||loading" @select="chooseTemplate" @matched="chooseTemplate"/>
   <div class="tc-basic-layout"><section v-show="step===1" class="panel create-main">
     <p class="hint">{{selectedTemplate?.name}} · 模板版本 v{{version?.revision_no}} · 共用规则，各路独立监测与报警</p>
     <fieldset class="create-fields">

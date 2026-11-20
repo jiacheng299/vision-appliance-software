@@ -4187,10 +4187,10 @@ export interface components {
             uncovered_requirements: string[];
             /**
              * Provider
-             * @default deepseek
-             * @constant
+             * @default kimi
+             * @enum {string}
              */
-            provider: "deepseek";
+            provider: "kimi" | "deepseek";
             /** Model */
             model: string;
         };
@@ -4200,10 +4200,10 @@ export interface components {
             configured: boolean;
             /**
              * Provider
-             * @default deepseek
-             * @constant
+             * @default kimi
+             * @enum {string}
              */
-            provider: "deepseek";
+            provider: "kimi" | "deepseek";
             /** Model */
             model: string;
             /** Threshold */

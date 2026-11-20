@@ -28,6 +28,8 @@ export function validateSettings(section: string, values: Record<string, unknown
     if (values.provider !== 'kimi' && values.provider !== 'deepseek') return '大模型官方来源仅支持 Kimi 与 DeepSeek。'
     if (typeof values.api_key !== 'string' || values.api_key.length > 300) return 'API Key 不能超过 300 个字符。'
     if (typeof values.model !== 'string' || !values.model.trim() || values.model.length > 120) return '请选择或填写模型名称。'
+    const threshold = values.match_threshold
+    if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) return '匹配置信度阈值需要在 0 到 1 之间。'
   }
   return ''
 }
