@@ -38,7 +38,9 @@ def test_a_camera_source_gets_intrinsic_only_and_says_why(seeded):
     with seeded.state.sessions() as db:
         result = bootstrap_module.bootstrap(db, 'cam')
         db.commit()
-    assert any('resolution=960x540' in item for item in result['created'])
+    # 分辨率在读取画像时已自动写入；bootstrap 只补其余设备字段。
+    assert result['profile'].intrinsic['resolution'] == '960x540'
+    assert any('device_id' in item for item in result['created'])
     assert any('lighting' not in item for item in result['created'])
     assert result['profile'].attributes == []
     assert any('没有可用画面帧' in notice for notice in result['notices'])

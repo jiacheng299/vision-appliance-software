@@ -33,10 +33,10 @@ def observation(source_id='cam', count=0, **overrides):
     return payload
 
 
-def test_profile_starts_empty_without_inventing_attributes(client, seeded):
+def test_profile_auto_created_with_resolution_and_no_invented_attributes(client, seeded):
     body = client.get('/api/v1/sources/cam/semantic-profile').json()
     assert body['version'] == 0 and body['attributes'] == []
-    assert body['intrinsic'] == {} and body['runtime'] == {}
+    assert body['intrinsic'] == {'resolution': '960x540'}
 
 
 def test_intrinsic_update_bumps_version_and_rejects_unknown_keys(client, seeded):

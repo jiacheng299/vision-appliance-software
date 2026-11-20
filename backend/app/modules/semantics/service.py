@@ -71,6 +71,23 @@ def _touch(row):
     return row
 
 
+def ensure_profile(db, source):
+    """Profile exists from the moment a source exists; resolution fills in once known.
+
+    Automatic device-derived data is written silently: no version bump and no
+    profile events, so the audit timeline only records explicit writes.
+    """
+    row = _profile(db, source.id)
+    if row is None:
+        row = _profile(db, source.id, create=True)
+    if source.width and source.height and 'resolution' not in (row.intrinsic or {}):
+        # 只补缺，绝不覆盖人工写入的固有层取值。
+        row.intrinsic = {**(row.intrinsic or {}),
+                         'resolution': f'{source.width}x{source.height}'}
+    db.flush()
+    return row
+
+
 def _attribute_views(db, profile_id, at):
     views = []
     for row in db.scalars(select(ProfileAttribute).where(ProfileAttribute.profile_id == profile_id)
@@ -90,7 +107,8 @@ def _attribute_views(db, profile_id, at):
 
 
 def read_profile(db, source_id, at=None):
-    sources_module.get_source(db, source_id)
+    source = sources_module.get_source(db, source_id)
+    ensure_profile(db, source)
     evaluated_at = epoch() if at is None else at
     row = _profile(db, source_id)
     if row is None:

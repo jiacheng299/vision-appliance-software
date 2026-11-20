@@ -159,6 +159,8 @@ class Supervisor:
             source.updated_at,source.observed_at = now(),now()
             source.row_version += 1
             job.lease_owner=job.lease_until=None
+            from app.modules.semantics import service as semantics
+            semantics.ensure_profile(db, source)
             notify_source(db,source)
             db.add(Log(level='INFO',module='worker',message='文件探测与浏览器预览转码完成。'))
             db.commit()
@@ -204,6 +206,8 @@ class Supervisor:
                     for field,value in metadata.items():
                         setattr(source,field,value)
                 source.row_version += 1
+                from app.modules.semantics import service as semantics
+                semantics.ensure_profile(db, source)
                 source.error_code=None if published else 'media_gateway_unavailable'
                 source.error_message=None if published else 'RTSP 视频会话描述可达；尚未在媒体网关确认该路视频，浏览器直播暂不可用。'
                 job.state='completed'
